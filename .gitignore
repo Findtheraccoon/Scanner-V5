@@ -1,0 +1,147 @@
+# ═══════════════════════════════════════
+# Python (backend)
+# ═══════════════════════════════════════
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Distribución / empaquetado
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+
+# uv / pip
+pip-log.txt
+pip-delete-this-directory.txt
+.venv/
+venv/
+env/
+ENV/
+
+# Testing / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+.cache
+coverage.xml
+htmlcov/
+nosetests.xml
+.tox/
+.nox/
+
+# mypy / ruff
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+
+# ═══════════════════════════════════════
+# Node / Frontend
+# ═══════════════════════════════════════
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Vite build output
+frontend/dist/
+frontend/dist-ssr/
+frontend/.vite/
+
+# ═══════════════════════════════════════
+# Base de datos (SQLite) — nunca se commitean
+# ═══════════════════════════════════════
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+data/archive/*.db
+data/archive/*.db-journal
+
+# pero mantenemos la estructura de carpetas
+!data/.gitkeep
+!data/archive/.gitkeep
+
+# ═══════════════════════════════════════
+# Logs — nunca se commitean, rotan localmente
+# ═══════════════════════════════════════
+LOG/*.txt
+LOG/*.log
+LOG/*.json
+!LOG/.gitkeep
+
+# ═══════════════════════════════════════
+# Config del usuario — contiene secretos encriptados
+# ═══════════════════════════════════════
+config_*.json
+last_config_path.txt
+secret.key
+
+# Credenciales cloud / API keys sueltas (paranoia extra)
+.env
+.env.*
+!.env.example
+secrets.*
+credentials.*
+
+# ═══════════════════════════════════════
+# IDEs y editores
+# ═══════════════════════════════════════
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# ═══════════════════════════════════════
+# OS
+# ═══════════════════════════════════════
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ═══════════════════════════════════════
+# Inno Setup output
+# ═══════════════════════════════════════
+*.iss.bak
+Output/
+setup-*.exe
+!scripts/*.iss
+
+# ═══════════════════════════════════════
+# Misc artifacts locales
+# ═══════════════════════════════════════
+*.tmp
+*.bak
+*.orig
+tmp/
+.scratch/

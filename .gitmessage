@@ -1,0 +1,24 @@
+# <tipo>(<scope>): <descripción imperativa breve, ≤72 caracteres>
+#
+# <cuerpo opcional — explicar QUÉ y POR QUÉ, no cómo. Líneas ≤80 caracteres.>
+# <Puede tener varios párrafos.>
+#
+# <Footer opcional:>
+# Refs: ADR-NNNN, #issue-number
+# BREAKING CHANGE: descripción (solo si aplica — implica bump MAJOR)
+#
+# ─────────────────────────────────────────────────────────────────
+# Tipos:  feat · fix · docs · refactor · test · chore · perf · style · build · ci
+# Scopes: data-engine · scoring · database-engine ·
+#         validator · slot-registry · config · db ·
+#         api · ws ·
+#         frontend · cockpit · dashboard · memento · config-ui ·
+#         fixtures · canonicals · metrics ·
+#         adr · docs · build · ci · repo
+# Ejemplos:
+#   feat(data-engine): add round-robin proportional key rotation
+#   fix(scoring): handle division by zero in FzaRel calc (ENG-020)
+#   docs(adr): add ADR-0008 for sibling metrics file naming
+#   feat(api)!: rename /signals/latest to /signals/current
+#
+# Ver CONTRIBUTING.md para detalles.
