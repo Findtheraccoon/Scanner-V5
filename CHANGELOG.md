@@ -77,7 +77,7 @@ Cada release estable incluye:
 - Correcciones relacionadas con seguridad.
 ```
 
-Entradas bajo `[Unreleased]` se acumulan entre releases y se renombran al publicar.
+Entradas bajo `findtheracoon` se acumulan entre releases y se renombran al publicar.
 
 ---
 
