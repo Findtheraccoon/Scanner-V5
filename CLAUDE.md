@@ -53,7 +53,7 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 
 ## Estado actual de la implementación
 
-**Rama activa:** `claude/review-project-setup-PqMEL` (todo desarrollo va acá).
+**Rama activa:** `claude/review-project-setup-4DnEm` (todo desarrollo va acá). La rama previa `claude/review-project-setup-PqMEL` fue mergeada a main y eliminada; este branch continúa el trabajo sobre Fase 5 del Scoring.
 
 ### Completado
 
@@ -177,7 +177,7 @@ El código de Observatory vive en `docs/specs/Observatory/Current/scanner/`:
 
 ## Git workflow
 
-- **Todo desarrollo:** rama `claude/review-project-setup-PqMEL`. Nunca push directo a main.
+- **Todo desarrollo:** rama `claude/review-project-setup-4DnEm`. Nunca push directo a main.
 - **Antes de commit:** correr `cd backend && python -m pytest tests/ -q` y asegurar que pasa.
 - **Commit messages:** español, conventional commits (`feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, `test:`). Scope entre paréntesis (`feat(scoring):`).
 - **Footer:** incluir `https://claude.ai/code/...` como manda la configuración del repo.
