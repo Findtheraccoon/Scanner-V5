@@ -195,6 +195,17 @@ Tres valores posibles:
 
 El dashboard muestra un badge distinto según el status, para que el trader sepa qué tan confiables son las métricas.
 
+#### 3.3.1 Excepción `legacy-calibration`
+
+Un canonical generado **antes** de la formalización de `CALIBRATION_METHODOLOGY.md` puede declarar `calibration_status: "final"` con `metrics_oos: null` (sin split training/oos) siempre que se cumplan las dos condiciones:
+
+1. `calibration_process.warnings_raised` contenga al menos una entrada cuyo prefijo sea exactamente `"legacy-calibration:"` (describiendo por qué no hay oos).
+2. `calibration_process.iterations_count` puede ser `null` (dato no trazable para el legacy) — se acepta como excepción puntual al tipo `integer` de §3.7.
+
+Esta excepción solo aplica a canonicals **heredados** del Observatory previos a la metodología formal. El Validator baja la severidad de `MET-004` a **warning** para estos casos (dashboard los muestra con badge "final · legacy"). Cualquier canonical nuevo generado bajo la metodología formal debe cumplir el schema estricto: `"final"` implica `metrics_oos` no-null e `iterations_count` entero.
+
+El canonical `qqq_canonical_v1` queda registrado bajo esta excepción hasta que se promueva `qqq_canonical_v2` con calibración completa.
+
 ### 3.4 Bloque `dataset`
 
 | Campo | Tipo | Obligatorio | Descripción |
@@ -283,7 +294,7 @@ Campos obligatorios faltantes, tipos incorrectos.
 Alguna de las 10 categorías de confirms no aparece en `confirms`.
 
 ### MET-004 · Status inconsistente
-`calibration_status: "final"` pero `metrics_oos: null`, o combinaciones similares que violan la semántica.
+`calibration_status: "final"` pero `metrics_oos: null`, o combinaciones similares que violan la semántica. Severidad fatal por default. **Excepción:** se baja a warning cuando el archivo cumple la cláusula `legacy-calibration` de §3.3.1 (canonicals heredados pre-metodología).
 
 ### MET-005 · Hash desincronizado
 `file_hash_sha256` en `fixture_ref` no matchea el hash actual del `.json` de la fixture. Indica que las métricas son viejas — la fixture fue modificada sin regenerar métricas. Warning, no crítico.
