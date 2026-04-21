@@ -71,12 +71,19 @@ def build_neutral_output(
     layers: dict[str, Any] | None = None,
     ind: dict[str, Any] | None = None,
     patterns: list[dict[str, Any]] | None = None,
+    dir_: str | None = None,
 ) -> dict[str, Any]:
     """Construye un output sin señal (no-error, sin trigger o bloqueado).
 
     Usado cuando el motor corrió OK pero los gates no pasaron o no
-    hubo triggers. `score=0`, `dir=None`, `error=False`. Si `blocked`
-    tiene valor, describe qué gate falló.
+    hubo triggers. `score=0`, `error=False`. Si `blocked` tiene valor,
+    describe qué gate falló.
+
+    Args:
+        dir_: dirección efectiva "CALL"/"PUT" si el alignment pasó
+            (gate de alignment resolvió una dirección), `None` en otros
+            casos. Usar `dir_` (con underscore) para evitar colisión
+            con la built-in `dir`.
     """
     return {
         "ticker": ticker,
@@ -86,7 +93,7 @@ def build_neutral_output(
         "score": 0.0,
         "conf": CONF_UNKNOWN,
         "signal": SIGNAL_NEUTRAL,
-        "dir": None,
+        "dir": dir_,
         "blocked": blocked,
         "error": False,
         "error_code": None,

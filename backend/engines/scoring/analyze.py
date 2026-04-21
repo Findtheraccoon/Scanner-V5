@@ -10,9 +10,8 @@ score+band) se construye en fases sucesivas sobre este esqueleto.
     ✅ Fase 1 · esqueleto + contrato + errors (ENG-001/010/099).
     ✅ Fase 2 · indicadores (SMA/EMA/BB/ATR/volumen) en `indicators/`.
     ✅ Fase 3 · alignment gate (trend 15m/1h/daily + compute_alignment).
-    ⬜ Fase 4 · 14 triggers hardcoded (port v4.2.1).
-    ⬜ Fase 5 · 10 confirms con pesos de la fixture.
-    ⬜ Fase 6 · gates conflict + ORB + score + band assignment.
+    ✅ Fase 4 · triggers (16) + risks (4) + trigger gate + conflict gate.
+    ⬜ Fase 5 · 10 confirms con pesos de la fixture + score + band.
 """
 
 from __future__ import annotations
@@ -20,9 +19,10 @@ from __future__ import annotations
 from typing import Any
 
 from engines.scoring.alignment import (
-    alignment_gate_passes,
-    compute_alignment,
-    trend_for_timeframe,
+    AlignmentDir,
+    alignment_gate,
+    trend_strict,
+    trend_with_fallback,
 )
 from engines.scoring.constants import (
     ENG_001,
@@ -33,7 +33,20 @@ from engines.scoring.constants import (
     MIN_CANDLES_DAILY,
 )
 from engines.scoring.errors import build_error_output, build_neutral_output
+from engines.scoring.indicators import bollinger_bands, sma, volume_ratio_at
+from engines.scoring.risks import detect_bb_fakeouts_15m, detect_volume_risks_15m
+from engines.scoring.triggers import (
+    detect_candle_15m_triggers,
+    detect_double_patterns_15m,
+    detect_engulfing_1h,
+    detect_ma_cross_1h,
+    detect_orb_triggers_15m,
+)
 from modules.fixtures import Fixture, FixtureError, parse_fixture
+
+_BB_WINDOW: int = 20
+_BB_K: float = 2.0
+_VOLUME_RATIO_WINDOW: int = 20
 
 
 def analyze(
@@ -112,36 +125,205 @@ def analyze(
             )
 
         # ── Paso 4: Alignment gate (spec §3 I5, primer gate del pipeline)
-        t_15m = trend_for_timeframe(candles_15m)
-        t_1h = trend_for_timeframe(candles_1h)
-        t_daily = trend_for_timeframe(candles_daily)
-        alignment_n, alignment_dir = compute_alignment(t_15m, t_1h, t_daily)
+        #
+        # Computamos trends con la lógica Observatory Option B:
+        #   - 15M y 1H → trend_with_fallback (strict + slope fallback)
+        #   - Daily   → trend_strict (sin fallback, spec + Observatory)
+        #
+        # Para `has_catalyst` (override): el criterio de catalizador
+        # (cambio diario > 1.5*ATR% o DivSPY) se determina fuera de
+        # este motor. En Fase 4d+ el wiring pasará el valor real; por
+        # ahora asumimos False para comportamiento strict del gate.
+        closes_15m = [c["c"] for c in candles_15m]
+        closes_1h = [c["c"] for c in candles_1h]
+        closes_daily = [c["c"] for c in candles_daily]
+
+        ma20_15m = _safe_last(sma(closes_15m, 20))
+        ma40_15m = _safe_last(sma(closes_15m, 40))
+        ma20_1h = _safe_last(sma(closes_1h, 20))
+        ma40_1h = _safe_last(sma(closes_1h, 40))
+        ma20_daily = _safe_last(sma(closes_daily, 20))
+        ma40_daily = _safe_last(sma(closes_daily, 40))
+
+        t_15m = trend_with_fallback(candles_15m, ma20_15m, ma40_15m)
+        t_1h = trend_with_fallback(candles_1h, ma20_1h, ma40_1h)
+        t_daily = trend_strict(candles_daily[-1]["c"], ma20_daily, ma40_daily)
+
+        gate = alignment_gate(t_15m, t_1h, t_daily, has_catalyst=False)
+
+        # `layers` adopta la estructura del Observatory scoring.py para
+        # facilitar paridad:
+        #   layers.structure = {pass, reason, override}
+        #   layers.trends    = {t15m, t1h, tdaily}       (extra informativo)
+        #   layers.alignment = {n, dir, effective_dir}   (extra informativo)
         layers: dict[str, Any] = {
+            "structure": {
+                "pass": gate.passed,
+                "reason": gate.reason,
+                "override": gate.override,
+            },
             "trends": {"t15m": t_15m, "t1h": t_1h, "tdaily": t_daily},
-            "alignment_n": alignment_n,
-            "alignment_dir": alignment_dir,
+            "alignment": {
+                "n": gate.n,
+                "dir": gate.dir,
+                "effective_dir": gate.effective_dir,
+            },
         }
-        if not alignment_gate_passes(alignment_n, alignment_dir):
-            layers["gate"] = "alignment"
+
+        if not gate.passed:
             return build_neutral_output(
                 ticker=ticker,
                 fixture_id=fixture_id,
                 fixture_version=fixture_version,
-                blocked="alignment_gate",
+                blocked="Alineación insuficiente",
                 layers=layers,
             )
 
-        # ── Paso 5+: fases futuras (triggers, confirms, conflict/ORB, score)
-        # Por ahora el motor corre "limpio" hasta alignment; en trigger
-        # aún no hay detectores.
-        layers["gate"] = "trigger"
-        layers["detail"] = "no trigger detectors wired yet"
+        # Dirección efectiva según el alignment gate (CALL o PUT).
+        # Por construcción del gate, aquí effective_dir es "bullish" o
+        # "bearish" (nunca None ni "mixed"); protegemos con assert.
+        assert gate.effective_dir is not None
+        effective_dir = _dir_from_alignment(gate.effective_dir)
+
+        # ── Paso 5: Detección de triggers + risks
+        #
+        # BB 15M y BB 1H se computan una única vez sobre las closes del
+        # timeframe respectivo; se pasa el último trío (upper, middle,
+        # lower) a los detectores que lo consumen (Doji/Hammer/Shooting
+        # en 15M; Fakeouts contra BB 1H). Convención Observatory.
+        bb_15m_series = bollinger_bands(closes_15m, _BB_WINDOW, _BB_K)
+        bb_1h_series = bollinger_bands(closes_1h, _BB_WINDOW, _BB_K)
+        bb_15m = _last_bb_tuple(bb_15m_series)
+        bb_1h = _last_bb_tuple(bb_1h_series)
+
+        # volume_ratio de la última vela 15M — gate binario del ORB.
+        # Semántica divergente con Observatory (mean sobre ventana fija
+        # vs. median intraday). Se ajusta cuando se port vol_ratio real
+        # del Observatory.
+        vol_ratio = volume_ratio_at(
+            candles_15m,
+            len(candles_15m) - 1,
+            _VOLUME_RATIO_WINDOW,
+        )
+
+        # Triggers (5 detectores, cubren los 16 patrones).
+        triggers: list[dict] = []
+        triggers.extend(detect_candle_15m_triggers(candles_15m, bb_15m))
+        triggers.extend(detect_engulfing_1h(candles_1h))
+        triggers.extend(detect_double_patterns_15m(candles_15m))
+        triggers.extend(detect_ma_cross_1h(candles_1h))
+        triggers.extend(
+            detect_orb_triggers_15m(
+                candles_15m,
+                volume_ratio=vol_ratio,
+                sim_datetime=sim_datetime,
+            )
+        )
+
+        # Risks — informacionales (cat="RISK"), NO suman al score.
+        # `volume_seq_declining` queda en False hasta portear
+        # vol_sequence() del Observatory (tolerancia 5% + threshold 75%).
+        risks: list[dict] = []
+        risks.extend(
+            detect_volume_risks_15m(
+                candles_15m,
+                volume_ratio=vol_ratio,
+                volume_seq_declining=False,
+            )
+        )
+        risks.extend(detect_bb_fakeouts_15m(candles_15m, bb_1h))
+
+        patterns: list[dict] = [*triggers, *risks]
+
+        # ── Paso 6: Trigger gate (spec §3 I5 item 2)
+        #
+        # Al menos 1 trigger en la dirección efectiva del alignment.
+        # Observatory: `triggers_in_direction = [p for p in triggers if sg == direction]`.
+        directional_triggers = [t for t in triggers if t["sg"] == effective_dir]
+        trigger_sum = round(sum(t["w"] for t in directional_triggers), 2)
+        layers["trigger"] = {
+            "pass": len(directional_triggers) >= 1,
+            "count": len(directional_triggers),
+            "sum": trigger_sum,
+        }
+
+        # Risks se agregan al layer "risk" con items y sum (informacional).
+        risk_sum = round(sum(r["w"] for r in risks), 2)
+
+        if not layers["trigger"]["pass"]:
+            layers["risk"] = {
+                "sum": risk_sum,
+                "blocked": False,
+                "items": risks,
+                "conflictInfo": None,
+            }
+            return build_neutral_output(
+                ticker=ticker,
+                fixture_id=fixture_id,
+                fixture_version=fixture_version,
+                blocked="Sin trigger de entrada",
+                layers=layers,
+                ind={},
+                patterns=patterns,
+                dir_=effective_dir,
+            )
+
+        # ── Paso 7: Conflict gate (spec §3 I5 item 3)
+        #
+        # Si hay triggers en AMBAS direcciones, la diferencia de pesos
+        # totales debe ser ≥ 2. Sino se bloquea el scan.
+        put_w = round(
+            sum(t["w"] for t in triggers if t["sg"] == "PUT"),
+            2,
+        )
+        call_w = round(
+            sum(t["w"] for t in triggers if t["sg"] == "CALL"),
+            2,
+        )
+        conflict_diff = round(abs(put_w - call_w), 2)
+        conflict_info: dict[str, Any] | None = None
+        conflict_blocked = False
+        if put_w > 0 and call_w > 0:
+            conflict_info = {"put": put_w, "call": call_w, "diff": conflict_diff}
+            if conflict_diff < 2:
+                conflict_blocked = True
+
+        layers["risk"] = {
+            "sum": risk_sum,
+            "blocked": conflict_blocked,
+            "items": risks,
+            "conflictInfo": conflict_info,
+        }
+
+        if conflict_blocked:
+            return build_neutral_output(
+                ticker=ticker,
+                fixture_id=fixture_id,
+                fixture_version=fixture_version,
+                blocked=(f"Conflicto PUT({put_w})/CALL({call_w}) — diferencia {conflict_diff} < 2"),
+                layers=layers,
+                ind={},
+                patterns=patterns,
+                dir_=effective_dir,
+            )
+
+        # ── Paso 8+: confirmaciones + score + band (Fase 5)
+        #
+        # Llegamos hasta acá cuando alignment, trigger gate y conflict
+        # gate pasan. Los siguientes pasos (confirms con pesos de la
+        # fixture, suma final, band assignment) vienen en la Fase 5 del
+        # scoring. Por ahora devolvemos NEUTRAL con dirección y trigger
+        # info pero sin score final.
+        layers["confirm"] = {"sum": 0, "volMult": 1.0, "items": [], "bonus": 0}
         return build_neutral_output(
             ticker=ticker,
             fixture_id=fixture_id,
             fixture_version=fixture_version,
-            blocked="no_triggers_detected",
+            blocked="Score pendiente — confirms no wireados (Fase 5)",
             layers=layers,
+            ind={},
+            patterns=patterns,
+            dir_=effective_dir,
         )
 
     except Exception as e:
@@ -157,6 +339,40 @@ def analyze(
 # ═══════════════════════════════════════════════════════════════════════════
 # Validadores internos
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+def _safe_last(series: list[float | None]) -> float | None:
+    """Último valor no-`None` de una serie, o `None` si vacía / puros None."""
+    if not series:
+        return None
+    return series[-1]
+
+
+def _last_bb_tuple(
+    bb_series: tuple[list[float | None], list[float | None], list[float | None]],
+) -> tuple[float, float, float] | None:
+    """Último trío `(upper, middle, lower)` de una serie de Bollinger.
+
+    Devuelve `None` si alguno de los tres es `None` en el último índice
+    (warmup incompleto). Tupla de tres `float` en caso contrario.
+    """
+    lower, middle, upper = bb_series
+    lo = lower[-1] if lower else None
+    mi = middle[-1] if middle else None
+    up = upper[-1] if upper else None
+    if lo is None or mi is None or up is None:
+        return None
+    return (up, mi, lo)
+
+
+def _dir_from_alignment(alignment_dir: AlignmentDir) -> str:
+    """Convierte la dirección del alignment en la convención "CALL"/"PUT".
+
+    Observatory: `"PUT" if alignment["dir"] == "bearish" else "CALL"`.
+    Sólo se llama cuando `alignment_dir` es "bullish" o "bearish"
+    (nunca "mixed", el gate ya filtró ese caso).
+    """
+    return "PUT" if alignment_dir == "bearish" else "CALL"
 
 
 def _candle_shortage(

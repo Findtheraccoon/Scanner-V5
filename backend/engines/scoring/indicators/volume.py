@@ -4,6 +4,9 @@ Todas las funciones operan sobre la lista completa de velas y un
 `index` — devuelven el valor *en ese índice* considerando la historia
 previa. Esto hace trivial el uso desde el scoring (que típicamente
 pide "el valor AL momento de la señal", no toda la serie).
+
+**Rounding a 2 decimales** en `volume_ratio_at` y `gap_pct_at` — paridad
+con Observatory `indicators.py:vol_ratio()` y `gap()`.
 """
 
 from __future__ import annotations
@@ -41,7 +44,7 @@ def volume_ratio_at(
     avg = sum(recent) / window
     if avg <= 0:
         return None
-    return candles[index]["v"] / avg
+    return round(candles[index]["v"] / avg, 2)
 
 
 def is_volume_increasing(
@@ -95,4 +98,4 @@ def gap_pct_at(candles: list[dict], index: int) -> float | None:
     prev_close = candles[index - 1]["c"]
     if prev_close <= 0:
         return None
-    return (candles[index]["o"] - prev_close) / prev_close * 100.0
+    return round((candles[index]["o"] - prev_close) / prev_close * 100.0, 2)

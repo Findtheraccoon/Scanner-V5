@@ -131,11 +131,16 @@ class TestBollingerBands:
             assert mi[i] == sma_[i]
 
     def test_bands_symmetric_around_middle(self) -> None:
+        # Observatory redondea cada banda independientemente a 2 decimales.
+        # La simetría puede tener desviación hasta 0.01 por rounding asimétrico
+        # (ej. mi=7.0, sd=1.6329... → up=10.27, lo=3.73, ambos round a 2 dec
+        # → up-mi = 3.27, mi-lo = 3.27, OK; pero en edge cases puede diferir
+        # en 0.01).
         values = [10.0, 12.0, 11.0, 13.0, 14.0, 12.5]
         lo, mi, up = bollinger_bands(values, window=3, k=2.0)
         for i in range(2, len(values)):
             assert mi[i] is not None
-            assert (up[i] - mi[i]) == pytest.approx(mi[i] - lo[i])
+            assert (up[i] - mi[i]) == pytest.approx(mi[i] - lo[i], abs=0.01)
 
     def test_constant_series_has_zero_width(self) -> None:
         values = [50.0] * 10
@@ -144,6 +149,8 @@ class TestBollingerBands:
             assert lo[i] == mi[i] == up[i] == 50.0
 
     def test_manual_calculation_matches(self) -> None:
+        # Con rounding a 2 decimales (paridad Observatory), comparamos contra
+        # la versión redondeada del cálculo manual.
         values = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]
         window = 3
         k = 2.0
@@ -152,8 +159,8 @@ class TestBollingerBands:
         expected_mi = 7.0
         expected_sd = pstdev([5.0, 7.0, 9.0])
         assert mi[-1] == pytest.approx(expected_mi)
-        assert up[-1] == pytest.approx(expected_mi + k * expected_sd)
-        assert lo[-1] == pytest.approx(expected_mi - k * expected_sd)
+        assert up[-1] == pytest.approx(round(expected_mi + k * expected_sd, 2))
+        assert lo[-1] == pytest.approx(round(expected_mi - k * expected_sd, 2))
 
     def test_rejects_window_below_2(self) -> None:
         with pytest.raises(ValueError):
