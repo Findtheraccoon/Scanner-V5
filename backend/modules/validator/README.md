@@ -40,8 +40,8 @@ Orquestador de validación del sistema. No es motor — se invoca bajo demanda y
 
 ## Pendientes de resolver al implementar
 
-- Dataset parity exhaustivo concreto (ventana QQQ específica — bloqueante).
-- Formato del snapshot de referencia (`parity_reference/` — recomendación JSONL).
+- ~~Dataset parity exhaustivo concreto~~ — resuelto: 30 sesiones QQQ 2025 (245 señales) en JSON monolítico. Ver `backend/fixtures/parity_reference/README.md`.
+- ~~Formato del snapshot de referencia~~ — resuelto: JSON monolítico (`parity_qqq_sample.json`).
 
 ## Referencias
 

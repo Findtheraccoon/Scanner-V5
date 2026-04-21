@@ -272,9 +272,9 @@ Son distintos:
 #### Dataset de parity
 
 - **Embebido en el repo** bajo `/backend/fixtures/parity_reference/`
-- **Formato:** JSONL (una señal por línea) — formato exacto a confirmar en implementación
+- **Formato:** JSON monolítico — `fixtures/parity_qqq_sample.json` con metadata + array `signals`
 - **Generación:** en el Observatory, copia manual al scanner
-- **Dataset concreto a usar:** pendiente definir ventana exacta (día, semana, mes de QQQ — ver sección 14)
+- **Dataset concreto:** 30 sesiones de QQQ en 2025 (2-3 por mes, seed fijo=42), 245 señales totales, cubriendo las 6 franjas (ver `backend/fixtures/parity_reference/README.md` como fuente de verdad)
 
 #### Reportes
 
@@ -991,7 +991,7 @@ scanner-v5/
 - **Canvas nodo-conexión estilo Runpod** con 6 slots visibles
 - Cada slot (nodo):
   - Número (1-6)
-  - Campo ticker (dropdown con watchlist SPY/QQQ/IWM/AAPL/NVDA/XBI/XLE o entrada manual)
+  - Campo ticker (dropdown con watchlist preset SPY/QQQ/IWM/AAPL/NVDA o entrada manual)
   - Campo fixture (dropdown con: canonicals del ticker disponibles + fixtures activas del Config + "Cargar fixture...")
   - Benchmark (auto-populado desde fixture, read-only)
   - Toggle activo/inactivo
@@ -1275,8 +1275,8 @@ Los 7 items que bloqueaban el `FRONTEND_FOR_DESIGNER.md` están resueltos. Se de
 
 ### 9.2 Validación y testing
 
-1. Dataset de referencia concreto para el parity test exhaustivo (ventana específica de QQQ: 1 día, 1 semana, 1 mes) — **bloqueante para Capa 2 Validator.**
-2. Formato del snapshot de referencia en `parity_reference/` — JSONL/pickle/parquet (recomendación: JSONL).
+1. ~~Dataset de referencia concreto para el parity test exhaustivo~~ — **resuelto**: 30 sesiones de QQQ 2025 (245 señales), seed fijo=42. Ver `backend/fixtures/parity_reference/README.md`.
+2. ~~Formato del snapshot de referencia en `parity_reference/`~~ — **resuelto**: JSON monolítico (`parity_qqq_sample.json`).
 
 ### 9.3 Fixtures y métricas
 
@@ -1434,7 +1434,7 @@ Lista de puntos donde este documento modifica o extiende los specs del Observato
 **Bloqueantes reales remanentes:**
 - **Para DESIGNER:** ninguno. `FRONTEND_FOR_DESIGNER.md` v2.0.0 se puede generar completo con el contenido de este doc.
 - **Para Capa 1 Data Engine:** ninguno bloqueante. Pendientes resolubles durante implementación (gap detection, umbral exacto ENG-060, ring buffer defaults).
-- **Para Capa 2 Validator:** dataset parity concreto (ventana QQQ) — único bloqueante duro.
+- **Para Capa 2 Validator:** ninguno bloqueante. Dataset parity resuelto (30 sesiones QQQ 2025 en JSON monolítico — ver `backend/fixtures/parity_reference/README.md`).
 
 **Siguientes pasos sugeridos:**
 

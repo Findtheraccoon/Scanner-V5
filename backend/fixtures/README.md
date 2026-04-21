@@ -16,7 +16,9 @@ fixtures/
 ├── qqq_canonical_v2.json            # Múltiples canonicals coexisten (desvío #5)
 ├── ...
 └── parity_reference/
-    └── *.jsonl                      # Dataset de parity para el Validator
+    ├── README.md                        # Fuente de verdad del sample (formato + ventana)
+    ├── parity_qqq_canonical.py          # Script go/no-go del parity check
+    └── fixtures/parity_qqq_sample.json  # Dataset de 30 sesiones QQQ 2025 (245 señales)
 ```
 
 ## Qué NO vive acá
@@ -34,7 +36,7 @@ fixtures/
 
 ## Dataset de parity
 
-`parity_reference/` contiene el dataset concreto que el Validator usa para su test F. Formato recomendado: JSONL (una señal de referencia por línea). Ventana concreta de QQQ a usar: **pendiente definir con Álvaro** (bloqueante para Capa 2).
+`parity_reference/` contiene el dataset concreto que el Validator usa para su test F. Formato: JSON monolítico (`parity_qqq_sample.json` con metadata + array `signals`). Ventana: 30 sesiones de QQQ en 2025 (2-3 por mes, seed fijo=42), 245 señales cubriendo las 6 franjas. El `README.md` interno del directorio es la fuente de verdad del sample.
 
 ## Referencias
 

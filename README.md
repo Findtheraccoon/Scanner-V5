@@ -1,6 +1,6 @@
 # Scanner-v5
 
-Scanner de trading de opciones (0DTE/1DTE) sobre mercado US en vivo. Procesa 6 tickers en paralelo con un motor de scoring plug-and-play, una fixture por ticker, y una UI operativa dividida en 4 pestañas.
+Scanner de trading de opciones (0DTE/1DTE) sobre mercado US en vivo. Procesa hasta 6 tickers en paralelo (5 preset por default — SPY/QQQ/IWM/AAPL/NVDA — + 1 slot libre para configurar) con un motor de scoring plug-and-play, una fixture por ticker, y una UI operativa dividida en 4 pestañas.
 
 **Estado:** diseño cerrado (abril 2026). Desarrollo greenfield — no porta código del scanner v4.2.1, solo concepto.
 

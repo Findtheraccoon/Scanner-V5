@@ -28,7 +28,7 @@ Nunca plantear tensiones con specs viejos como si ambas fuentes tuvieran el mism
 
 ## Qué es el Scanner v5 live
 
-Scanner de trading de opciones (0DTE/1DTE sobre SPY/QQQ/IWM/AAPL/NVDA/XBI/XLE) que opera sobre mercado en vivo con 6 slots de tickers paralelos. Reemplaza al scanner v4.2.1 HTML monolítico.
+Scanner de trading de opciones (0DTE/1DTE) que opera sobre mercado en vivo con 6 slots de tickers paralelos. Por default trae 5 tickers preset (SPY/QQQ/IWM/AAPL/NVDA) y un slot libre para configurar a gusto del trader. Reemplaza al scanner v4.2.1 HTML monolítico.
 
 **Relación con Signal Observatory:** el Observatory es proyecto hermano que vive en paralelo — calibra canonicals, genera métricas empíricas, es fuente de verdad de aprobación. El scanner live **consume, no calibra**.
 
@@ -163,7 +163,7 @@ Decisiones previas, ya en los specs del Observatory. Se implementan fielmente:
 - Dispara al arranque + 3 botones Dashboard + automático tras hot-reload.
 - 7 categorías D→A→B→C→E→F→G; severidad Fatal/DEGRADED/Warning.
 - Test end-to-end usa flag `is_validator_test: true` para no contaminar DB.
-- Dataset parity en `backend/fixtures/parity_reference/` JSONL.
+- Dataset parity en `backend/fixtures/parity_reference/` (JSON monolítico, 30 sesiones QQQ 2025, 245 señales).
 - Reporte JSON al frontend vía `validator.progress` WebSocket event + TXT a `/LOG/` 5 días.
 
 ### Slot Registry (módulo)
@@ -290,9 +290,7 @@ Consulta. 2 secciones colapsables: Stats por Slot (6 subsecciones, leen desde si
 
 ## Preguntas abiertas (16 vivas — ver FEATURE_DECISIONS §9)
 
-**Bloqueantes para Capa 2 Validator:**
-- Dataset parity exhaustivo concreto (ventana QQQ específica: 1 día, 1 semana, 1 mes).
-- Formato del snapshot de referencia en `parity_reference/` (recomendación: JSONL).
+**Bloqueantes para Capa 2 Validator:** ninguno. Dataset parity resuelto (30 sesiones QQQ 2025 en JSON monolítico, ver `backend/fixtures/parity_reference/README.md`).
 
 **No bloqueantes** (se resuelven en implementación de cada capa):
 - Detección de gaps en DB local del Data Engine (resolver al programar Capa 1).
@@ -314,7 +312,7 @@ Consulta. 2 secciones colapsables: Stats por Slot (6 subsecciones, leen desde si
 1. **Arrancar desarrollo de Capa 1 (Data Engine)** en chat nuevo. Inputs: este handoff + `FEATURE_DECISIONS.md` + `FRONTEND_FOR_DESIGNER.md` + `scanner_v4_2_1.html` (referencia del round-robin ya validado en producción) + specs del Observatory en `docs/specs/`.
 2. **Entregar `SCANNER_V5_FRONTEND_FOR_DESIGNER.md` v2.0.0** al diseñador.
 3. **Actualizar specs del Observatory** según §8 de FEATURE_DECISIONS (manual, pendiente).
-4. **Definir dataset parity exhaustivo** con Álvaro (ventana QQQ concreta) — desbloquea Capa 2.
+4. ~~Definir dataset parity exhaustivo~~ — resuelto (30 sesiones QQQ 2025 JSON, ver `backend/fixtures/parity_reference/README.md`).
 
 ---
 
