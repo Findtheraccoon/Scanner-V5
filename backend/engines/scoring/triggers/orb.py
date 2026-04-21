@@ -1,34 +1,25 @@
 """ORB (Opening Range Breakout) breakout/breakdown — 2 triggers del total de 14.
 
-Port de scanner_v4.2.1.html líneas 302-316 (cálculo de niveles) + 640-648
-(triggers). Agrega el time gate "≤ 10:30 ET" que v5 requiere explícitamente
-(spec §3 I5 item 4).
+Implementa lo que pide el spec v5.2.0 §5.1 + §3 I5 item 4:
 
-Definición del ORB:
+    ORB breakout / breakdown: solo válidos cuando la hora actual está
+    ≤ 10:30 ET (time gate). Peso 2.0, age 0, sin decay.
 
-    Opening Range = máximo y mínimo de las **primeras 2 velas 15M del día**
-    (9:30-10:00 ET en un día regular → ventana de 30 minutos).
+El ORB se define como el high/low de las **primeras 2 velas 15M del
+día**. Un close actual que supera el high → breakout (CALL). Un close
+debajo del low → breakdown (PUT).
 
-    breakUp  si close_actual > ORB_high
-    breakDown si close_actual < ORB_low
-
-Cuándo dispara en v5:
-
-    1. Debe ser ≤ 10:30 ET (spec §3 I5). Se consulta `sim_datetime` si
-       el caller lo provee, else el `dt` de la última vela 15M.
-    2. (v4.2.1) Se respeta el filtro volumétrico opcional `volM >= 1.0`
-       para mantener paridad con el canonical QQQ. El caller pasa
-       `volume_ratio=volM` computado con volumen relativo a mediana
-       reciente; si no lo pasa, el filtro se salta.
-
-Weight: 2.0, age: 0 (nunca decay — ORB es solo de la vela actual).
+**Desvíos explícitos respecto a v4.2.1:** el scanner viejo tenía un
+filtro adicional `volM >= 1.0` sobre los triggers ORB. **NO se porta**
+porque el spec v5 removió el volumen (y la hora del día) como parámetro
+de peso/gating del sistema de scoring. La única constraint de ORB en
+v5 es el time gate.
 """
 
 from __future__ import annotations
 
 _WEIGHT_ORB: float = 2.0
 _ORB_CUTOFF_SECONDS: int = 10 * 3600 + 30 * 60  # 10:30:00 ET = 37800 s
-_ORB_VOL_MIN: float = 1.0  # v4.2.1
 
 
 def compute_orb_levels(candles_15m: list[dict]) -> dict | None:
@@ -80,17 +71,12 @@ def compute_orb_levels(candles_15m: list[dict]) -> dict | None:
 def detect_orb_triggers_15m(
     candles_15m: list[dict],
     *,
-    volume_ratio: float | None = None,
     sim_datetime: str | None = None,
 ) -> list[dict]:
     """Detecta ORB breakout / breakdown con time gate 10:30 ET.
 
     Args:
         candles_15m: velas 15M antigua→reciente. Mínimo 10.
-        volume_ratio: ratio de volumen actual vs promedio reciente
-            (`volume_ratio_at` del módulo indicators). Si < 1.0, el
-            trigger se suprime para mantener paridad con v4.2.1. Si
-            `None`, el filtro se salta.
         sim_datetime: timestamp "YYYY-MM-DD HH:MM:SS" ET usado por el
             Validator/Observatory. Si es `None`, se usa el `dt` de la
             última vela. Nunca se usa la hora del reloj del sistema.
@@ -105,9 +91,6 @@ def detect_orb_triggers_15m(
         current_dt = candles_15m[-1].get("dt")
 
     if not _is_orb_time_valid(current_dt):
-        return []
-
-    if volume_ratio is not None and volume_ratio < _ORB_VOL_MIN:
         return []
 
     orb = compute_orb_levels(candles_15m)
