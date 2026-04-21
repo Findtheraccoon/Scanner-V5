@@ -1,0 +1,75 @@
+{
+  "confirm_weights": {
+    "BBinf_1H": 3,
+    "BBinf_D": 1,
+    "BBsup_1H": 1,
+    "BBsup_D": 1,
+    "DivSPY": 1,
+    "FzaRel": 4,
+    "Gap": 1,
+    "SqExp": 0,
+    "VolHigh": 2,
+    "VolSeq": 0
+  },
+  "detection_thresholds": {
+    "divspy_asset_threshold_pct": 0.5,
+    "divspy_spy_threshold_pct": 0.3,
+    "fzarel_min_divergence_pct": 0.5,
+    "volhigh_min_ratio": 1.2
+  },
+  "metadata": {
+    "author": "Alvaro + Signal Observatory",
+    "canonical_ref": "qqq_canonical_v1",
+    "description": "Baseline canonical del motor v5.2.0 calibrado sobre QQQ.",
+    "engine_compat_range": ">=5.2.0,<6.0.0",
+    "fixture_id": "qqq_canonical_v1",
+    "fixture_version": "5.2.0",
+    "generated_at": "2026-04-19T00:00:00Z",
+    "generated_from": "Signal Observatory Fase 2 Paso 4 + Paso 5 (Sesion 4). Calibrado empiricamente sobre 6519 senales QQQ en 773 sesiones (2023-03-15 a 2026-04-14). Spread B->S+ de +24.2pp verificado. Fixture activa derivada: qqq_v5_2_0.",
+    "notes": "Este es el primer canonical del sistema plug-and-play, derivado del dataset observatory_v5_2.db. Los valores de confirm_weights, detection_thresholds y score_bands provienen de los hallazgos H-01 a H-16 documentados en FINDINGS_ARCHIVE.md. No modificar sin replay completo y aprobacion del trader."
+  },
+  "score_bands": [
+    {
+      "label": "S+",
+      "max": null,
+      "min": 16.0,
+      "signal": "SETUP"
+    },
+    {
+      "label": "S",
+      "max": 16.0,
+      "min": 14.0,
+      "signal": "SETUP"
+    },
+    {
+      "label": "A+",
+      "max": 14.0,
+      "min": 10.0,
+      "signal": "SETUP"
+    },
+    {
+      "label": "A",
+      "max": 10.0,
+      "min": 7.0,
+      "signal": "SETUP"
+    },
+    {
+      "label": "B",
+      "max": 7.0,
+      "min": 4.0,
+      "signal": "REVISAR"
+    },
+    {
+      "label": "REVISAR",
+      "max": 4.0,
+      "min": 2.0,
+      "signal": "REVISAR"
+    }
+  ],
+  "ticker_info": {
+    "benchmark": "SPY",
+    "requires_bench_daily": true,
+    "requires_spy_daily": true,
+    "ticker": "QQQ"
+  }
+}

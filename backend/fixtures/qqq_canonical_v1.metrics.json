@@ -1,0 +1,124 @@
+{
+  "calibration_process": {
+    "force_promoted": false,
+    "iterations_count": null,
+    "report_md_path": "fixtures/qqq_canonical_v1.calibration.md",
+    "warnings_raised": [
+      "legacy-calibration: calibrado antes de la formalización de la metodología en CALIBRATION_METHODOLOGY.md. No tiene split training/oos explícito — todos los valores son sobre dataset completo (36 meses)."
+    ]
+  },
+  "calibration_status": "final",
+  "dataset": {
+    "benchmark": "SPY",
+    "oos_end": null,
+    "oos_months": null,
+    "oos_sessions": null,
+    "oos_signals_total": null,
+    "oos_start": null,
+    "ticker": "QQQ",
+    "training_end": "2026-04-14",
+    "training_months": 36,
+    "training_sessions": 773,
+    "training_signals_total": 6519,
+    "training_start": "2023-03-15"
+  },
+  "fixture_ref": {
+    "file_hash_sha256": "4927abaa7177235a42f38f368a384d1cb1bae49ec7f3c1db2c0d8c52758f57ac",
+    "fixture_id": "qqq_canonical_v1",
+    "fixture_type": "canonical",
+    "fixture_version": "5.2.0"
+  },
+  "generated_at": "2026-04-19T00:00:00Z",
+  "generated_by": "Signal Observatory Fase 2 Paso 4 + Paso 5 (Sesion 4)",
+  "metrics_oos": null,
+  "metrics_training": {
+    "by_band": {
+      "A": {
+        "mfe_mae": 6.36,
+        "n": 1759,
+        "wr_pct": 54.9
+      },
+      "A_plus": {
+        "mfe_mae": 7.19,
+        "n": 674,
+        "wr_pct": 59.5
+      },
+      "B": {
+        "mfe_mae": 10.37,
+        "n": 2413,
+        "wr_pct": 48.5
+      },
+      "REVISAR": {
+        "mfe_mae": 7.18,
+        "n": 1611,
+        "wr_pct": 50.9
+      },
+      "S": {
+        "mfe_mae": 4.35,
+        "n": 51,
+        "wr_pct": 60.8
+      },
+      "S_plus": {
+        "mfe_mae": 1.6,
+        "n": 11,
+        "wr_pct": 72.7
+      }
+    },
+    "confirms": {
+      "BBinf_1H": {
+        "coverage_pct": 7.3,
+        "uplift_pp": 6.6
+      },
+      "BBinf_D": {
+        "coverage_pct": 5.8,
+        "uplift_pp": 1.4
+      },
+      "BBsup_1H": {
+        "coverage_pct": 5.3,
+        "uplift_pp": 9.0
+      },
+      "BBsup_D": {
+        "coverage_pct": 7.4,
+        "uplift_pp": 1.1
+      },
+      "DivSPY": {
+        "coverage_pct": 0.0,
+        "uplift_pp": 0
+      },
+      "FzaRel": {
+        "coverage_pct": 49.5,
+        "uplift_pp": 12.0
+      },
+      "Gap": {
+        "coverage_pct": 31.1,
+        "uplift_pp": 2.4
+      },
+      "SqExp": {
+        "coverage_pct": 3.4,
+        "uplift_pp": -2.3
+      },
+      "VolHigh": {
+        "coverage_pct": 13.9,
+        "uplift_pp": 0.2
+      },
+      "VolSeq": {
+        "coverage_pct": 9.4,
+        "uplift_pp": -3.9
+      }
+    },
+    "progression_monotonic": true,
+    "spread_b_to_splus_pp": 24.2
+  },
+  "schema_version": "1.0.0",
+  "thresholds_check": {
+    "all_mandatory_met": true,
+    "n_a_plus_min_met": true,
+    "n_s_splus_min_met": true,
+    "progression_monotonic_met": true,
+    "spread_min_met": true,
+    "wr_a_min_met": true,
+    "wr_a_plus_min_met": true,
+    "wr_s_min_met": true,
+    "wr_s_plus_min_met": true
+  }
+}
