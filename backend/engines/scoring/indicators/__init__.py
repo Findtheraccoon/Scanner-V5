@@ -25,6 +25,7 @@ from engines.scoring.indicators.bollinger import (
 )
 from engines.scoring.indicators.gap import gap
 from engines.scoring.indicators.moving_averages import ema, sma
+from engines.scoring.indicators.pivots import find_pivots, key_levels
 from engines.scoring.indicators.volume import (
     gap_pct_at,
     is_volume_increasing,
@@ -40,9 +41,11 @@ __all__ = [
     "bb_width_normalized",
     "bollinger_bands",
     "ema",
+    "find_pivots",
     "gap",
     "gap_pct_at",
     "is_volume_increasing",
+    "key_levels",
     "sma",
     "today_candles",
     "true_range",
