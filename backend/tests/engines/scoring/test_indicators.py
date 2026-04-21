@@ -14,7 +14,7 @@ import pytest
 
 from engines.scoring.indicators import (
     atr,
-    bb_width,
+    bb_width_normalized,
     bollinger_bands,
     ema,
     gap_pct_at,
@@ -174,22 +174,22 @@ class TestBollingerBands:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# BB width (derivado de bollinger_bands)
+# BB width normalizado (helper auxiliar)
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class TestBBWidth:
+class TestBBWidthNormalized:
     def test_constant_series_width_is_zero(self) -> None:
         values = [50.0] * 10
         lo, mi, up = bollinger_bands(values, window=5, k=2.0)
-        w = bb_width(lo, mi, up)
+        w = bb_width_normalized(lo, mi, up)
         for v in w[4:]:
             assert v == pytest.approx(0.0)
 
     def test_width_is_none_in_warmup(self) -> None:
         values = [1.0, 2.0, 3.0, 4.0]
         lo, mi, up = bollinger_bands(values, window=3, k=2.0)
-        w = bb_width(lo, mi, up)
+        w = bb_width_normalized(lo, mi, up)
         assert w[0] is None
         assert w[1] is None
         assert w[2] is not None  # warmup completo
@@ -197,7 +197,7 @@ class TestBBWidth:
     def test_width_is_positive_for_non_constant_series(self) -> None:
         values = [1.0, 5.0, 2.0, 6.0, 3.0, 7.0]
         lo, mi, up = bollinger_bands(values, window=3, k=2.0)
-        w = bb_width(lo, mi, up)
+        w = bb_width_normalized(lo, mi, up)
         for v in w[2:]:
             assert v is not None and v > 0
 

@@ -18,22 +18,38 @@ Convenciones globales:
 """
 
 from engines.scoring.indicators.atr import atr, true_range
-from engines.scoring.indicators.bollinger import bb_width, bollinger_bands
+from engines.scoring.indicators.bollinger import (
+    bb_width,
+    bb_width_normalized,
+    bollinger_bands,
+)
+from engines.scoring.indicators.gap import gap
 from engines.scoring.indicators.moving_averages import ema, sma
+from engines.scoring.indicators.pivots import find_pivots, key_levels
 from engines.scoring.indicators.volume import (
     gap_pct_at,
     is_volume_increasing,
+    today_candles,
+    vol_ratio_intraday,
+    vol_sequence,
     volume_ratio_at,
 )
 
 __all__ = [
     "atr",
     "bb_width",
+    "bb_width_normalized",
     "bollinger_bands",
     "ema",
+    "find_pivots",
+    "gap",
     "gap_pct_at",
     "is_volume_increasing",
+    "key_levels",
     "sma",
+    "today_candles",
     "true_range",
+    "vol_ratio_intraday",
+    "vol_sequence",
     "volume_ratio_at",
 ]
