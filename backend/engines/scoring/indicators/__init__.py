@@ -23,6 +23,7 @@ from engines.scoring.indicators.bollinger import (
     bb_width_normalized,
     bollinger_bands,
 )
+from engines.scoring.indicators.gap import gap
 from engines.scoring.indicators.moving_averages import ema, sma
 from engines.scoring.indicators.volume import (
     gap_pct_at,
@@ -39,6 +40,7 @@ __all__ = [
     "bb_width_normalized",
     "bollinger_bands",
     "ema",
+    "gap",
     "gap_pct_at",
     "is_volume_increasing",
     "sma",
