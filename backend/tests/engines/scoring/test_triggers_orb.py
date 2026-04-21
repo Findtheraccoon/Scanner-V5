@@ -214,7 +214,10 @@ class TestTimeGate:
             ("09:30:00", True),
             ("10:00:00", True),
             ("10:30:00", True),  # edge inclusivo
-            ("10:30:01", False),  # 1 segundo después
+            # Observatory usa `dt_str[11:16]` — slice fijo "HH:MM", ignora
+            # segundos. 10:30:59 → "10:30" → válido. 10:31:00 → "10:31" → inválido.
+            ("10:30:01", True),
+            ("10:30:59", True),
             ("10:31:00", False),
             ("11:00:00", False),
             ("15:00:00", False),

@@ -10,8 +10,10 @@ debajo del low → breakdown (PUT).
 **Gates aplicados al trigger (ambos del Observatory):**
 
     1. **Time gate** — solo válido ≤ 10:30 ET (spec §3 I5 item 4).
-       Coincide con lo que hace el Observatory. Usa `sim_datetime` si
-       lo provee el caller, else `dt` de la última vela.
+       Port literal de Observatory: slice `dt_str[11:16]` + comparación
+       string contra `"10:30"`. Los segundos se ignoran — `"10:30:59"`
+       → `"10:30"` → válido. Usa `sim_datetime` si lo provee el caller,
+       else `dt` de la última vela.
 
     2. **Volume gate** — `volume_ratio >= 1.0`. Este es un GATE BINARIO
        (fire / no fire), NO un weight del score. El hallazgo H-02
@@ -27,7 +29,7 @@ Weight: 2.0, age: 0, sin decay.
 from __future__ import annotations
 
 _WEIGHT_ORB: float = 2.0
-_ORB_CUTOFF_SECONDS: int = 10 * 3600 + 30 * 60  # 10:30:00 ET = 37800 s
+_ORB_CUTOFF_HHMM: str = "10:30"  # Observatory string compare — ver _is_orb_time_valid
 _ORB_VOL_MIN: float = 1.0  # gate binario — paridad con Observatory
 
 
@@ -146,31 +148,36 @@ def detect_orb_triggers_15m(
 
 
 def _is_orb_time_valid(dt_str: str | None) -> bool:
-    """True si el time-component de `dt_str` es ≤ 10:30:00 (ET asumido).
+    """True si la parte "HH:MM" de `dt_str` es ≤ "10:30" (string compare).
 
-    Semántica del spec §3 I5: ORB solo válido ≤ 10:30 ET. Inclusivo de
-    10:30:00 exacto.
+    Port literal del Observatory `engine.py` líneas 184-185:
 
-    Conservadoramente devuelve False si no se puede parsear el time
-    (no queremos disparar ORB de forma incontrolada cuando el
-    timestamp está roto).
+        _hhmm = sim_datetime[11:16]      # "HH:MM" de "YYYY-MM-DD HH:MM:SS"
+        _orb_in_first_hour = _hhmm <= "10:30"
+
+    El slice [11:16] funciona para ambos separadores (" " o "T") porque
+    el carácter 10 es irrelevante. **Los segundos se ignoran por completo** —
+    `"10:30:30"` → `"10:30"` → válido. Inclusivo de `"10:30"` exacto.
+
+    Divergencias con Observatory:
+
+        - `dt_str = None`     → Mío: False. Observatory: True (permite ORB
+                                 en live mode sin sim_datetime). Mi elección
+                                 es conservadora: sin info de tiempo, no
+                                 dispara.
+        - Parse falla         → Mío: False. Observatory: True (fallback
+                                 laxo). Mismo argumento.
+
+    En backtest contra el sample (sim_datetime siempre "YYYY-MM-DD HH:MM:SS"
+    válido), ambas semánticas convergen.
     """
-    if not dt_str:
-        return False
-    if " " in dt_str:
-        _, time_part = dt_str.split(" ", 1)
-    elif "T" in dt_str:
-        _, time_part = dt_str.split("T", 1)
-    else:
-        return False  # sin time-component no se puede validar
-    parts = time_part.split(":")
-    if len(parts) < 2:
+    if dt_str is None:
         return False
     try:
-        hours = int(parts[0])
-        minutes = int(parts[1])
-        seconds = int(parts[2]) if len(parts) >= 3 else 0
-    except ValueError:
+        hhmm = dt_str[11:16]
+        # Validación mínima: "HH:MM" tiene longitud 5 con ":" en índice 2.
+        if len(hhmm) != 5 or hhmm[2] != ":":
+            return False
+        return hhmm <= _ORB_CUTOFF_HHMM
+    except (IndexError, TypeError):
         return False
-    total_seconds = hours * 3600 + minutes * 60 + seconds
-    return total_seconds <= _ORB_CUTOFF_SECONDS
