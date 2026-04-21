@@ -23,6 +23,13 @@ from engines.data.constants import (
 )
 from engines.data.fetcher import TwelveDataClient, TwelveDataError
 from engines.data.integrity import check_integrity
+from engines.data.market_calendar import (
+    is_market_day,
+    is_market_open,
+    next_close,
+    previous_close,
+    session_close,
+)
 from engines.data.models import (
     ApiKeyConfig,
     ApiKeyState,
@@ -59,4 +66,9 @@ __all__ = [
     "TwelveDataClient",
     "TwelveDataError",
     "check_integrity",
+    "is_market_day",
+    "is_market_open",
+    "next_close",
+    "previous_close",
+    "session_close",
 ]
