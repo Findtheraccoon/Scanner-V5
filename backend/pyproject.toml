@@ -29,6 +29,9 @@ dependencies = [
     "pydantic>=2.9.0",
     "pydantic-settings>=2.6.0",
 
+    # Semver parsing (SpecifierSet) — slot_registry engine compat check
+    "packaging>=24.0",
+
     # Logging
     "loguru>=0.7.2",
 
