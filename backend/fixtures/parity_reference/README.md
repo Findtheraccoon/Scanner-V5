@@ -1,6 +1,8 @@
-# tests/ — Tests del motor v5
+# backend/fixtures/parity_reference/ — Parity reference del motor v5
 
-Contiene tests que validan que el motor de scoring v5 preserva comportamiento a través de cambios de código. El test principal es el **parity check** contra el canonical QQQ.
+Contiene el dataset golden reference que el Validator (test F) y el chat de desarrollo usan para validar que el motor de scoring v5 preserva comportamiento bit-a-bit a través de cambios de código. El test principal es el **parity check** contra el canonical QQQ.
+
+**Este README es la fuente de verdad del sample:** formato y ventana declarados acá ganan sobre cualquier otra mención en docs operativos o specs.
 
 ## Archivos
 
@@ -30,9 +32,8 @@ También verifica que no haya señales extra en la DB que no estén en el refere
 ## Cuándo correrlo
 
 **Obligatorio antes de:**
-- Aprobar cualquier PR que toque `scanner/engine.py`, `scanner/scoring.py`, `scanner/patterns.py`, o `scanner/indicators.py`
-- Implementar el refactor plug-and-play (validar que externalizar pesos de confirms + umbrales + franjas no rompe paridad)
-- Cualquier merge a la rama principal
+- Aprobar cualquier PR que toque `backend/engines/scoring/` o `backend/fixtures/qqq_canonical_v1.json`
+- Cualquier merge a la rama principal que toque el motor
 
 **Recomendado:**
 - Después de actualizar dependencias (cambios de versión de Python, librerías numéricas)
@@ -40,19 +41,19 @@ También verifica que no haya señales extra en la DB que no estén en el refere
 
 **Innecesario:**
 - En cambios puramente cosméticos (comentarios, renames sin cambio de lógica)
-- En cambios a `analysis/` o `backtest/` que no tocan el motor
+- En cambios fuera de `backend/engines/scoring/` que no tocan el motor
 
 ## Cómo correrlo
 
 ```bash
 # Desde la raíz del repo
-python3 tests/parity_qqq_canonical.py
+python3 backend/fixtures/parity_reference/parity_qqq_canonical.py
 
 # Con tolerancia custom para floats
-python3 tests/parity_qqq_canonical.py --tolerance 0.001
+python3 backend/fixtures/parity_reference/parity_qqq_canonical.py --tolerance 0.001
 
-# Contra una DB específica (ej. después de un refactor que generó nueva DB)
-python3 tests/parity_qqq_canonical.py --db observatory_v5_2_refactored.db
+# Contra una DB específica (default: data/scanner.db)
+python3 backend/fixtures/parity_reference/parity_qqq_canonical.py --db data/scanner_refactored.db
 ```
 
 ### Exit codes
@@ -78,16 +79,16 @@ El refactor rompió paridad. Leer el diff detallado. Opciones:
 Algo cambió que no debía. Chequear:
 - ¿Se modificó alguna fixture sin regenerar hash?
 - ¿Se actualizó una librería que alteró cálculos de floats?
-- ¿Cambió `observatory_v5_2.db` de posición o contenido?
-- ¿El sample `.json` fue modificado accidentalmente (git log del file)?
+- ¿La DB del scanner (`data/scanner.db`) fue regenerada o borrada?
+- ¿El sample `.json` fue modificado accidentalmente (`git log` del file)?
 
 ## Cómo regenerar el reference
 
 Solo regenerar cuando el canonical cambia formalmente (nuevo `qqq_canonical_v2.json`). El proceso:
 
-1. Correr replay completo con el nuevo canonical → genera nueva DB
+1. Correr replay completo con el nuevo canonical en el Observatory → genera nueva DB allá
 2. Correr el script generador del sample (embebido en las notas del Observatory)
-3. Actualizar `tests/fixtures/parity_qqq_sample.json` con el nuevo content
+3. Copiar el output a `backend/fixtures/parity_reference/fixtures/parity_qqq_sample.json`
 4. Actualizar el campo `canonical_hash` y `engine_version` del sample
 5. Commitear junto con el nuevo canonical
 

@@ -12,7 +12,7 @@ El test PASA si bit-por-bit los outputs del motor coinciden con el reference:
  - Mismos componentes detectados
 
 Uso:
-    python3 tests/parity_qqq_canonical.py [--tolerance 0.01]
+    python3 backend/fixtures/parity_reference/parity_qqq_canonical.py [--tolerance 0.01] [--db PATH]
 
 Exit codes:
     0 — parity OK, el motor matchea el reference
@@ -20,9 +20,10 @@ Exit codes:
     2 — error de setup (DB no encontrada, sample roto, etc.)
 
 Requisitos para correr:
-    - observatory_v5_2.db en la raíz del repo (o pasar otro path)
-    - fixtures/qqq_canonical_v1.json + .sha256
-    - tests/fixtures/parity_qqq_sample.json
+    - DB con señales generadas por el motor v5 sobre las 30 sesiones del sample.
+      Default: data/scanner.db. Pasar otra con --db.
+    - backend/fixtures/qqq_canonical_v1.json + .sha256
+    - backend/fixtures/parity_reference/fixtures/parity_qqq_sample.json
 """
 
 import argparse
@@ -38,11 +39,14 @@ from collections import defaultdict
 # CONFIG
 # ═══════════════════════════════════════════════════════════════════════════
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DEFAULT_DB = os.path.join(ROOT, "observatory_v5_2.db")
-CANONICAL_PATH = os.path.join(ROOT, "fixtures", "qqq_canonical_v1.json")
-CANONICAL_HASH_PATH = os.path.join(ROOT, "fixtures", "qqq_canonical_v1.sha256")
-SAMPLE_PATH = os.path.join(ROOT, "tests", "fixtures", "parity_qqq_sample.json")
+# Script vive en backend/fixtures/parity_reference/; subir 3 niveles para llegar a la raíz del repo.
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+DEFAULT_DB = os.path.join(ROOT, "data", "scanner.db")
+CANONICAL_PATH = os.path.join(ROOT, "backend", "fixtures", "qqq_canonical_v1.json")
+CANONICAL_HASH_PATH = os.path.join(ROOT, "backend", "fixtures", "qqq_canonical_v1.sha256")
+SAMPLE_PATH = os.path.join(
+    ROOT, "backend", "fixtures", "parity_reference", "fixtures", "parity_qqq_sample.json"
+)
 
 # Tolerancia default para comparación de floats
 DEFAULT_TOL = 0.01
