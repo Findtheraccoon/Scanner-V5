@@ -9,6 +9,9 @@ Convención canónica de J. Bollinger:
 
 Valores estándar: n=20, k=2.0. El scanner usa estos por default pero
 acepta override para experimentar.
+
+**Rounding a 2 decimales** en middle/upper/lower — paridad con
+Observatory `indicators.py:bb()`.
 """
 
 from __future__ import annotations
@@ -49,9 +52,9 @@ def bollinger_bands(
         win = values[i - window + 1 : i + 1]
         m = sum(win) / window
         sd = pstdev(win)
-        middle[i] = m
-        upper[i] = m + k * sd
-        lower[i] = m - k * sd
+        middle[i] = round(m, 2)
+        upper[i] = round(m + k * sd, 2)
+        lower[i] = round(m - k * sd, 2)
     return lower, middle, upper
 
 

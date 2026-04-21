@@ -14,6 +14,15 @@ ATR con **Wilder's smoothing** (el estándar):
 Equivale a EMA con alpha = 1/window (no 2/(window+1) como la EMA clásica).
 Wilder la formuló así originalmente para su RSI y ADR; todas las
 plataformas que se precian lo respetan.
+
+**Divergencia conocida con Observatory:** Observatory `indicators.py:atr()`
+usa `mean(TR[-period:])` simple (no Wilder). Esta divergencia afecta
+parity pero queda fuera del scope de Paso 6 (rounding); se aborda
+en un commit separado si resulta necesario para el parity test.
+
+**Rounding a 2 decimales** en el output — paridad con Observatory. La
+recurrencia interna usa el valor sin redondear (`prev`) para no
+acumular errores.
 """
 
 from __future__ import annotations
@@ -70,10 +79,10 @@ def atr(candles: list[dict], window: int = 14) -> list[float | None]:
 
     # Seed a mean(TR[0..window]).
     seed = sum(trs[:window]) / window
-    result[window - 1] = seed
+    result[window - 1] = round(seed, 2)
     prev = seed
     for i in range(window, n):
         curr = (prev * (window - 1) + trs[i]) / window
-        result[i] = curr
-        prev = curr
+        result[i] = round(curr, 2)
+        prev = curr  # keep unrounded for recurrence
     return result
