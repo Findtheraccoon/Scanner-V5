@@ -20,9 +20,9 @@ from __future__ import annotations
 from typing import Any
 
 from engines.scoring.alignment import (
-    alignment_gate_passes,
-    compute_alignment,
-    trend_for_timeframe,
+    alignment_gate,
+    trend_strict,
+    trend_with_fallback,
 )
 from engines.scoring.constants import (
     ENG_001,
@@ -33,6 +33,7 @@ from engines.scoring.constants import (
     MIN_CANDLES_DAILY,
 )
 from engines.scoring.errors import build_error_output, build_neutral_output
+from engines.scoring.indicators import sma
 from modules.fixtures import Fixture, FixtureError, parse_fixture
 
 
@@ -112,35 +113,68 @@ def analyze(
             )
 
         # ── Paso 4: Alignment gate (spec §3 I5, primer gate del pipeline)
-        t_15m = trend_for_timeframe(candles_15m)
-        t_1h = trend_for_timeframe(candles_1h)
-        t_daily = trend_for_timeframe(candles_daily)
-        alignment_n, alignment_dir = compute_alignment(t_15m, t_1h, t_daily)
+        #
+        # Computamos trends con la lógica Observatory Option B:
+        #   - 15M y 1H → trend_with_fallback (strict + slope fallback)
+        #   - Daily   → trend_strict (sin fallback, spec + Observatory)
+        #
+        # Para `has_catalyst` (override): el criterio de catalizador
+        # (cambio diario > 1.5*ATR% o DivSPY) se determina fuera de
+        # este motor. En Fase 4d+ el wiring pasará el valor real; por
+        # ahora asumimos False para comportamiento strict del gate.
+        closes_15m = [c["c"] for c in candles_15m]
+        closes_1h = [c["c"] for c in candles_1h]
+        closes_daily = [c["c"] for c in candles_daily]
+
+        ma20_15m = _safe_last(sma(closes_15m, 20))
+        ma40_15m = _safe_last(sma(closes_15m, 40))
+        ma20_1h = _safe_last(sma(closes_1h, 20))
+        ma40_1h = _safe_last(sma(closes_1h, 40))
+        ma20_daily = _safe_last(sma(closes_daily, 20))
+        ma40_daily = _safe_last(sma(closes_daily, 40))
+
+        t_15m = trend_with_fallback(candles_15m, ma20_15m, ma40_15m)
+        t_1h = trend_with_fallback(candles_1h, ma20_1h, ma40_1h)
+        t_daily = trend_strict(candles_daily[-1]["c"], ma20_daily, ma40_daily)
+
+        gate = alignment_gate(t_15m, t_1h, t_daily, has_catalyst=False)
+
+        # `layers` adopta la estructura del Observatory scoring.py para
+        # facilitar paridad:
+        #   layers.structure = {pass, reason, override}
+        #   layers.trends    = {t15m, t1h, tdaily}       (extra informativo)
+        #   layers.alignment = {n, dir, effective_dir}   (extra informativo)
         layers: dict[str, Any] = {
+            "structure": {
+                "pass": gate.passed,
+                "reason": gate.reason,
+                "override": gate.override,
+            },
             "trends": {"t15m": t_15m, "t1h": t_1h, "tdaily": t_daily},
-            "alignment_n": alignment_n,
-            "alignment_dir": alignment_dir,
+            "alignment": {
+                "n": gate.n,
+                "dir": gate.dir,
+                "effective_dir": gate.effective_dir,
+            },
         }
-        if not alignment_gate_passes(alignment_n, alignment_dir):
-            layers["gate"] = "alignment"
+
+        if not gate.passed:
             return build_neutral_output(
                 ticker=ticker,
                 fixture_id=fixture_id,
                 fixture_version=fixture_version,
-                blocked="alignment_gate",
+                blocked="Alineación insuficiente",
                 layers=layers,
             )
 
         # ── Paso 5+: fases futuras (triggers, confirms, conflict/ORB, score)
-        # Por ahora el motor corre "limpio" hasta alignment; en trigger
-        # aún no hay detectores.
-        layers["gate"] = "trigger"
-        layers["detail"] = "no trigger detectors wired yet"
+        # Por ahora alineamos pero sin detectores de trigger conectados.
+        layers["trigger"] = {"pass": False, "count": 0, "sum": 0}
         return build_neutral_output(
             ticker=ticker,
             fixture_id=fixture_id,
             fixture_version=fixture_version,
-            blocked="no_triggers_detected",
+            blocked="Sin trigger de entrada",
             layers=layers,
         )
 
@@ -157,6 +191,13 @@ def analyze(
 # ═══════════════════════════════════════════════════════════════════════════
 # Validadores internos
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+def _safe_last(series: list[float | None]) -> float | None:
+    """Último valor no-`None` de una serie, o `None` si vacía / puros None."""
+    if not series:
+        return None
+    return series[-1]
 
 
 def _candle_shortage(

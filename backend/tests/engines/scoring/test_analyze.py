@@ -151,7 +151,7 @@ def _assert_output_shape(out: dict[str, Any]) -> None:
 
 class TestHappyPath:
     def test_returns_neutral_with_valid_inputs(self) -> None:
-        """Con series monotónicamente crecientes, alignment=up/n=3 pasa
+        """Con series monotónicamente crecientes, alignment=bullish/n=3 pasa
         el primer gate y cae en el trigger gate (aún sin detectores)."""
         out = analyze(**_valid_inputs())
         _assert_output_shape(out)
@@ -160,14 +160,17 @@ class TestHappyPath:
         assert out["signal"] == "NEUTRAL"
         assert out["score"] == 0.0
         assert out["dir"] is None
-        assert out["blocked"] == "no_triggers_detected"
+        assert out["blocked"] == "Sin trigger de entrada"
 
     def test_layers_include_alignment_info_on_happy_path(self) -> None:
         out = analyze(**_valid_inputs())
-        assert "trends" in out["layers"]
+        # layers ahora matchea la estructura del Observatory.
+        assert out["layers"]["structure"]["pass"] is True
+        assert out["layers"]["structure"]["override"] is False
         assert set(out["layers"]["trends"].keys()) == {"t15m", "t1h", "tdaily"}
-        assert out["layers"]["alignment_n"] == 3
-        assert out["layers"]["alignment_dir"] == "up"
+        assert out["layers"]["alignment"]["n"] == 3
+        assert out["layers"]["alignment"]["dir"] == "bullish"
+        assert out["layers"]["alignment"]["effective_dir"] == "bullish"
 
     def test_echoes_ticker_and_engine_version(self) -> None:
         out = analyze(**_valid_inputs())
@@ -379,7 +382,7 @@ class TestAlignmentGate:
     """Integración del alignment gate de Fase 3 con `analyze()`."""
 
     def _flat_candles(self, n: int) -> list[dict]:
-        """Serie constante — produce trend=flat en todos los TFs."""
+        """Serie constante — produce trend=neutral en todos los TFs."""
         return [
             {
                 "dt": f"2025-01-{(i % 28) + 1:02d} 10:00:00",
@@ -393,7 +396,7 @@ class TestAlignmentGate:
         ]
 
     def test_flat_series_blocks_at_alignment_gate(self) -> None:
-        """3 TFs planos → dir=flat → gate bloquea."""
+        """3 TFs planos → dir="mixed" → gate bloquea."""
         inputs = _valid_inputs()
         inputs["candles_daily"] = self._flat_candles(MIN_CANDLES_DAILY)
         inputs["candles_1h"] = self._flat_candles(MIN_CANDLES_1H)
@@ -401,15 +404,16 @@ class TestAlignmentGate:
         out = analyze(**inputs)
         _assert_output_shape(out)
         assert out["error"] is False
-        assert out["blocked"] == "alignment_gate"
-        assert out["layers"]["alignment_dir"] == "flat"
+        assert out["blocked"] == "Alineación insuficiente"
+        assert out["layers"]["alignment"]["dir"] == "mixed"
+        assert out["layers"]["structure"]["pass"] is False
 
     def test_conflicting_trends_block_at_alignment_gate(self) -> None:
-        """15m up, 1h down, daily flat → empate up/down → dir=flat."""
+        """15m bullish, 1h bearish, daily neutral → tie → mixed."""
         inputs = _valid_inputs()
-        # 15m monotónicamente up (default de _candles)
+        # 15m monotónicamente creciente (default de _candles)
         inputs["candles_15m"] = _candles(MIN_CANDLES_15M, start_price=500.0)
-        # 1h monotónicamente down
+        # 1h monotónicamente decreciente
         inputs["candles_1h"] = [
             {
                 "dt": f"2025-01-{(i % 28) + 1:02d} 10:00:00",
@@ -424,15 +428,16 @@ class TestAlignmentGate:
         # daily flat
         inputs["candles_daily"] = self._flat_candles(MIN_CANDLES_DAILY)
         out = analyze(**inputs)
-        assert out["blocked"] == "alignment_gate"
-        # 1 up + 1 down + 1 flat → tie → flat
-        assert out["layers"]["alignment_dir"] == "flat"
+        assert out["blocked"] == "Alineación insuficiente"
+        # 1 bullish + 1 bearish + 1 neutral → tie → mixed
+        assert out["layers"]["alignment"]["dir"] == "mixed"
 
     def test_passing_alignment_reaches_trigger_gate(self) -> None:
         """Cuando alignment pasa, el blocker actual es el trigger gate."""
         out = analyze(**_valid_inputs())
-        assert out["blocked"] == "no_triggers_detected"
-        assert out["layers"]["alignment_n"] >= 2
+        assert out["blocked"] == "Sin trigger de entrada"
+        assert out["layers"]["alignment"]["n"] >= 2
+        assert out["layers"]["alignment"]["effective_dir"] in ("bullish", "bearish")
 
 
 class TestOutputShapeStability:
