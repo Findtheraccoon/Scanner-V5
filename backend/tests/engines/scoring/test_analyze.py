@@ -151,6 +151,8 @@ def _assert_output_shape(out: dict[str, Any]) -> None:
 
 class TestHappyPath:
     def test_returns_neutral_with_valid_inputs(self) -> None:
+        """Con series monotónicamente crecientes, alignment=up/n=3 pasa
+        el primer gate y cae en el trigger gate (aún sin detectores)."""
         out = analyze(**_valid_inputs())
         _assert_output_shape(out)
         assert out["error"] is False
@@ -158,8 +160,14 @@ class TestHappyPath:
         assert out["signal"] == "NEUTRAL"
         assert out["score"] == 0.0
         assert out["dir"] is None
-        # Phase 1 bloquea a nivel de trigger porque no hay detectores.
         assert out["blocked"] == "no_triggers_detected"
+
+    def test_layers_include_alignment_info_on_happy_path(self) -> None:
+        out = analyze(**_valid_inputs())
+        assert "trends" in out["layers"]
+        assert set(out["layers"]["trends"].keys()) == {"t15m", "t1h", "tdaily"}
+        assert out["layers"]["alignment_n"] == 3
+        assert out["layers"]["alignment_dir"] == "up"
 
     def test_echoes_ticker_and_engine_version(self) -> None:
         out = analyze(**_valid_inputs())
@@ -365,6 +373,66 @@ class TestInvariants:
 # ═══════════════════════════════════════════════════════════════════════════
 # Estabilidad del shape bajo condiciones límite
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestAlignmentGate:
+    """Integración del alignment gate de Fase 3 con `analyze()`."""
+
+    def _flat_candles(self, n: int) -> list[dict]:
+        """Serie constante — produce trend=flat en todos los TFs."""
+        return [
+            {
+                "dt": f"2025-01-{(i % 28) + 1:02d} 10:00:00",
+                "o": 100.0,
+                "h": 101.0,
+                "l": 99.0,
+                "c": 100.0,
+                "v": 1000 + i,
+            }
+            for i in range(n)
+        ]
+
+    def test_flat_series_blocks_at_alignment_gate(self) -> None:
+        """3 TFs planos → dir=flat → gate bloquea."""
+        inputs = _valid_inputs()
+        inputs["candles_daily"] = self._flat_candles(MIN_CANDLES_DAILY)
+        inputs["candles_1h"] = self._flat_candles(MIN_CANDLES_1H)
+        inputs["candles_15m"] = self._flat_candles(MIN_CANDLES_15M)
+        out = analyze(**inputs)
+        _assert_output_shape(out)
+        assert out["error"] is False
+        assert out["blocked"] == "alignment_gate"
+        assert out["layers"]["alignment_dir"] == "flat"
+
+    def test_conflicting_trends_block_at_alignment_gate(self) -> None:
+        """15m up, 1h down, daily flat → empate up/down → dir=flat."""
+        inputs = _valid_inputs()
+        # 15m monotónicamente up (default de _candles)
+        inputs["candles_15m"] = _candles(MIN_CANDLES_15M, start_price=500.0)
+        # 1h monotónicamente down
+        inputs["candles_1h"] = [
+            {
+                "dt": f"2025-01-{(i % 28) + 1:02d} 10:00:00",
+                "o": 500.0 - i * 0.5,
+                "h": 501.0 - i * 0.5,
+                "l": 499.0 - i * 0.5,
+                "c": 500.0 - i * 0.5,
+                "v": 1000,
+            }
+            for i in range(MIN_CANDLES_1H)
+        ]
+        # daily flat
+        inputs["candles_daily"] = self._flat_candles(MIN_CANDLES_DAILY)
+        out = analyze(**inputs)
+        assert out["blocked"] == "alignment_gate"
+        # 1 up + 1 down + 1 flat → tie → flat
+        assert out["layers"]["alignment_dir"] == "flat"
+
+    def test_passing_alignment_reaches_trigger_gate(self) -> None:
+        """Cuando alignment pasa, el blocker actual es el trigger gate."""
+        out = analyze(**_valid_inputs())
+        assert out["blocked"] == "no_triggers_detected"
+        assert out["layers"]["alignment_n"] >= 2
 
 
 class TestOutputShapeStability:

@@ -5,31 +5,25 @@ stateless, pura, determinística, nunca lanza excepciones, fixture
 read-only. El pipeline completo (alignment → trigger → conflict → ORB →
 score+band) se construye en fases sucesivas sobre este esqueleto.
 
-**Fase actual (1 — esqueleto + contrato):**
+**Estado:**
 
-    - Valida fixture via `modules.fixtures.parse_fixture` → ENG-010 si
-      falla el schema.
-    - Valida cuenta mínima de velas (40/25/25 spec §2.2) → ENG-001.
-    - Valida que `requires_spy_daily` / `requires_bench_daily` del
-      fixture estén honrados con los inputs correspondientes → ENG-001.
-    - Envuelve todo en try/except para garantizar I3 (nunca propaga
-      excepciones) → ENG-099 como catch-all.
-    - Devuelve NEUTRAL con `blocked="no_triggers_detected"` en el happy
-      path, ya que el detector de triggers aún no está implementado.
-
-**Fases siguientes (TODO en commits sucesivos):**
-
-    Fase 2 · indicadores (SMA, EMA, BB, ATR, volumen)
-    Fase 3 · alignment + trend gate
-    Fase 4 · 14 triggers (patterns.py)
-    Fase 5 · 10 confirms (confirms.py)
-    Fase 6 · gates (conflict/ORB) + score + band assignment
+    ✅ Fase 1 · esqueleto + contrato + errors (ENG-001/010/099).
+    ✅ Fase 2 · indicadores (SMA/EMA/BB/ATR/volumen) en `indicators/`.
+    ✅ Fase 3 · alignment gate (trend 15m/1h/daily + compute_alignment).
+    ⬜ Fase 4 · 14 triggers hardcoded (port v4.2.1).
+    ⬜ Fase 5 · 10 confirms con pesos de la fixture.
+    ⬜ Fase 6 · gates conflict + ORB + score + band assignment.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from engines.scoring.alignment import (
+    alignment_gate_passes,
+    compute_alignment,
+    trend_for_timeframe,
+)
 from engines.scoring.constants import (
     ENG_001,
     ENG_010,
@@ -117,14 +111,37 @@ def analyze(
                 fixture_version=fixture_version,
             )
 
-        # ── Paso 4+: fases futuras (indicadores, triggers, confirms, gates)
-        # Por ahora el motor corre "limpio" pero no detecta nada.
+        # ── Paso 4: Alignment gate (spec §3 I5, primer gate del pipeline)
+        t_15m = trend_for_timeframe(candles_15m)
+        t_1h = trend_for_timeframe(candles_1h)
+        t_daily = trend_for_timeframe(candles_daily)
+        alignment_n, alignment_dir = compute_alignment(t_15m, t_1h, t_daily)
+        layers: dict[str, Any] = {
+            "trends": {"t15m": t_15m, "t1h": t_1h, "tdaily": t_daily},
+            "alignment_n": alignment_n,
+            "alignment_dir": alignment_dir,
+        }
+        if not alignment_gate_passes(alignment_n, alignment_dir):
+            layers["gate"] = "alignment"
+            return build_neutral_output(
+                ticker=ticker,
+                fixture_id=fixture_id,
+                fixture_version=fixture_version,
+                blocked="alignment_gate",
+                layers=layers,
+            )
+
+        # ── Paso 5+: fases futuras (triggers, confirms, conflict/ORB, score)
+        # Por ahora el motor corre "limpio" hasta alignment; en trigger
+        # aún no hay detectores.
+        layers["gate"] = "trigger"
+        layers["detail"] = "no trigger detectors wired yet"
         return build_neutral_output(
             ticker=ticker,
             fixture_id=fixture_id,
             fixture_version=fixture_version,
             blocked="no_triggers_detected",
-            layers={"gate": "trigger", "detail": "no trigger detectors wired yet"},
+            layers=layers,
         )
 
     except Exception as e:
