@@ -23,6 +23,8 @@ from engines.scoring.indicators.moving_averages import ema, sma
 from engines.scoring.indicators.volume import (
     gap_pct_at,
     is_volume_increasing,
+    today_candles,
+    vol_ratio_intraday,
     volume_ratio_at,
 )
 
@@ -34,6 +36,8 @@ __all__ = [
     "gap_pct_at",
     "is_volume_increasing",
     "sma",
+    "today_candles",
     "true_range",
+    "vol_ratio_intraday",
     "volume_ratio_at",
 ]
