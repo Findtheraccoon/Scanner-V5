@@ -8,6 +8,7 @@ contratos con otros componentes.
 """
 
 from engines.data.api_keys import KeyPool, KeyPoolExhaustedError
+from engines.data.config import DataEngineConfig
 from engines.data.constants import (
     AUTO_CYCLE_DELAY_AFTER_CLOSE_S,
     ENG_060,
@@ -21,12 +22,21 @@ from engines.data.constants import (
     WARMUP_DAILY_N,
 )
 from engines.data.fetcher import TwelveDataClient, TwelveDataError
+from engines.data.integrity import check_integrity
+from engines.data.market_calendar import (
+    is_market_day,
+    is_market_open,
+    next_close,
+    previous_close,
+    session_close,
+)
 from engines.data.models import (
     ApiKeyConfig,
     ApiKeyState,
     Candle,
     EngineStatus,
     FetchResult,
+    IntegrityResult,
     SlotStatus,
     Timeframe,
 )
@@ -45,12 +55,20 @@ __all__ = [
     "ApiKeyConfig",
     "ApiKeyState",
     "Candle",
+    "DataEngineConfig",
     "EngineStatus",
     "FetchResult",
+    "IntegrityResult",
     "KeyPool",
     "KeyPoolExhaustedError",
     "SlotStatus",
     "Timeframe",
     "TwelveDataClient",
     "TwelveDataError",
+    "check_integrity",
+    "is_market_day",
+    "is_market_open",
+    "next_close",
+    "previous_close",
+    "session_close",
 ]
