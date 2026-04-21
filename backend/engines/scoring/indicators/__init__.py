@@ -18,7 +18,11 @@ Convenciones globales:
 """
 
 from engines.scoring.indicators.atr import atr, true_range
-from engines.scoring.indicators.bollinger import bb_width, bollinger_bands
+from engines.scoring.indicators.bollinger import (
+    bb_width,
+    bb_width_normalized,
+    bollinger_bands,
+)
 from engines.scoring.indicators.moving_averages import ema, sma
 from engines.scoring.indicators.volume import (
     gap_pct_at,
@@ -32,6 +36,7 @@ from engines.scoring.indicators.volume import (
 __all__ = [
     "atr",
     "bb_width",
+    "bb_width_normalized",
     "bollinger_bands",
     "ema",
     "gap_pct_at",
