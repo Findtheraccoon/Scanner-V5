@@ -28,7 +28,7 @@ Nunca plantear tensiones con specs viejos como si ambas fuentes tuvieran el mism
 
 ## Qué es el Scanner v5 live
 
-Scanner de trading de opciones (0DTE/1DTE sobre SPY/QQQ/IWM/AAPL/NVDA/XBI/XLE) que opera sobre mercado en vivo con 6 slots de tickers paralelos. Reemplaza al scanner v4.2.1 HTML monolítico.
+Scanner de trading de opciones (0DTE/1DTE) que opera sobre mercado en vivo con 6 slots de tickers paralelos. Por default trae 5 tickers preset (SPY/QQQ/IWM/AAPL/NVDA) y un slot libre para configurar a gusto del trader. Reemplaza al scanner v4.2.1 HTML monolítico.
 
 **Relación con Signal Observatory:** el Observatory es proyecto hermano que vive en paralelo — calibra canonicals, genera métricas empíricas, es fuente de verdad de aprobación. El scanner live **consume, no calibra**.
 

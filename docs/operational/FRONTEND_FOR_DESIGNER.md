@@ -10,7 +10,7 @@
 
 ## 1 · Producto — una pantalla de contexto
 
-Scanner de trading de opciones sobre la bolsa norteamericana. Herramienta profesional de uso intensivo durante el horario de mercado (9:30-16:00 ET). El usuario — un trader de opciones que trabaja con 6 tickers en paralelo — lo abre cada mañana, lo usa durante 6 horas, y lo cierra.
+Scanner de trading de opciones sobre la bolsa norteamericana. Herramienta profesional de uso intensivo durante el horario de mercado (9:30-16:00 ET). El usuario — un trader de opciones que trabaja con hasta 6 tickers en paralelo (5 preset + 1 libre por default) — lo abre cada mañana, lo usa durante 6 horas, y lo cierra.
 
 **Personalidad del producto:**
 - **Serio y preciso** — es herramienta profesional, no consumer app
@@ -127,7 +127,7 @@ El scanner tiene 4 pestañas de nivel superior. Orden visual en la navegación:
 
 **Cada nodo (slot):**
 - Número prominente (1 a 6)
-- Campo de ticker (dropdown con watchlist SPY/QQQ/IWM/AAPL/NVDA/XBI/XLE + campo libre para otros)
+- Campo de ticker (dropdown con watchlist preset SPY/QQQ/IWM/AAPL/NVDA + campo libre para otros)
 - Campo de fixture (dropdown con 3 grupos: canonicals del ticker / fixtures activas del Config actual / "Cargar fixture...")
 - Benchmark (texto read-only, se auto-llena desde la fixture)
 - Toggle activo/inactivo

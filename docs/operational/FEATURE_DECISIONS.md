@@ -991,7 +991,7 @@ scanner-v5/
 - **Canvas nodo-conexión estilo Runpod** con 6 slots visibles
 - Cada slot (nodo):
   - Número (1-6)
-  - Campo ticker (dropdown con watchlist SPY/QQQ/IWM/AAPL/NVDA/XBI/XLE o entrada manual)
+  - Campo ticker (dropdown con watchlist preset SPY/QQQ/IWM/AAPL/NVDA o entrada manual)
   - Campo fixture (dropdown con: canonicals del ticker disponibles + fixtures activas del Config + "Cargar fixture...")
   - Benchmark (auto-populado desde fixture, read-only)
   - Toggle activo/inactivo
