@@ -8,9 +8,10 @@ Dos familias de funciones conviven acá:
    valor en un índice. **Diverge de Observatory** (`volume_ratio_at`
    usa mean sobre ventana fija; Observatory usa median intraday).
 
-2. **API Observatory** — `today_candles`, `vol_ratio_intraday`. Port
-   exacto de `docs/specs/Observatory/Current/scanner/indicators.py`
-   (líneas 64-108). Usadas por Fase 5 (confirms VolHigh + DivSPY +
+2. **API Observatory** — `today_candles`, `vol_ratio_intraday`,
+   `vol_sequence`. Port exacto de
+   `docs/specs/Observatory/Current/scanner/indicators.py` (líneas
+   64-235). Usadas por Fase 5 (confirms VolHigh + VolSeq + DivSPY +
    FzaRel y por el wiring del ORB en sub-fase 5.3).
 
 **Rounding a 2 decimales** en todas las funciones de salida numérica —
@@ -19,6 +20,7 @@ paridad bit-a-bit con Observatory `indicators.py`.
 
 from __future__ import annotations
 
+import math
 from statistics import median as _stdlib_median
 
 
@@ -187,3 +189,54 @@ def gap_pct_at(candles: list[dict], index: int) -> float | None:
     if prev_close <= 0:
         return None
     return round((candles[index]["o"] - prev_close) / prev_close * 100.0, 2)
+
+
+def vol_sequence(candles: list[dict], n: int = 4) -> dict:
+    """Detecta secuencia de N velas completas crecientes o decrecientes
+    en volumen, con tolerancia del 5%.
+
+    Port literal de Observatory `indicators.py:vol_sequence()` líneas
+    211-235. Comportamiento clave:
+
+    - **Excluye la última vela** (potencialmente incompleta). Toma
+      `n` velas previas (`candles[-(n+1):-1]`).
+    - **Tolerancia 5%:** una vela cuenta como "growing" si su volumen
+      supera al 95% de la previa, y como "declining" si está por
+      debajo del 105% de la previa. Una misma vela puede contar para
+      ambos en la zona de tolerancia (es por diseño).
+    - **Threshold 75%:** `ceil((n-1) * 0.75)` velas deben cumplir.
+      Para `n=4` → 3 de 3 comparaciones (estricto).
+    - **Mutex con prioridad growing:** si ambos cumplen, gana
+      `growing` (orden del `if` Observatory).
+    - **Count signo:** positivo para growing, negativo para declining.
+
+    Usado por:
+    - confirm `VolSeq` (`growing == True` → fires)
+    - risk `vol_declining` (`declining == True` → fires)
+
+    Args:
+        candles: lista de velas (dicts con `v`).
+        n: número de velas completas a evaluar (default 4 — Observatory).
+
+    Returns:
+        Dict con forma `{"growing": bool, "declining": bool, "count": int}`.
+        Si `len(candles) < n + 2`, devuelve neutro `{False, False, 0}`.
+    """
+    if not candles or len(candles) < n + 2:
+        return {"growing": False, "declining": False, "count": 0}
+    completed = candles[-(n + 1) : -1]
+    g_count = 0
+    d_count = 0
+    for i in range(1, len(completed)):
+        if completed[i]["v"] > completed[i - 1]["v"] * 0.95:
+            g_count += 1
+        if completed[i]["v"] < completed[i - 1]["v"] * 1.05:
+            d_count += 1
+    threshold = math.ceil((n - 1) * 0.75)
+    growing = g_count >= threshold
+    declining = d_count >= threshold
+    if growing:
+        return {"growing": True, "declining": False, "count": g_count}
+    if declining:
+        return {"growing": False, "declining": True, "count": -d_count}
+    return {"growing": False, "declining": False, "count": 0}

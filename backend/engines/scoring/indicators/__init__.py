@@ -25,6 +25,7 @@ from engines.scoring.indicators.volume import (
     is_volume_increasing,
     today_candles,
     vol_ratio_intraday,
+    vol_sequence,
     volume_ratio_at,
 )
 
@@ -39,5 +40,6 @@ __all__ = [
     "today_candles",
     "true_range",
     "vol_ratio_intraday",
+    "vol_sequence",
     "volume_ratio_at",
 ]
