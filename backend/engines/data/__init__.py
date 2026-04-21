@@ -21,12 +21,14 @@ from engines.data.constants import (
     WARMUP_DAILY_N,
 )
 from engines.data.fetcher import TwelveDataClient, TwelveDataError
+from engines.data.integrity import check_integrity
 from engines.data.models import (
     ApiKeyConfig,
     ApiKeyState,
     Candle,
     EngineStatus,
     FetchResult,
+    IntegrityResult,
     SlotStatus,
     Timeframe,
 )
@@ -47,10 +49,12 @@ __all__ = [
     "Candle",
     "EngineStatus",
     "FetchResult",
+    "IntegrityResult",
     "KeyPool",
     "KeyPoolExhaustedError",
     "SlotStatus",
     "Timeframe",
     "TwelveDataClient",
     "TwelveDataError",
+    "check_integrity",
 ]

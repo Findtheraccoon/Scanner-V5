@@ -153,6 +153,31 @@ class ApiKeyState(BaseModel):
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Resultado de verificación de integridad
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class IntegrityResult(BaseModel):
+    """Resultado de `check_integrity()` sobre una lista de velas.
+
+    Es estructural: verifica orden, duplicados, OHLC válido, tz-awareness,
+    y cuenta mínima. No verifica staleness (frescura) ni gaps entre
+    sesiones — eso requiere market calendar y es responsabilidad del
+    caller si le interesa.
+
+    `notes` acumula TODOS los issues encontrados (no solo el primero)
+    para dar diagnóstico completo al chat de desarrollo y a los logs.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    ok: bool
+    notes: list[str] = Field(default_factory=list)
+    checked_count: NonNegativeInt = Field(description="Cantidad de velas examinadas")
+    timeframe: Timeframe
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Resultados de fetch
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -184,6 +209,7 @@ __all__ = [
     "Candle",
     "EngineStatus",
     "FetchResult",
+    "IntegrityResult",
     "SlotStatus",
     "Timeframe",
 ]
