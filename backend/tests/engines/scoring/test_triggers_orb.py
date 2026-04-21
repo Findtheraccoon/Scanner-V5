@@ -174,15 +174,26 @@ class TestOrbTriggers:
         triggers = detect_orb_triggers_15m(candles, sim_datetime="2025-01-15 10:00:00")
         assert any(t["d"].startswith("ORB breakout") for t in triggers)
 
-    def test_no_volume_filter_in_v5(self) -> None:
-        """v4.2.1 tenía un filtro `volM >= 1.0` que NO se porta en v5.
+    def test_volume_filter_suppresses_below_1x(self) -> None:
+        """Gate binario de volumen — si volM < 1.0, el trigger no fire.
 
-        El spec v5 eliminó volumen como parámetro del sistema de scoring,
-        así que ORB dispara puramente en función de price + time gate.
+        Paridad con Observatory engine.py:193-199. H-02 del Observatory
+        ("volumen sale del score") se refiere al `volMult` multiplicador,
+        NO a este gate binario que sí se mantiene.
         """
         candles = _today_session(first_high=110.0, current_close=115.0)
-        # No hay kwarg volume_ratio — el detector no lo acepta.
-        triggers = detect_orb_triggers_15m(candles)
+        triggers = detect_orb_triggers_15m(candles, volume_ratio=0.5)
+        assert not triggers
+
+    def test_volume_filter_allows_at_1x_exactly(self) -> None:
+        candles = _today_session(first_high=110.0, current_close=115.0)
+        triggers = detect_orb_triggers_15m(candles, volume_ratio=1.0)
+        assert any(t["d"].startswith("ORB breakout") for t in triggers)
+
+    def test_none_volume_ratio_skips_filter(self) -> None:
+        """Si el caller no pasa volume_ratio, el gate se omite."""
+        candles = _today_session(first_high=110.0, current_close=115.0)
+        triggers = detect_orb_triggers_15m(candles, volume_ratio=None)
         assert any(t["d"].startswith("ORB breakout") for t in triggers)
 
     def test_no_breakup_or_breakdown_yields_no_triggers(self) -> None:

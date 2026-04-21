@@ -22,9 +22,9 @@ gate (spec §3 I5 item 2) + conflict gate (item 3) en fases siguientes.
 
     Indicadores + time gate (Fase 4c):
       - Cruce alcista/bajista MA20/40 (1H)
-      - ORB breakout / breakdown       (≤ 10:30 ET — sin filtro volumétrico,
-                                         el spec v5 eliminó volumen y hora
-                                         del día como parámetros de peso)
+      - ORB breakout / breakdown       (≤ 10:30 ET + volume gate volM ≥ 1.0
+                                         como gate binario, paridad con
+                                         Observatory engine.py)
 
 Pendiente (Fase 4d):
 
