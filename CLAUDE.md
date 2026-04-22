@@ -63,12 +63,13 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 | 2 (Validator) | `backend/modules/validator/` — batería D/A/B/C/E/F/G + runner + REST + TXT log + hot-reload revalidation | ✅ |
 | 3 (Slot Registry) | `backend/modules/slot_registry/` + `backend/engines/registry_runtime.py` — runtime in-memory con hot-reload REST (disable + enable con warmup + persistencia JSON) | ✅ |
 | 4 (Scoring Engine) | `backend/engines/scoring/` — Fases 1-5 + parity harness (189/245 baseline) | ✅ |
-| 5 (Persistencia + API + WS) | `backend/modules/db/` + `backend/api/` + `backend/modules/signal_pipeline/` — SQLAlchemy async, Alembic híbrido, REST auth Bearer, WS con 6 eventos, pipeline scan→persist→broadcast con flag `persist` | ✅ |
-| 6 (Database Engine) | `backend/engines/database/` — heartbeat + rotación retention | ✅ |
-| D (Entrypoint) | `backend/main.py` + `backend/settings.py` + `backend/api/workers.py` — Pydantic Settings, lifecycle, worker factories, Validator wiring | ✅ |
+| 5 (Persistencia + API + WS) | `backend/modules/db/` + `backend/api/` + `backend/modules/signal_pipeline/` — SQLAlchemy async, Alembic híbrido, REST auth Bearer, WS con 6 eventos, pipeline scan→persist→broadcast con flag `persist`, backup/restore S3, transparent reads op+archive | ✅ |
+| 6 (Database Engine) | `backend/engines/database/` — heartbeat + rotación retention + move-to-archive + retención agresiva (§9.4) | ✅ |
+| 7 (Archive + S3) | `data/archive/scanner_archive.db` + `modules/db/backup.py` + validator_reports histórico | ✅ |
+| D (Entrypoint) | `backend/main.py` + `backend/settings.py` + `backend/api/workers.py` — Pydantic Settings, lifecycle, worker factories, Validator wiring, archive wiring, shutdown rotation | ✅ |
 | Fixtures | `backend/modules/fixtures/` — loader | ✅ base |
 
-**Tests totales:** 964 passing en `backend/tests/`. `ruff check .` limpio.
+**Tests totales:** 1043 passing en `backend/tests/`. `ruff check .` limpio.
 
 ### Scoring Engine — detalle por fase
 
@@ -129,6 +130,43 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 - **V.8** (post-merge) · `modules/validator/log_writer.py` — TXT a `/LOG/` con retención 5 días. Se invoca desde el endpoint `POST /run` y desde el startup factory.
 - **V.9** (post-merge) · `Validator.run_slot_revalidation()` — corre A→B→C con un solo run_id, spawneado desde `api/routes/slots.py` tras cualquier PATCH exitoso.
 
+### Capa 7 (Archive + S3 + histórico) — detalle por sub-fase
+
+- **AR.1** · Archive DB físico + rotación real.
+  - `data/archive/scanner_archive.db` como engine separado (`create_app(archive_db_url=...)`).
+  - `engines/database/rotation.py:rotate_with_archive(op, archive, policies)` — SELECT expired → INSERT OR IGNORE al archive (commit) → DELETE de op (commit). No-pérdida idempotente.
+  - `heartbeat` se borra sin archivar (spec §3.7).
+  - Settings: `SCANNER_ARCHIVE_DB_PATH`, `SCANNER_ROTATE_ON_SHUTDOWN` (lifespan hook opcional).
+  - `POST /api/v1/database/rotate` — botón "Correr limpieza ahora" (§5.3).
+  - `GET /api/v1/database/stats` — filas op + archive + retention_seconds por tabla.
+  - `rotate_expired` legacy mantenido para compat sin archive.
+- **AR.2** · Backup + Restore S3-compatible.
+  - `modules/db/backup.py` — `S3Config` Pydantic, `backup_to_s3()` (VACUUM INTO + gzip + upload_fileobj), `restore_from_s3()` (download → gunzip → sibling file, NO pisa op viva), `list_backups()` (sort desc por key).
+  - Multi-provider via `endpoint_url` (AWS S3 / B2 / R2 / custom).
+  - Endpoints `POST /database/{backup,restore,backups}` — todos POST por credenciales en body.
+  - Dep dev `moto[s3]>=5.1.0` para tests.
+  - **Deuda:** credenciales S3 en body hasta que `modules/config/` encriptado exista.
+- **AR.3** · Transparent reads op + archive (Opción X).
+  - `read_signals_history`, `read_signal_by_id`, `read_candles_window`, `read_validator_reports_*` aceptan `archive_session` opcional.
+  - Merge + sort + dedup (op-wins).
+  - `api/deps.py:get_archive_session()` yield-ea `None` si el app arrancó sin archive.
+  - Endpoints `/signals/{history,/{id}}` + `/validator/reports/*` son transparentes.
+- **AR.4** · Reportes históricos del Validator en DB.
+  - Tabla `validator_reports` (id, run_id, trigger, started_at, finished_at, overall_status, tests_json).
+  - Retención 30d op → archive.
+  - `ValidatorTrigger = Literal["startup","manual","hot_reload","connectivity"]`.
+  - Endpoints `/validator/reports/latest`, `/validator/reports` (cursor, filtros), `/validator/reports/{id}`.
+  - Wiring automático: `POST /run` → `"manual"`, startup factory → `"startup"`, `_spawn_revalidation` → `"hot_reload"`. Silencioso ante fallos DB.
+  - `ValidatorReportRecord` SQL (nombre distinto al Pydantic `ValidatorReport`).
+- **AR.5** · Retención agresiva (§9.4).
+  - `AGGRESSIVE_RETENTION_POLICIES` ~50% de las normales.
+  - `DEFAULT_SIZE_LIMIT_MB = 5000` (tentativo revisable, spec §9.4).
+  - `check_and_rotate_aggressive(op, archive, db_path, *, size_limit_mb)` — mide tamaño del archivo, solo dispara si supera. Retorna `{triggered, size_mb_before, size_mb_after, rotation, vacuum_recommended}`.
+  - `POST /api/v1/database/rotate/aggressive` — 503 sin archive, 400 con `:memory:`.
+  - `GET /stats` extendido con `size_mb_operative` + `size_limit_mb` para barra del Dashboard.
+  - Settings: `SCANNER_DB_SIZE_LIMIT_MB=5000`.
+  - `vacuum_recommended=True` al trigger — SQLite DELETE no reclama hasta VACUUM.
+
 ### Módulos nuevos del Scoring Engine (Fase 5)
 
 | Archivo | Rol |
@@ -167,32 +205,48 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 | `modules/slot_registry/writer.py` | `save_registry()` con escritura atómica (`tempfile` + `os.replace`) |
 | `api/routes/slots.py` | REST + spawn warmup task + spawn revalidation task |
 
+### Módulos nuevos de Capa 7 (Archive + S3 + Histórico Validator)
+
+| Archivo | Rol |
+|---|---|
+| `engines/database/rotation.py` | `rotate_expired` (legacy), `rotate_with_archive` (move), `check_and_rotate_aggressive` (§9.4), `compute_stats`. Políticas `DEFAULT_RETENTION_POLICIES` + `AGGRESSIVE_RETENTION_POLICIES` |
+| `modules/db/backup.py` | `S3Config` Pydantic, `backup_to_s3`, `restore_from_s3`, `list_backups` — multi-provider via `endpoint_url` |
+| `api/routes/database.py` | REST `/rotate`, `/rotate/aggressive`, `/stats`, `/backup`, `/restore`, `/backups` |
+| `api/deps.py:get_archive_session` | Yield `AsyncSession | None` según `app.state.archive_session_factory` |
+| `modules/db/models.py:ValidatorReportRecord` | Tabla `validator_reports` (id, run_id, trigger, started_at, finished_at, overall_status, tests_json) |
+| `modules/db/helpers.py` — `write_validator_report`, `read_validator_reports_{latest,history}`, `read_validator_report_by_id` | Persistencia + transparent reads |
+| `api/routes/validator.py` — `/reports*` | Endpoints histórico |
+
 ### Pendiente
 
-- **Frontend:** React + TS + Vite + Tailwind + shadcn + Zustand + TanStack Query (aún no iniciado). Bloque grande — desbloquea el producto entero; backend ya expone todo lo necesario.
+- **Frontend:** React + TS + Vite + Tailwind + shadcn + Zustand + TanStack Query (aún no iniciado). Bloque grande — desbloquea el producto entero; backend ya expone todo lo necesario (REST + WS + stats + backup/restore).
 - **Fase 5.4 cierre:** el parity está en **189/245 (77%)** — baseline funcional aceptado. Los 56 mismatches restantes NO son bugs del motor (lógica porteada bit-a-bit de Observatory `patterns.py`), sino diferencias probablemente en data sources: al debuggear el trigger MA cross 1H del 2025-04-21 09:45, mi aggregator replica la convención exacta del `CandleBuilder` del replay (open-stamped, `include_current=True`) pero los closes de las velas 1H no coinciden con los que Observatory tenía cuando generó el sample. Requiere correr el replay completo sobre el `observatory_v5_2.db` original para regenerar un sample con los closes actuales.
-- **Archive DB + S3 backup** (Capa 5 scope futuro, spec §3.5).
-- **Config encriptado `modules/config/`** para distribución Windows.
-- **Reportes históricos de Validator en DB:** actualmente solo se persiste el último reporte en memoria y el TXT en `/LOG/`. No hay tabla `validator_reports`.
+- **Config encriptado `modules/config/`** para distribución Windows. Bloqueante para:
+  - Encriptar credenciales S3 del body de `/database/backup` (deuda técnica AR.2).
+  - Encriptar API keys de Twelve Data actualmente en env var.
+- **Watchdog automático para rotación agresiva:** AR.5 expone el endpoint manual. Un worker que chequee cada X minutos + dispare automáticamente queda para futuro (después del frontend, cuando el Dashboard muestre la barra).
 
 ### Para el siguiente chat
 
-**Estado al 2026-04-22:** backend conceptualmente completo según spec §3. Último hito pushado (no PR todavía — Álvaro pide agrupar PRs por varios hitos):
+**Estado al 2026-04-22:** backend **completo al spec §3 + §9.4**. Ultima tanda pushada (AR.5 + docs):
 
-- SR.4 — `PATCH /slots {enabled: true}` con reload de fixture + warmup.
-- SR.5 — hot-reload auto-revalidation (`run_slot_revalidation` A→B→C).
-- V.8 — TXT log del Validator a `/LOG/` con retención 5 días.
-- Updates a `CLAUDE.md` (este mismo commit).
+- AR.5 — retención agresiva (§9.4). `POST /database/rotate/aggressive` + stats extendido con `size_mb_operative`.
+- Update completo de este `CLAUDE.md` — estado post PR #18/#19/#20 + nueva sección "Capa 7".
 
-**Branch de trabajo:** `claude/review-project-setup-4DnEm`. PR pendiente de crear — disparar cuando Álvaro diga.
+**Branch de trabajo:** `claude/review-project-setup-4DnEm`. 2 commits sin PR desde último merge (PR #20 de AR.4).
 
-**Próximo bloque grande sugerido:** Frontend React + TS. Backend ya expone:
-- REST `/api/v1/slots/{id}` PATCH completo (disable + enable con warmup).
-- REST `/api/v1/validator/{run,connectivity,report/latest}`.
-- REST `/api/v1/signals/{latest,history,by_id}`.
+**Próximo bloque grande:** Frontend React + TS. Backend ya expone:
+- REST `/api/v1/slots/{id}` PATCH (disable + enable con warmup).
+- REST `/api/v1/validator/{run,connectivity,report/latest,reports/*,reports/{id}}`.
+- REST `/api/v1/signals/{latest,history,{id}}` — transparent op+archive.
+- REST `/api/v1/database/{rotate,rotate/aggressive,stats,backup,restore,backups}`.
 - REST `/api/v1/scan/manual`.
 - REST `/api/v1/engine/health`.
 - WS `/ws?token=...` con 6 eventos.
+
+**Otros pendientes chicos antes del frontend** (decisión abierta, preguntar a Álvaro):
+- Cierre paridad Fase 5.4 (requiere `observatory_v5_2.db` original).
+- `modules/config/` encriptado (bloqueante para distribución Windows + deuda S3 creds).
 
 **Comando de arranque end-to-end verificado:**
 ```bash
@@ -202,7 +256,7 @@ SCANNER_REGISTRY_PATH="slot_registry.json" \
 python backend/main.py
 ```
 
-Al arrancar, el Validator corre la batería completa, emite progress via WS, persiste reporte en `app.state` + TXT en `LOG/`.
+Al arrancar, el Validator corre la batería completa, emite progress via WS, persiste el reporte en DB (trigger=startup) + `app.state` + TXT en `LOG/`. El Database Engine inicializa op + archive automáticamente. Si `SCANNER_ROTATE_ON_SHUTDOWN=true`, dispara `rotate_with_archive` al cerrar.
 
 ### Divergencias conocidas con Observatory — estado post-Fase 5.2/5.4
 
