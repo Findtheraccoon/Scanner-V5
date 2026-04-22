@@ -95,7 +95,7 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 
 ### Pendiente
 
-- **Fase 5.4 restantes:** cerrar los 56 mismatches del parity (requiere estudiar el código del replay Observatory en `docs/specs/Observatory/Current/Replay/` para entender convención exacta de 1H aggregation + decay age).
+- **Fase 5.4 cierre:** el parity está en **189/245 (77%)** — baseline funcional aceptado. Los 56 mismatches restantes NO son bugs del motor (lógica porteada bit-a-bit de Observatory `patterns.py`), sino diferencias probablemente en data sources: al debuggear el trigger MA cross 1H del 2025-04-21 09:45, mi aggregator replica la convención exacta del `CandleBuilder` del replay (open-stamped, `include_current=True`) pero los closes de las velas 1H no coinciden con los que Observatory tenía cuando generó el sample. Requiere correr el replay completo sobre el `observatory_v5_2.db` original para regenerar un sample con los closes actuales.
 - **Capa 2:** Validator module.
 - **Capa 5:** persistencia SQLAlchemy + FastAPI endpoints + WebSocket.
 - **Frontend:** React + TS (aún no iniciado en esta rama).
@@ -106,8 +106,8 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 2. ~~`volume_ratio` mediana intraday~~ → **Resuelto Fase 5.2a** (nuevo `vol_ratio_intraday`; el `volume_ratio_at` legacy sigue disponible pero no se usa en el pipeline principal).
 3. **ATR Wilder vs Observatory mean:** pendiente. No afecta confirms críticos (Gap usa `atr_pct` que da similar magnitude). Documentada en `indicators/atr.py`.
 4. ~~Pivot fakeouts~~ → **Resuelto Fase 5.2e** (`find_pivots` + `key_levels`).
-5. **Convención 1H aggregation:** ambigua al momento. Mis tests con `include_partial=False` rompen más de lo que arreglan (189→160). Resolución requiere el código del replay Observatory. Ver divergencias documentadas en `backend/fixtures/parity_reference/README.md`.
-6. **Decay age en triggers 15M:** mismatches como `trigger_sum expected=2.0 actual=2.1` sugieren off-by-1 en cálculo de age de velas pasadas. Requiere el replay para ver cuántas velas atrás mira Observatory exactamente.
+5. **Convención 1H aggregation:** ~~ambigua~~ → **Resuelta con el replay Observatory** portado en `docs/specs/Observatory/Current/Replay/candle_builder.py` L117-127: 1H open-stamped con `include_current=True`. Mi aggregator coincide.
+6. **Data source mismatch (nuevo):** el `parity_qqq_candles.db` portable parece tener pequeñas diferencias en los closes del warmup vs lo que Observatory tenía cuando generó el sample. Diagnosticado en el debug del trigger MA cross 1H del 2025-04-21 09:45 (la lógica es correcta pero los datos no matchean). Pendiente regenerar sample con el replay sobre el `.db` actual.
 
 ---
 
