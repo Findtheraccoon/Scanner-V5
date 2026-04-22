@@ -28,7 +28,12 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from api.broadcaster import Broadcaster
-from api.workers import DEFAULT_HEARTBEAT_INTERVAL_S, heartbeat_worker
+from api.workers import (
+    DEFAULT_AUTO_SCHEDULER_INTERVAL_S,
+    DEFAULT_HEARTBEAT_INTERVAL_S,
+    auto_scheduler_worker,
+    heartbeat_worker,
+)
 from modules.db import default_url, init_db, make_engine, make_session_factory
 
 _APP_TITLE = "Scanner V5 Backend"
@@ -42,6 +47,8 @@ def create_app(
     auto_init_db: bool = True,
     enable_heartbeat: bool = False,
     heartbeat_interval_s: float = DEFAULT_HEARTBEAT_INTERVAL_S,
+    enable_auto_scheduler: bool = False,
+    auto_scheduler_interval_s: float = DEFAULT_AUTO_SCHEDULER_INTERVAL_S,
 ) -> FastAPI:
     """Construye una `FastAPI` lista para correr.
 
@@ -58,6 +65,11 @@ def create_app(
             necesitan. El entrypoint productivo (`backend/main.py`) lo
             activa.
         heartbeat_interval_s: intervalo entre heartbeats (default 120s).
+        enable_auto_scheduler: si `True`, arranca el `auto_scheduler_worker`
+            (stub actual) — reemplazado por el Data Engine real cuando
+            esté disponible. Default `False`.
+        auto_scheduler_interval_s: intervalo del scheduler stub
+            (default 60s).
 
     Returns:
         `FastAPI` con lifecycle, routers y workers registrados.
@@ -81,6 +93,16 @@ def create_app(
                         interval_s=heartbeat_interval_s,
                     ),
                     name="heartbeat_worker",
+                ),
+            )
+        if enable_auto_scheduler:
+            workers.append(
+                asyncio.create_task(
+                    auto_scheduler_worker(
+                        broadcaster,
+                        interval_s=auto_scheduler_interval_s,
+                    ),
+                    name="auto_scheduler_worker",
                 ),
             )
         app.state.workers = workers

@@ -1,78 +1,135 @@
-"""Tests de `backend.main` — entrypoint (D.1)."""
+"""Tests de `backend.main` y `settings.py` — entrypoint (D.1 + D.3)."""
 
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 
-class TestLoadApiKeys:
-    def test_empty_env_returns_empty_set(self, monkeypatch) -> None:
-        from main import _load_api_keys
+class TestSettings:
+    def test_empty_api_keys_default(self, monkeypatch) -> None:
+        from settings import Settings
 
         monkeypatch.delenv("SCANNER_API_KEYS", raising=False)
-        assert _load_api_keys() == set()
+        s = Settings()
+        assert s.api_keys == ""
+        assert s.api_keys_set == set()
 
-    def test_single_key(self, monkeypatch) -> None:
-        from main import _load_api_keys
+    def test_api_keys_single(self, monkeypatch) -> None:
+        from settings import Settings
 
         monkeypatch.setenv("SCANNER_API_KEYS", "sk-one")
-        assert _load_api_keys() == {"sk-one"}
+        s = Settings()
+        assert s.api_keys_set == {"sk-one"}
 
-    def test_multiple_csv(self, monkeypatch) -> None:
-        from main import _load_api_keys
+    def test_api_keys_csv(self, monkeypatch) -> None:
+        from settings import Settings
 
         monkeypatch.setenv("SCANNER_API_KEYS", "sk-a, sk-b ,sk-c")
-        assert _load_api_keys() == {"sk-a", "sk-b", "sk-c"}
+        s = Settings()
+        assert s.api_keys_set == {"sk-a", "sk-b", "sk-c"}
 
-    def test_empty_tokens_filtered(self, monkeypatch) -> None:
-        from main import _load_api_keys
+    def test_api_keys_filters_empty_tokens(self, monkeypatch) -> None:
+        from settings import Settings
 
         monkeypatch.setenv("SCANNER_API_KEYS", "sk-a,,  ,sk-b")
-        assert _load_api_keys() == {"sk-a", "sk-b"}
+        s = Settings()
+        assert s.api_keys_set == {"sk-a", "sk-b"}
+
+    def test_defaults(self, monkeypatch) -> None:
+        from settings import Settings
+
+        for v in (
+            "SCANNER_DB_PATH", "SCANNER_HOST", "SCANNER_PORT",
+            "SCANNER_HEARTBEAT_INTERVAL_S", "SCANNER_AUTO_SCHEDULER_ENABLED",
+            "SCANNER_AUTO_SCHEDULER_INTERVAL_S", "SCANNER_SHUTDOWN_TIMEOUT_S",
+            "SCANNER_LOG_LEVEL",
+        ):
+            monkeypatch.delenv(v, raising=False)
+        s = Settings()
+        assert s.db_path == "data/scanner.db"
+        assert s.host == "127.0.0.1"
+        assert s.port == 8000
+        assert s.heartbeat_interval_s == 120.0
+        assert s.auto_scheduler_enabled is False
+        assert s.auto_scheduler_interval_s == 60.0
+        assert s.shutdown_timeout_s == 30.0
+        assert s.log_level == "INFO"
+
+    def test_log_level_normalized_to_upper(self, monkeypatch) -> None:
+        from settings import Settings
+
+        monkeypatch.setenv("SCANNER_LOG_LEVEL", "debug")
+        assert Settings().log_level == "DEBUG"
+
+    def test_port_validation(self, monkeypatch) -> None:
+        from settings import Settings
+
+        monkeypatch.setenv("SCANNER_PORT", "99999")
+        with pytest.raises(ValidationError):
+            Settings()
+
+    def test_interval_must_be_positive(self, monkeypatch) -> None:
+        from settings import Settings
+
+        monkeypatch.setenv("SCANNER_HEARTBEAT_INTERVAL_S", "0")
+        with pytest.raises(ValidationError):
+            Settings()
 
 
-class TestMainReturnsNonZeroOnMissingKeys:
-    def test_missing_keys_returns_1(self, monkeypatch, capsys) -> None:
+class TestMainExitCodes:
+    def test_missing_keys_returns_1(self, monkeypatch) -> None:
         from main import main
 
         monkeypatch.delenv("SCANNER_API_KEYS", raising=False)
-        # Evita que intente bindear puerto: no llamará a uvicorn.run si
-        # las keys faltan (return 1 antes).
         assert main() == 1
 
 
-class TestAppWithHeartbeatEnabled:
-    """El heartbeat worker solo se enciende cuando enable_heartbeat=True.
-
-    Validamos que el lifespan maneja el caso sin romper.
-    """
-
+class TestAppLifespan:
     @pytest.mark.asyncio
-    async def test_lifespan_with_heartbeat_starts_and_stops(self) -> None:
+    async def test_lifespan_with_heartbeat_only(self) -> None:
         from api import create_app
 
         app = create_app(
             valid_api_keys={"sk-test"},
             db_url="sqlite+aiosqlite:///:memory:",
             enable_heartbeat=True,
-            heartbeat_interval_s=0.01,
+            heartbeat_interval_s=60.0,
         )
-        # El context manager ejecuta startup + shutdown
         async with app.router.lifespan_context(app):
-            # Durante el lifespan, hay un task registrado
+            # 1 worker: heartbeat
             assert len(app.state.workers) == 1
-            assert not app.state.workers[0].done()
-        # Después del shutdown, todos cancelados
+            names = {t.get_name() for t in app.state.workers}
+            assert "heartbeat_worker" in names
         assert all(w.done() for w in app.state.workers)
 
     @pytest.mark.asyncio
-    async def test_lifespan_without_heartbeat_has_no_workers(self) -> None:
+    async def test_lifespan_with_all_workers(self) -> None:
+        from api import create_app
+
+        app = create_app(
+            valid_api_keys={"sk-test"},
+            db_url="sqlite+aiosqlite:///:memory:",
+            enable_heartbeat=True,
+            enable_auto_scheduler=True,
+            heartbeat_interval_s=60.0,
+            auto_scheduler_interval_s=60.0,
+        )
+        async with app.router.lifespan_context(app):
+            assert len(app.state.workers) == 2
+            names = {t.get_name() for t in app.state.workers}
+            assert names == {"heartbeat_worker", "auto_scheduler_worker"}
+        assert all(w.done() for w in app.state.workers)
+
+    @pytest.mark.asyncio
+    async def test_lifespan_without_workers(self) -> None:
         from api import create_app
 
         app = create_app(
             valid_api_keys={"sk-test"},
             db_url="sqlite+aiosqlite:///:memory:",
             enable_heartbeat=False,
+            enable_auto_scheduler=False,
         )
         async with app.router.lifespan_context(app):
             assert app.state.workers == []

@@ -26,6 +26,7 @@ from api.events import EVENT_ENGINE_STATUS
 from engines.database import emit_engine_heartbeat
 
 DEFAULT_HEARTBEAT_INTERVAL_S: float = 120.0
+DEFAULT_AUTO_SCHEDULER_INTERVAL_S: float = 60.0
 
 
 async def heartbeat_worker(
@@ -70,4 +71,47 @@ async def heartbeat_worker(
             await asyncio.sleep(interval_s)
     except asyncio.CancelledError:
         logger.info(f"Heartbeat worker cancelled — engine={engine_name}")
+        raise
+
+
+async def auto_scheduler_worker(
+    broadcaster: Broadcaster,
+    *,
+    interval_s: float = DEFAULT_AUTO_SCHEDULER_INTERVAL_S,
+) -> None:
+    """Scheduler AUTO stub — emite tick cada N segundos.
+
+    Stub MVP (D.3) sin detección real de cierre de velas 15M. En
+    producción (Capa 1 completa), este worker será reemplazado por
+    el Data Engine con la lógica del spec §3.1:
+
+        cierre_15M → delay 3s → fetch data → verify integrity →
+        trigger scan para cada slot operativo
+
+    Por ahora solo emite un envelope `engine.status` del Data Engine
+    con status amarillo y `message="stub"` para que el frontend sepa
+    que el scheduler está conectado pero sin datos reales.
+
+    Args:
+        broadcaster: broadcaster para emitir engine.status.
+        interval_s: segundos entre ticks (default 60s). En producción
+            el intervalo real está atado al cierre de vela 15M.
+    """
+    logger.info(f"Auto-scheduler stub started (interval={interval_s}s)")
+    try:
+        while True:
+            await asyncio.sleep(interval_s)
+            try:
+                await broadcaster.broadcast(
+                    EVENT_ENGINE_STATUS,
+                    {
+                        "engine": "data",
+                        "status": "yellow",
+                        "message": "Data Engine stub — scheduler tick",
+                    },
+                )
+            except Exception:
+                logger.exception("Auto-scheduler broadcast failed")
+    except asyncio.CancelledError:
+        logger.info("Auto-scheduler cancelled")
         raise

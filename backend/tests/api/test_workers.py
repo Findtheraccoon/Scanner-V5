@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from api.broadcaster import Broadcaster
 from api.events import EVENT_ENGINE_STATUS
-from api.workers import heartbeat_worker
+from api.workers import auto_scheduler_worker, heartbeat_worker
 from modules.db import (
     Heartbeat,
     default_url,
@@ -105,3 +105,45 @@ class TestHeartbeatWorker:
             result = await session.execute(select(Heartbeat))
             hbs = result.scalars().all()
         assert all(h.engine == "data" for h in hbs)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Auto-scheduler worker (stub D.3)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestAutoSchedulerWorker:
+    @pytest.mark.asyncio
+    async def test_emits_ticks(self) -> None:
+        """El worker debe emitir engine.status del Data Engine (stub)."""
+        broadcaster = Broadcaster()
+        ws = RecordingWS()
+        await broadcaster.register(ws)
+
+        task = asyncio.create_task(
+            auto_scheduler_worker(broadcaster, interval_s=0.05),
+        )
+        await asyncio.sleep(0.2)
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+        # Al menos un envelope
+        assert len(ws.received) >= 1
+        env = ws.received[0]
+        assert env["event"] == EVENT_ENGINE_STATUS
+        assert env["payload"]["engine"] == "data"
+        assert env["payload"]["status"] == "yellow"
+        assert "stub" in env["payload"]["message"]
+
+    @pytest.mark.asyncio
+    async def test_cancel_is_clean(self) -> None:
+        broadcaster = Broadcaster()
+        task = asyncio.create_task(
+            auto_scheduler_worker(broadcaster, interval_s=60.0),
+        )
+        await asyncio.sleep(0.01)
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+        assert task.done()

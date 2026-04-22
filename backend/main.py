@@ -1,35 +1,27 @@
 #!/usr/bin/env python3
 """Entrypoint del backend Scanner V5.
 
-Corre el stack completo: FastAPI (REST + WebSocket) + workers de
-background (heartbeat). Carga config desde variables de entorno —
-cuando exista el módulo `modules.config/` encriptado, las keys se
-leerán desde ahí.
+Levanta FastAPI (REST + WebSocket) + workers de background (heartbeat,
+auto scheduler stub). Config via Pydantic Settings (ver `settings.py`)
+que lee de variables de entorno con prefix `SCANNER_`.
 
 **Uso local:**
 
     SCANNER_API_KEYS="sk-dev-1,sk-dev-2" python -m backend.main
 
-    # O con override de puerto:
-    SCANNER_API_KEYS="sk-dev" SCANNER_PORT=9000 python -m backend.main
-
-**Variables de entorno reconocidas:**
-
-- `SCANNER_API_KEYS` — CSV de API keys aceptadas (obligatorio).
-- `SCANNER_DB_PATH` — ruta al archivo SQLite (default `data/scanner.db`).
-- `SCANNER_HOST` — host del server (default `127.0.0.1`).
-- `SCANNER_PORT` — puerto (default `8000`).
-- `SCANNER_HEARTBEAT_INTERVAL_S` — intervalo heartbeat (default `120`).
-- `SCANNER_LOG_LEVEL` — nivel de loguru (default `INFO`).
+    # Con auto scheduler stub + intervalo corto para testing:
+    SCANNER_API_KEYS="sk-dev" \\
+    SCANNER_AUTO_SCHEDULER_ENABLED=true \\
+    SCANNER_AUTO_SCHEDULER_INTERVAL_S=10 \\
+    python -m backend.main
 
 **Shutdown graceful (spec §4.3):** Uvicorn captura SIGINT/SIGTERM y
-dispara el shutdown del lifespan, que cancela workers + cierra engine.
-Timeout de 30s configurable via `SCANNER_SHUTDOWN_TIMEOUT_S`.
+dispara el shutdown del lifespan, que cancela workers + dispose del
+engine. Timeout de 30s default (configurable).
 """
 
 from __future__ import annotations
 
-import os
 import sys
 
 import uvicorn
@@ -37,19 +29,14 @@ from loguru import logger
 
 from api import create_app
 from modules.db import default_url
-
-
-def _load_api_keys() -> set[str]:
-    raw = os.environ.get("SCANNER_API_KEYS", "")
-    keys = {k.strip() for k in raw.split(",") if k.strip()}
-    return keys
+from settings import Settings
 
 
 def _configure_logging(level: str) -> None:
     logger.remove()
     logger.add(
         sys.stderr,
-        level=level.upper(),
+        level=level,
         format=(
             "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> "
             "<level>{level: <8}</level> "
@@ -60,9 +47,10 @@ def _configure_logging(level: str) -> None:
 
 
 def main() -> int:
-    _configure_logging(os.environ.get("SCANNER_LOG_LEVEL", "INFO"))
+    settings = Settings()
+    _configure_logging(settings.log_level)
 
-    keys = _load_api_keys()
+    keys = settings.api_keys_set
     if not keys:
         logger.error(
             "SCANNER_API_KEYS env var missing or empty. "
@@ -70,32 +58,31 @@ def main() -> int:
         )
         return 1
 
-    db_path = os.environ.get("SCANNER_DB_PATH", "data/scanner.db")
-    host = os.environ.get("SCANNER_HOST", "127.0.0.1")
-    port = int(os.environ.get("SCANNER_PORT", "8000"))
-    heartbeat_s = float(os.environ.get("SCANNER_HEARTBEAT_INTERVAL_S", "120"))
-    shutdown_s = float(os.environ.get("SCANNER_SHUTDOWN_TIMEOUT_S", "30"))
-
     logger.info(
         "Starting Scanner V5 backend — "
-        f"host={host} port={port} db={db_path} keys={len(keys)} "
-        f"heartbeat={heartbeat_s}s shutdown_timeout={shutdown_s}s"
+        f"host={settings.host} port={settings.port} "
+        f"db={settings.db_path} keys={len(keys)} "
+        f"heartbeat={settings.heartbeat_interval_s}s "
+        f"auto_scheduler={'on' if settings.auto_scheduler_enabled else 'off'} "
+        f"shutdown_timeout={settings.shutdown_timeout_s}s"
     )
 
     app = create_app(
         valid_api_keys=keys,
-        db_url=default_url(db_path),
+        db_url=default_url(settings.db_path),
         auto_init_db=True,
         enable_heartbeat=True,
-        heartbeat_interval_s=heartbeat_s,
+        heartbeat_interval_s=settings.heartbeat_interval_s,
+        enable_auto_scheduler=settings.auto_scheduler_enabled,
+        auto_scheduler_interval_s=settings.auto_scheduler_interval_s,
     )
 
     config = uvicorn.Config(
         app,
-        host=host,
-        port=port,
+        host=settings.host,
+        port=settings.port,
         log_level="info",
-        timeout_graceful_shutdown=int(shutdown_s),
+        timeout_graceful_shutdown=int(settings.shutdown_timeout_s),
     )
     server = uvicorn.Server(config)
     server.run()
