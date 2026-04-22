@@ -31,6 +31,10 @@ Schema:
 
 ## Cómo correr el regenerador (Opción B)
 
+### Opción A — usar la DB completa del observatorio (comparación rápida)
+
+Si ya tenés `observatory_v5_2.db` en la raíz del repo (típico si trabajás en el observatorio):
+
 ```bash
 # Desde la raíz del repo
 python3 backend/fixtures/parity_reference/parity_qqq_regenerate.py
@@ -44,6 +48,23 @@ python3 backend/fixtures/parity_reference/parity_qqq_regenerate.py --max-diffs 2
 # Ajustar tolerancia float
 python3 backend/fixtures/parity_reference/parity_qqq_regenerate.py --tolerance 0.001
 ```
+
+El script lee directamente de `observatory_v5_2.db` las señales actuales y las compara con el sample. **No regenera señales** — asume que la DB ya tiene el output del motor a testear.
+
+### Opción B — regenerar señales desde el dataset portable (test completo del refactor)
+
+Si refactoreaste el motor y querés verificar paridad end-to-end, necesitás:
+
+1. Leer candles desde `data/parity_qqq_candles.db`
+2. Correr tu motor refactoreado sobre cada sesión target
+3. Guardar las señales generadas en una DB con el schema de observatory (`signals` + `signal_components`)
+4. Correr el parity check apuntando a tu nueva DB:
+
+```bash
+python3 backend/fixtures/parity_reference/parity_qqq_canonical.py --db tu_nueva_db.db
+```
+
+Este es el caso de uso principal cuando el chat del scanner v5 implementa el motor desde cero.
 
 ### Exit codes
 
