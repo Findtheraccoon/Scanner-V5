@@ -11,7 +11,7 @@ score+band) se construye en fases sucesivas sobre este esqueleto.
     ✅ Fase 2 · indicadores (SMA/EMA/BB/ATR/volumen) en `indicators/`.
     ✅ Fase 3 · alignment gate (trend 15m/1h/daily + compute_alignment).
     ✅ Fase 4 · triggers (16) + risks (4) + trigger gate + conflict gate.
-    ⬜ Fase 5 · 10 confirms con pesos de la fixture + score + band.
+    ✅ Fase 5 · 10 confirms con pesos de la fixture + score + band.
 """
 
 from __future__ import annotations
@@ -24,6 +24,17 @@ from engines.scoring.alignment import (
     trend_strict,
     trend_with_fallback,
 )
+from engines.scoring.bands import resolve_band
+from engines.scoring.confirms import (
+    apply_confirm_weights,
+    detect_bollinger_confirms,
+    detect_divspy_confirm,
+    detect_fzarel_confirm,
+    detect_gap_confirm,
+    detect_squeeze_expansion_confirm,
+    detect_volume_high_confirm,
+    detect_volume_sequence_confirm,
+)
 from engines.scoring.constants import (
     ENG_001,
     ENG_010,
@@ -31,8 +42,14 @@ from engines.scoring.constants import (
     MIN_CANDLES_1H,
     MIN_CANDLES_15M,
     MIN_CANDLES_DAILY,
+    SIGNAL_NEUTRAL,
 )
-from engines.scoring.errors import build_error_output, build_neutral_output
+from engines.scoring.errors import (
+    build_error_output,
+    build_neutral_output,
+    build_signal_output,
+)
+from engines.scoring.ind_builder import build_ind_bundle
 from engines.scoring.indicators import bollinger_bands, sma, volume_ratio_at
 from engines.scoring.risks import detect_bb_fakeouts_15m, detect_volume_risks_15m
 from engines.scoring.triggers import (
@@ -307,23 +324,116 @@ def analyze(
                 dir_=effective_dir,
             )
 
-        # ── Paso 8+: confirmaciones + score + band (Fase 5)
+        # ── Paso 8: Indicator bundle (Fase 5.3a)
         #
-        # Llegamos hasta acá cuando alignment, trigger gate y conflict
-        # gate pasan. Los siguientes pasos (confirms con pesos de la
-        # fixture, suma final, band assignment) vienen en la Fase 5 del
-        # scoring. Por ahora devolvemos NEUTRAL con dirección y trigger
-        # info pero sin score final.
-        layers["confirm"] = {"sum": 0, "volMult": 1.0, "items": [], "bonus": 0}
-        return build_neutral_output(
+        # Construye el dict `ind` con todos los indicadores consumidos
+        # por los confirms. Port parcial de Observatory `calc_indicators`
+        # acotado a lo que entra al score. Warmup se resuelve al neutro
+        # Observatory (None para BB/gap, 1.0 para vol_ratio, 0 para
+        # pct_change).
+        ind_bundle = build_ind_bundle(
+            candles_daily=candles_daily,
+            candles_1h=candles_1h,
+            candles_15m=candles_15m,
+            spy_daily=spy_daily,
+            bench_daily=bench_daily,
+            sim_date=sim_date,
+        )
+
+        # ── Paso 9: Detectar los 10 confirms (Fase 5.1)
+        #
+        # FzaRel usa benchmark del fixture (default "SPY") y su pct
+        # change. Si el fixture declara un benchmark distinto y se pasa
+        # `bench_daily`, se usa ese; sino el pct change de SPY.
+        bench_ticker = parsed.ticker_info.benchmark or "SPY"
+        bench_chg_for_fzarel = (
+            ind_bundle["bench_chg"] if bench_daily else ind_bundle["spy_chg"]
+        )
+
+        confirms: list[dict] = []
+        confirms.extend(
+            detect_bollinger_confirms(
+                last_close_15m=ind_bundle["price"],
+                bb_1h=ind_bundle["bb_1h"],
+                bb_daily=ind_bundle["bb_daily"],
+            )
+        )
+        confirms.extend(detect_volume_high_confirm(ind_bundle["vol_m"]))
+        confirms.extend(detect_volume_sequence_confirm(ind_bundle["vol_seq_m"]))
+        confirms.extend(detect_squeeze_expansion_confirm(ind_bundle["bb_sq_1h"]))
+        confirms.extend(detect_gap_confirm(ind_bundle["gap_info"]))
+        confirms.extend(
+            detect_fzarel_confirm(
+                a_chg=ind_bundle["a_chg"],
+                bench_chg=bench_chg_for_fzarel,
+                bench_ticker=bench_ticker,
+                alignment_dir=gate.effective_dir,
+            )
+        )
+        confirms.extend(
+            detect_divspy_confirm(
+                ticker=ticker,
+                a_chg=ind_bundle["a_chg"],
+                spy_chg=ind_bundle["spy_chg"],
+            )
+        )
+        patterns = [*triggers, *risks, *confirms]
+
+        # ── Paso 10: Confirm sum con dedup + pesos del fixture (Fase 5.3)
+        #
+        # Observatory `scoring.py` L307: confirms en la dirección
+        # efectiva o con `sg="CONFIRM"` (neutros). Los direccionales
+        # opuestos no suman.
+        directional_confirms = [
+            c for c in confirms
+            if c["sg"] == effective_dir or c["sg"] == "CONFIRM"
+        ]
+        confirm_sum, confirm_items = apply_confirm_weights(
+            directional_confirms,
+            parsed.confirm_weights,
+        )
+        layers["confirm"] = {
+            "sum": confirm_sum,
+            "volMult": 1.0,  # v5 H-02: volumen no multiplica el score
+            "items": confirm_items,
+            "bonus": 0,  # v5 H-02: bonus no suma al score
+        }
+
+        # ── Paso 11: Score final + banda de confianza
+        #
+        # Fórmula v5: `raw_score = trigger_sum + confirm_sum` (sin
+        # volMult, sin time_w, sin bonus, sin risk_sum — H-02).
+        # Clamp a >= 0 y redondeo a 1 decimal para paridad.
+        raw_score = trigger_sum + confirm_sum
+        score = round(max(0.0, raw_score), 1)
+
+        conf, signal = resolve_band(score, parsed)
+
+        # Score por debajo del umbral mínimo de todas las bandas →
+        # output neutro con el score calculado pero sin señal.
+        if signal == SIGNAL_NEUTRAL:
+            return build_neutral_output(
+                ticker=ticker,
+                fixture_id=fixture_id,
+                fixture_version=fixture_version,
+                blocked="Score insuficiente — sin banda asignada",
+                layers=layers,
+                ind=dict(ind_bundle),
+                patterns=patterns,
+                dir_=effective_dir,
+            )
+
+        return build_signal_output(
             ticker=ticker,
             fixture_id=fixture_id,
             fixture_version=fixture_version,
-            blocked="Score pendiente — confirms no wireados (Fase 5)",
-            layers=layers,
-            ind={},
-            patterns=patterns,
+            score=score,
+            conf=conf,
+            signal=signal,
             dir_=effective_dir,
+            layers=layers,
+            ind=dict(ind_bundle),
+            patterns=patterns,
         )
 
     except Exception as e:

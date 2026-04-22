@@ -103,3 +103,51 @@ def build_neutral_output(
         "sec_rel": None,
         "div_spy": None,
     }
+
+
+def build_signal_output(
+    *,
+    ticker: str,
+    fixture_id: str,
+    fixture_version: str,
+    score: float,
+    conf: str,
+    signal: str,
+    dir_: str,
+    layers: dict[str, Any],
+    ind: dict[str, Any],
+    patterns: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Construye un output con señal activa (SETUP o REVISAR).
+
+    Usado cuando el pipeline completa exitosamente y hay score > 0.
+    Comparte la estructura del output neutro pero con `score`, `conf`
+    y `signal` poblados desde la banda del fixture, y `blocked=None`.
+
+    Args:
+        score: puntaje final (trigger_sum + confirm_sum, redondeado).
+        conf: label de la banda (ej. "S+", "A", "B", "REVISAR").
+        signal: "SETUP" o "REVISAR" según la banda.
+        dir_: "CALL" o "PUT" según el alignment.
+        layers: dict completo con todas las capas del pipeline.
+        ind: bundle de indicadores.
+        patterns: lista de triggers + confirms + risks.
+    """
+    return {
+        "ticker": ticker,
+        "engine_version": ENGINE_VERSION,
+        "fixture_id": fixture_id,
+        "fixture_version": fixture_version,
+        "score": score,
+        "conf": conf,
+        "signal": signal,
+        "dir": dir_,
+        "blocked": None,
+        "error": False,
+        "error_code": None,
+        "layers": layers,
+        "ind": ind,
+        "patterns": patterns,
+        "sec_rel": None,
+        "div_spy": None,
+    }
