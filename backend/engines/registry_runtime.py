@@ -79,6 +79,18 @@ class RegistryRuntime:
                     return self._effective_status(s)
             return None
 
+    async def get_fixture_dict(self, slot_id: int) -> dict[str, Any] | None:
+        """Fixture del slot como dict (para pasar a `scan_and_emit()`).
+
+        Retorna `None` si el slot no existe, está DEGRADED o DISABLED,
+        o si el registry no tiene la fixture parseada.
+        """
+        async with self._lock:
+            for s in self._registry.slots:
+                if s.slot == slot_id and s.fixture is not None:
+                    return s.fixture.model_dump(mode="json")
+            return None
+
     # ─────────────────────────────────────────────────────────────────────
     # Overlay de warmup
     # ─────────────────────────────────────────────────────────────────────

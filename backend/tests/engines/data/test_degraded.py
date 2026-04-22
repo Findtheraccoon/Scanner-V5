@@ -148,6 +148,43 @@ async def db_factory():
     await engine.dispose()
 
 
+def _make_registry_runtime(tickers: list[str], fixture_dict: dict):
+    from datetime import UTC, datetime
+
+    from engines.registry_runtime import RegistryRuntime
+    from modules.fixtures import Fixture
+    from modules.slot_registry import RegistryMetadata, SlotRecord, SlotRegistry
+
+    metadata = RegistryMetadata(
+        registry_version="1.0.0",
+        engine_version_required=">=5.2.0,<6.0.0",
+        generated_at=datetime(2026, 4, 22, tzinfo=UTC),
+        description="test",
+    )
+    fixture_obj = Fixture.model_validate(fixture_dict)
+    slots_map = {}
+    for idx, t in enumerate(tickers, start=1):
+        slots_map[idx] = SlotRecord(
+            slot=idx, status="OPERATIVE", ticker=t,
+            fixture_path=f"fixtures/slot{idx}.json",
+            fixture=fixture_obj, benchmark="SPY",
+        )
+    full = []
+    for i in range(1, 7):
+        if i in slots_map:
+            full.append(slots_map[i])
+        else:
+            full.append(
+                SlotRecord(
+                    slot=i, status="DISABLED", ticker=None,
+                    fixture_path=None, fixture=None, benchmark=None,
+                ),
+            )
+    return RegistryRuntime(
+        SlotRegistry(metadata=metadata, slots=full, warnings=[]),
+    )
+
+
 class TestRetry:
     @pytest.mark.asyncio
     async def test_retry_recovers_transient_failure(
@@ -243,8 +280,9 @@ class TestScanLoopDegraded:
                     data_engine=de,
                     session_factory=db_factory,
                     broadcaster=broadcaster,
-                    slot_tickers=["QQQ"],
-                    fixture={},  # no se usa — scan nunca llega
+                    registry=_make_registry_runtime(
+                        ["QQQ"], _valid_fixture(),
+                    ),
                     test_interval_s=0.01,
                     tracker=tracker,
                 ),
@@ -296,8 +334,9 @@ class TestScanLoopDegraded:
                     data_engine=de,
                     session_factory=db_factory,
                     broadcaster=broadcaster,
-                    slot_tickers=["QQQ"],
-                    fixture=_valid_fixture(),
+                    registry=_make_registry_runtime(
+                        ["QQQ"], _valid_fixture(),
+                    ),
                     test_interval_s=0.02,
                     tracker=tracker,
                 ),

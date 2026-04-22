@@ -37,6 +37,7 @@ from api.events import (
 from engines.data.constants import ENG_060, ENG_060_CYCLES_THRESHOLD
 from engines.data.engine import DataEngine
 from engines.data.market_calendar import is_market_open
+from engines.registry_runtime import RegistryRuntime
 from modules.db import now_et
 from modules.signal_pipeline import scan_and_emit
 
@@ -93,8 +94,7 @@ async def auto_scan_loop(
     data_engine: DataEngine,
     session_factory: async_sessionmaker,
     broadcaster: Broadcaster,
-    slot_tickers: list[str],
-    fixture: dict,
+    registry: RegistryRuntime,
     delay_after_close_s: float = DEFAULT_DELAY_AFTER_CLOSE_S,
     test_interval_s: float | None = None,
     tracker: SlotFailureTracker | None = None,
@@ -117,7 +117,7 @@ async def auto_scan_loop(
     """
     tracker = tracker or SlotFailureTracker()
     logger.info(
-        f"Auto-scan loop started — slots={slot_tickers} "
+        f"Auto-scan loop started — registry-driven "
         f"delay_after_close={delay_after_close_s}s "
         f"mode={'TEST' if test_interval_s is not None else 'PRODUCTION'}",
     )
@@ -138,8 +138,7 @@ async def auto_scan_loop(
                     data_engine=data_engine,
                     session_factory=session_factory,
                     broadcaster=broadcaster,
-                    slot_tickers=slot_tickers,
-                    fixture=fixture,
+                    registry=registry,
                     candle_timestamp=candle_ts,
                     tracker=tracker,
                 )
@@ -191,37 +190,49 @@ async def _run_scan_cycle(
     data_engine: DataEngine,
     session_factory: async_sessionmaker,
     broadcaster: Broadcaster,
-    slot_tickers: list[str],
-    fixture: dict,
+    registry: RegistryRuntime,
     candle_timestamp: _dt.datetime,
     tracker: SlotFailureTracker,
 ) -> None:
-    """Dispara el scan paralelo por cada slot operativo."""
+    """Dispara el scan paralelo por cada slot scannable del registry."""
+    scannable = await registry.list_scannable_tickers()
     logger.info(
         f"Scan cycle starting at {candle_timestamp.isoformat()} "
-        f"— slots={slot_tickers}",
+        f"— scannable={scannable}",
     )
     await broadcaster.broadcast(
         EVENT_ENGINE_STATUS,
         {"engine": "data", "status": "green", "message": "cycle start"},
     )
 
-    tasks = [
-        asyncio.create_task(
-            _scan_slot(
-                data_engine=data_engine,
-                session_factory=session_factory,
-                broadcaster=broadcaster,
-                slot_id=idx,
-                ticker=ticker,
-                fixture=fixture,
-                candle_timestamp=candle_timestamp,
-                tracker=tracker,
+    if not scannable:
+        logger.info("No scannable slots — cycle idle")
+        await _broadcast_api_usage(broadcaster, data_engine)
+        return
+
+    tasks = []
+    for slot_id, ticker in scannable:
+        fixture = await registry.get_fixture_dict(slot_id)
+        if fixture is None:
+            logger.warning(
+                f"Slot {slot_id} ({ticker}): fixture not available, skipping",
+            )
+            continue
+        tasks.append(
+            asyncio.create_task(
+                _scan_slot(
+                    data_engine=data_engine,
+                    session_factory=session_factory,
+                    broadcaster=broadcaster,
+                    slot_id=slot_id,
+                    ticker=ticker,
+                    fixture=fixture,
+                    candle_timestamp=candle_timestamp,
+                    tracker=tracker,
+                ),
+                name=f"scan_slot_{slot_id}_{ticker}",
             ),
-            name=f"scan_slot_{idx}_{ticker}",
         )
-        for idx, ticker in enumerate(slot_tickers, start=1)
-    ]
     # Fallos individuales no rompen el loop — return_exceptions=True
     await asyncio.gather(*tasks, return_exceptions=True)
 

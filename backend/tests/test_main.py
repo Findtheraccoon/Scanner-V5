@@ -78,17 +78,17 @@ class TestSettings:
 
 
 class TestSettingsScanLoop:
-    def test_scan_tickers_list_empty(self, monkeypatch) -> None:
+    def test_registry_path_default(self, monkeypatch) -> None:
         from settings import Settings
 
-        monkeypatch.setenv("SCANNER_SCAN_TICKERS", "")
-        assert Settings().scan_tickers_list == []
+        monkeypatch.delenv("SCANNER_REGISTRY_PATH", raising=False)
+        assert Settings().registry_path == "slot_registry.json"
 
-    def test_scan_tickers_list_csv(self, monkeypatch) -> None:
+    def test_registry_path_override(self, monkeypatch) -> None:
         from settings import Settings
 
-        monkeypatch.setenv("SCANNER_SCAN_TICKERS", "QQQ, SPY, AAPL")
-        assert Settings().scan_tickers_list == ["QQQ", "SPY", "AAPL"]
+        monkeypatch.setenv("SCANNER_REGISTRY_PATH", "config/reg.json")
+        assert Settings().registry_path == "config/reg.json"
 
     def test_parse_twelvedata_keys_empty(self, monkeypatch) -> None:
         from settings import Settings
