@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as _dt
 from pathlib import Path
 
 import pytest
@@ -179,6 +180,154 @@ class TestLogPersistence:
         ) as client:
             r = await client.post("/api/v1/validator/run", headers=AUTH)
         assert r.status_code == 200
+
+
+class TestReportsEndpoints:
+    """Endpoints `/reports*` — histórico persistido en DB (AR.4)."""
+
+    @pytest.mark.asyncio
+    async def test_reports_latest_404_empty(
+        self, app_with_validator,
+    ) -> None:
+        async with AsyncClient(
+            transport=ASGITransport(app=app_with_validator),
+            base_url="http://test",
+        ) as client:
+            r = await client.get(
+                "/api/v1/validator/reports/latest", headers=AUTH,
+            )
+        assert r.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_run_persists_and_reports_latest_returns_it(
+        self, app_with_validator,
+    ) -> None:
+        async with AsyncClient(
+            transport=ASGITransport(app=app_with_validator),
+            base_url="http://test",
+        ) as client:
+            # Corro la batería → persiste en DB
+            run_r = await client.post(
+                "/api/v1/validator/run", headers=AUTH,
+            )
+            assert run_r.status_code == 200
+            run_id = run_r.json()["run_id"]
+
+            # /reports/latest debe devolverlo
+            latest = await client.get(
+                "/api/v1/validator/reports/latest", headers=AUTH,
+            )
+        assert latest.status_code == 200
+        body = latest.json()
+        assert body["run_id"] == run_id
+        assert body["trigger"] == "manual"
+
+    @pytest.mark.asyncio
+    async def test_reports_history_empty(
+        self, app_with_validator,
+    ) -> None:
+        async with AsyncClient(
+            transport=ASGITransport(app=app_with_validator),
+            base_url="http://test",
+        ) as client:
+            r = await client.get("/api/v1/validator/reports", headers=AUTH)
+        assert r.status_code == 200
+        assert r.json() == {"items": [], "next_cursor": None}
+
+    @pytest.mark.asyncio
+    async def test_reports_history_paginates(
+        self, app_with_validator,
+    ) -> None:
+        async with AsyncClient(
+            transport=ASGITransport(app=app_with_validator),
+            base_url="http://test",
+        ) as client:
+            # Corro 3 batteries
+            for _ in range(3):
+                await client.post("/api/v1/validator/run", headers=AUTH)
+
+            r = await client.get(
+                "/api/v1/validator/reports?limit=2", headers=AUTH,
+            )
+        assert r.status_code == 200
+        body = r.json()
+        assert len(body["items"]) == 2
+        assert body["next_cursor"] is not None
+
+    @pytest.mark.asyncio
+    async def test_reports_history_filter_trigger(
+        self, app_with_validator,
+    ) -> None:
+        from modules.db import ET_TZ, write_validator_report
+        from modules.validator import TestResult, ValidatorReport
+
+        # Persistir 3 reportes con triggers distintos via DB directa
+        async with app_with_validator.state.session_factory() as op:
+            for i, trig in enumerate(("startup", "manual", "hot_reload")):
+                await write_validator_report(
+                    op,
+                    report=ValidatorReport(
+                        run_id=f"r-{i}",
+                        started_at=_dt.datetime(2026, 4, 22, tzinfo=ET_TZ),
+                        finished_at=_dt.datetime(2026, 4, 22, tzinfo=ET_TZ),
+                        tests=[TestResult(test_id="D", status="skip")],
+                    ),
+                    trigger=trig,  # type: ignore[arg-type]
+                )
+
+        async with AsyncClient(
+            transport=ASGITransport(app=app_with_validator),
+            base_url="http://test",
+        ) as client:
+            r = await client.get(
+                "/api/v1/validator/reports?trigger=hot_reload",
+                headers=AUTH,
+            )
+        assert r.status_code == 200
+        items = r.json()["items"]
+        assert len(items) == 1
+        assert items[0]["trigger"] == "hot_reload"
+
+    @pytest.mark.asyncio
+    async def test_report_by_id_404(
+        self, app_with_validator,
+    ) -> None:
+        async with AsyncClient(
+            transport=ASGITransport(app=app_with_validator),
+            base_url="http://test",
+        ) as client:
+            r = await client.get(
+                "/api/v1/validator/reports/9999", headers=AUTH,
+            )
+        assert r.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_report_by_id_returns_full(
+        self, app_with_validator,
+    ) -> None:
+        async with AsyncClient(
+            transport=ASGITransport(app=app_with_validator),
+            base_url="http://test",
+        ) as client:
+            run_r = await client.post(
+                "/api/v1/validator/run", headers=AUTH,
+            )
+            run_id = run_r.json()["run_id"]
+
+            # Resolver el id vía /reports
+            listing = await client.get(
+                "/api/v1/validator/reports", headers=AUTH,
+            )
+            report_id = listing.json()["items"][0]["id"]
+
+            r = await client.get(
+                f"/api/v1/validator/reports/{report_id}", headers=AUTH,
+            )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["id"] == report_id
+        assert body["run_id"] == run_id
+        assert len(body["tests"]) == 7
 
 
 class TestOpenApi:

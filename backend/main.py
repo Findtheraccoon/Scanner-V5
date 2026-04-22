@@ -48,7 +48,12 @@ from engines.data import (
 from engines.data.scan_loop import auto_scan_loop
 from engines.registry_runtime import RegistryRuntime
 from engines.scoring import ENGINE_VERSION
-from modules.db import default_url, make_engine, make_session_factory
+from modules.db import (
+    default_url,
+    make_engine,
+    make_session_factory,
+    write_validator_report,
+)
 from modules.slot_registry import RegistryError, load_registry
 from modules.validator import Validator
 from modules.validator.log_writer import write_report_log
@@ -224,6 +229,15 @@ def _build_validator_startup_factory(app):
                 logger.exception(
                     f"could not write validator TXT log to {log_dir}",
                 )
+        # Persistir a la tabla validator_reports (AR.4). Silencioso.
+        try:
+            session_factory = app.state.session_factory
+            async with session_factory() as session:
+                await write_validator_report(
+                    session, report=report, trigger="startup",
+                )
+        except Exception:
+            logger.exception("could not persist startup validator report")
         logger.info(
             f"Validator startup run done — overall={report.overall_status} "
             f"run_id={report.run_id}",

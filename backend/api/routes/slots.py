@@ -229,6 +229,19 @@ def _spawn_revalidation(request: Request) -> None:
         try:
             report = await validator.run_slot_revalidation()
             request.app.state.last_validator_report = report
+            # AR.4 — persistir a la tabla validator_reports.
+            try:
+                from modules.db import write_validator_report
+
+                factory = request.app.state.session_factory
+                async with factory() as session:
+                    await write_validator_report(
+                        session, report=report, trigger="hot_reload",
+                    )
+            except Exception:
+                logger.exception(
+                    "could not persist hot-reload validator report",
+                )
         except Exception:
             logger.exception("slot revalidation background task failed")
 

@@ -1,19 +1,24 @@
 """Endpoints REST del Validator Module (`/api/v1/validator`).
 
-**Scope V.6:**
+**Run + lectura de reportes:**
 
 - `POST /api/v1/validator/run` — corre la batería completa (7 tests
-  D→A→B→C→E→F→G). El endpoint es sync: bloquea hasta que la corrida
-  termina y devuelve el reporte. La batería también emite
-  `validator.progress` via WebSocket durante la corrida — clientes
-  adicionales pueden seguir el progreso sin disparar.
-- `POST /api/v1/validator/connectivity` — corre solo Check G, útil
-  para el botón "Test conectividad API" del Dashboard.
-- `GET /api/v1/validator/report/latest` — devuelve el último reporte
-  (404 si todavía no se corrió ninguno en esta sesión).
+  D→A→B→C→E→F→G). Bloqueante — emite `validator.progress` durante la
+  corrida y retorna el reporte.
+- `POST /api/v1/validator/connectivity` — corre solo Check G.
+- `GET /api/v1/validator/report/latest` — último reporte en memoria
+  (compatibilidad — devuelve el cache `app.state.last_validator_report`).
+- `GET /api/v1/validator/reports?cursor=&limit=&trigger=&overall_status=`
+  — histórico paginado desde DB. Transparent read op + archive.
+- `GET /api/v1/validator/reports/latest` — último reporte de la DB
+  (vs `/report/latest` que es el cache in-memory).
+- `GET /api/v1/validator/reports/{id}` — detalle por id desde DB.
 
-**Persistencia:** el último reporte vive en `app.state.last_validator_report`.
-Solo se mantiene el último — los históricos no están soportados.
+**Persistencia (AR.4):** cada corrida (startup/manual/hot_reload/
+connectivity) se guarda en la tabla `validator_reports`. El endpoint
+`/run` persiste con `trigger="manual"`, el startup factory con
+`trigger="startup"`, `run_slot_revalidation()` con `"hot_reload"` y
+`/connectivity` con `"connectivity"`.
 
 **Auth:** Bearer token.
 
@@ -26,10 +31,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import require_auth
+from api.deps import get_archive_session, get_session
+from modules.db import (
+    DEFAULT_PAGE_LIMIT,
+    MAX_PAGE_LIMIT,
+    ValidatorTrigger,
+    read_validator_report_by_id,
+    read_validator_reports_history,
+    read_validator_reports_latest,
+    write_validator_report,
+)
 from modules.validator import Validator, ValidatorReport
 from modules.validator.log_writer import write_report_log
 
@@ -50,6 +66,23 @@ def _persist_report_log(request: Request, report: ValidatorReport) -> None:
         logger.exception(
             f"could not write validator TXT log to {log_dir}",
         )
+
+
+async def _persist_report_db(
+    request: Request,
+    report: ValidatorReport,
+    *,
+    trigger: ValidatorTrigger,
+) -> None:
+    """Persiste el reporte a la tabla `validator_reports`. Silencioso."""
+    factory = request.app.state.session_factory
+    try:
+        async with factory() as session:
+            await write_validator_report(
+                session, report=report, trigger=trigger,
+            )
+    except Exception:
+        logger.exception("could not persist validator report to DB")
 
 
 def _get_validator(request: Request) -> Validator:
@@ -87,6 +120,7 @@ async def run_full_battery(
     report = await validator.run_full_battery()
     request.app.state.last_validator_report = report
     _persist_report_log(request, report)
+    await _persist_report_db(request, report, trigger="manual")
     return _report_to_dict(report)
 
 
@@ -106,6 +140,8 @@ async def get_latest_report(
     request: Request,
     _token: str = Depends(require_auth),
 ) -> dict:
+    """Cache in-memory del último reporte. Prefiera `/reports/latest`
+    para fuente persistente."""
     report = getattr(request.app.state, "last_validator_report", None)
     if report is None:
         raise HTTPException(
@@ -113,3 +149,69 @@ async def get_latest_report(
             detail="No validator report available yet in this session.",
         )
     return _report_to_dict(report)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# /reports — historia persistente en DB (AR.4)
+# ──────────────────────────────────────────────────────────────────────
+
+
+@router.get("/reports/latest")
+async def get_db_latest_report(
+    session: AsyncSession = Depends(get_session),
+    archive_session: AsyncSession | None = Depends(get_archive_session),
+    _token: str = Depends(require_auth),
+) -> dict:
+    """Último reporte persistido en DB (transparent op + archive)."""
+    report = await read_validator_reports_latest(
+        session, archive_session=archive_session,
+    )
+    if report is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No persisted validator report found.",
+        )
+    return report
+
+
+@router.get("/reports")
+async def list_reports(
+    cursor: int | None = Query(None, ge=1),
+    limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
+    trigger: ValidatorTrigger | None = Query(None),
+    overall_status: str | None = Query(
+        None, pattern=r"^(pass|fail|partial)$",
+    ),
+    session: AsyncSession = Depends(get_session),
+    archive_session: AsyncSession | None = Depends(get_archive_session),
+    _token: str = Depends(require_auth),
+) -> dict:
+    """Histórico paginado cursor-based.
+
+    Filtros opcionales por `trigger` y `overall_status`.
+    """
+    items, next_cursor = await read_validator_reports_history(
+        session,
+        archive_session=archive_session,
+        trigger=trigger,
+        overall_status=overall_status,
+        cursor=cursor,
+        limit=limit,
+    )
+    return {"items": items, "next_cursor": next_cursor}
+
+
+@router.get("/reports/{report_id}")
+async def get_report_by_id(
+    report_id: int,
+    session: AsyncSession = Depends(get_session),
+    archive_session: AsyncSession | None = Depends(get_archive_session),
+    _token: str = Depends(require_auth),
+) -> dict:
+    """Reporte completo por id. Transparent read op + archive."""
+    report = await read_validator_report_by_id(
+        session, report_id, archive_session=archive_session,
+    )
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return report
