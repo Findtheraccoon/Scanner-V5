@@ -321,4 +321,59 @@ python backend/main.py
 
 ---
 
+## Protocolo Handoff al cerrar un chat
+
+Al terminar una sesión de desarrollo (antes de dejar el chat inactivo), correr
+este protocolo para dejar el proyecto listo para el siguiente chat. Álvaro lo
+dispara con "handoff" — no inferirlo por cuenta propia.
+
+### Pasos
+
+1. **Actualizar avances en `CLAUDE.md` — sección "Estado actual de la implementación":**
+   - Mover ítems nuevos de "Pendiente" a "Completado" (o agregar sub-fases en
+     el desglose por sub-fase).
+   - Actualizar el contador de **tests passing** (`cd backend && python -m
+     pytest tests/ -q` para el número global; añadir el sub-total del módulo
+     tocado si aplica).
+   - Actualizar "Divergencias conocidas" si se resolvió alguna.
+   - Agregar **gotchas nuevas** (sección #N) si se aprendió algo que no se
+     debe repetir en futuros chats — con ejemplo concreto de código o commit.
+
+2. **Actualizar descripciones de directorios y `README.md`:**
+   - Si se crearon directorios nuevos en `backend/modules/<x>/` o
+     `backend/engines/<x>/`, asegurar que aparecen en el árbol del
+     `README.md` raíz y que su `README.md` de módulo describe el alcance
+     actual.
+   - Si los `README.md` de módulos tocados quedaron obsoletos, refrescarlos
+     con el scope final (no narrar el what del código — reflejar
+     responsabilidades y puntos de entrada).
+
+3. **Indexar archivos nuevos en `CLAUDE.md`:**
+   - Agregar los módulos/archivos relevantes a la tabla correspondiente
+     ("Módulos nuevos del Scoring Engine" o crear sub-sección análoga por
+     capa si no existe).
+   - Mantener la tabla concisa: archivo + rol en 1 línea.
+
+4. **Dejar info relevante para el siguiente chat:**
+   - Sub-sección "Para el siguiente chat" (temporal, puede sobrescribirse en
+     el próximo handoff): decisiones abiertas, caminos recomendados,
+     bloqueos conocidos, tests o comandos puntuales que el próximo chat
+     necesitará correr.
+   - Si hay PR abierto: link + estado.
+
+5. **Commit + push:**
+   - `docs(claude): handoff <YYYY-MM-DD> — <resumen 1 línea>`.
+   - Push a la rama de trabajo actual (ver §Git workflow).
+   - Si hay PR abierto que refleja el trabajo de la sesión, actualizar la
+     descripción con los deltas del día.
+
+### Cuándo NO correr el protocolo
+
+- Commits WIP intermedios (cambio de contexto breve, va en el próximo
+  commit).
+- Sesiones exploratorias sin cambios de código.
+- Cuando el trabajo sigue en vuelo y no hay un "checkpoint" natural.
+
+---
+
 **Fin del contexto. Cuando leas esto por primera vez en un chat nuevo: saludar, confirmar que lo leíste mencionando 1-2 gotchas específicas, y preguntar en qué pinchamos hoy.**
