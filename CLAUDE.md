@@ -60,14 +60,15 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 | Capa | Módulo | Estado |
 |---|---|---|
 | 1 (Data Engine) | `backend/engines/data/` — KeyPool, TwelveDataClient, `DataEngine` orquestrador (warmup DB-first, fetch_for_scan retry), `auto_scan_loop` real con DEGRADED ENG-060 | ✅ |
-| 3 (Slot Registry) | `backend/modules/slot_registry/` + `backend/engines/registry_runtime.py` (runtime in-memory con hot-reload REST) | ✅ |
+| 2 (Validator) | `backend/modules/validator/` — batería D/A/B/C/E/F/G + runner + REST + TXT log + hot-reload revalidation | ✅ |
+| 3 (Slot Registry) | `backend/modules/slot_registry/` + `backend/engines/registry_runtime.py` — runtime in-memory con hot-reload REST (disable + enable con warmup + persistencia JSON) | ✅ |
 | 4 (Scoring Engine) | `backend/engines/scoring/` — Fases 1-5 + parity harness (189/245 baseline) | ✅ |
-| 5 (Persistencia + API + WS) | `backend/modules/db/` + `backend/api/` + `backend/modules/signal_pipeline/` — SQLAlchemy async, Alembic híbrido, REST auth Bearer, WS con 6 eventos, pipeline scan→persist→broadcast | ✅ |
+| 5 (Persistencia + API + WS) | `backend/modules/db/` + `backend/api/` + `backend/modules/signal_pipeline/` — SQLAlchemy async, Alembic híbrido, REST auth Bearer, WS con 6 eventos, pipeline scan→persist→broadcast con flag `persist` | ✅ |
 | 6 (Database Engine) | `backend/engines/database/` — heartbeat + rotación retention | ✅ |
-| D (Entrypoint) | `backend/main.py` + `backend/settings.py` + `backend/api/workers.py` — Pydantic Settings, lifecycle, worker factories | ✅ |
+| D (Entrypoint) | `backend/main.py` + `backend/settings.py` + `backend/api/workers.py` — Pydantic Settings, lifecycle, worker factories, Validator wiring | ✅ |
 | Fixtures | `backend/modules/fixtures/` — loader | ✅ base |
 
-**Tests totales:** 851 passing en `backend/tests/`. `ruff check .` limpio.
+**Tests totales:** 964 passing en `backend/tests/`. `ruff check .` limpio.
 
 ### Scoring Engine — detalle por fase
 
@@ -83,7 +84,7 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
   - **5.3c** · Tests de integración con monkeypatch de detectores.
 - **Fase 5.4:** parity harness — `backend/engines/scoring/aggregator.py` (1min→15M/1H) + `backend/fixtures/parity_reference/parity_qqq_regenerate.py` (runner E2E). **Baseline 189/245 matches (77%)**.
 
-**Tests scoring:** 643 passing en `backend/tests/engines/scoring/` (sub-total del total global 851).
+**Tests scoring:** 643 passing en `backend/tests/engines/scoring/` (sub-total del total global 964).
 
 ### Capa 5 + Entrypoint + Data Engine — detalle por sub-fase
 
@@ -112,7 +113,21 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 **Slot Registry runtime:**
 - **SR.1** · `engines/registry_runtime.py:RegistryRuntime` — wrapper sobre `SlotRegistry` con `asyncio.Lock`, warmup overlay (`mark_warming`/`mark_warmed`/`is_warming`/`warming_slots`), `effective_status`, `replace_registry` para hot-reload. Tipo `SlotRuntimeStatus = Literal["active","warming_up","degraded","disabled"]`.
 - **SR.2** · `auto_scan_loop(registry: RegistryRuntime, ...)` consulta `list_scannable_tickers()` cada ciclo 15M. Cambios en el registry toman efecto sin reiniciar.
-- **SR.3** · `api/routes/slots.py` — `GET /api/v1/slots`, `GET /api/v1/slots/{id}`, `PATCH /api/v1/slots/{id}` con body `{enabled: false}` → `disable_slot` + broadcast `slot.status=disabled`. Enable + swap de ticker/fixture queda fuera de MVP.
+- **SR.3** · `api/routes/slots.py` — `GET /api/v1/slots`, `GET /api/v1/slots/{id}`, `PATCH /api/v1/slots/{id}` con body `{enabled: false}` → `disable_slot` + broadcast `slot.status=disabled`.
+- **SR.4** · PATCH `{enabled: true, ticker, fixture, benchmark?}` → `RegistryRuntime.enable_slot()` (valida fixture + REG-011/012/013), persist JSON, marca warming_up, broadcast. Background task hace `DataEngine.warmup([ticker])` → `mark_warmed` + broadcast `slot.status=active`. Requiere `app.state.data_engine` (503 si no).
+- **SR.5** · PATCH (disable o enable) dispara `Validator.run_slot_revalidation()` en background (A→B→C con mismo run_id). Spec §3.3 — "validator corre solo sobre el slot afectado tras hot-reload".
+
+### Capa 2 (Validator) — detalle por sub-fase
+
+- **V.1** · `modules/validator/models.py` (`TestResult` frozen, `ValidatorReport` con `overall_status` derivado, `TEST_ORDER`/`TEST_DESCRIPTIONS`) + `runner.py:Validator.run_full_battery()` + `checks/d_infra.py` (DB `SELECT 1` + FS probe via `asyncio.to_thread`). Emite `validator.progress` 2 eventos por test.
+- **V.2** · `checks/a_fixtures.py` (`load_fixture` por slot enabled, fail degraded con FIX-XXX), `checks/b_canonicals.py` (SHA-256 recompute, fail fatal REG-020), `checks/c_registry.py` (reload `load_registry` + reporta degraded/operative/disabled counts).
+- **V.3** · `checks/e_e2e.py` con `scan_executor` callable inyectable + `scan_and_emit(persist: bool = True)`. Persist=False → skip write_signal + broadcast, retorna `{..., "id": None, "persisted": False}`. Fatal si executor crashea o shape inválida.
+- **V.4** · `checks/f_parity.py` — corre `analyze()` sobre `parity_qqq_candles.db` (commiteado). Slicing/compare portados del runner CLI. Match rate < `min_match_rate` (default 0.70) → warning ENG-050.
+- **V.5** · `checks/g_connectivity.py` — `td_probe` + `s3_probe` inyectables. Fatal si TODAS las TD keys fallan; warning si alguna falla o S3 cae.
+- **V.6** · `api/routes/validator.py` — `POST /api/v1/validator/run` (bloqueante), `POST /api/v1/validator/connectivity` (solo G), `GET /api/v1/validator/report/latest`. Guarda el último reporte en `app.state.last_validator_report`.
+- **V.7** · `main.py` `_build_validator` + `_build_td_probe` + `_build_validator_startup_factory`. Si `validator_run_at_startup=True` corre batería al arrancar. Continue-on-fatal.
+- **V.8** (post-merge) · `modules/validator/log_writer.py` — TXT a `/LOG/` con retención 5 días. Se invoca desde el endpoint `POST /run` y desde el startup factory.
+- **V.9** (post-merge) · `Validator.run_slot_revalidation()` — corre A→B→C con un solo run_id, spawneado desde `api/routes/slots.py` tras cualquier PATCH exitoso.
 
 ### Módulos nuevos del Scoring Engine (Fase 5)
 
@@ -125,17 +140,69 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 | `engines/scoring/indicators/pivots.py` | `find_pivots()` + `key_levels()` |
 | `engines/scoring/confirms/categorize.py` | `categorize_confirm()` + `apply_confirm_weights()` (dedup por categoría) |
 | `engines/scoring/confirms/bollinger.py`, `volume.py`, `squeeze.py`, `gap.py`, `relative_strength.py` | Detectores de confirms por familia |
-| `fixtures/parity_reference/parity_qqq_regenerate.py` | Runner parity E2E (Opción B) contra `data/parity_qqq_candles.db` |
+| `fixtures/parity_reference/parity_qqq_regenerate.py` | Runner parity E2E (Opción B) contra `parity_qqq_candles.db` |
+| `fixtures/parity_reference/fixtures/parity_qqq_candles.db` | Dataset de velas QQQ/SPY commiteado (10.6MB, usado por Check F y runner) |
+
+### Módulos nuevos del Validator (Capa 2)
+
+| Archivo | Rol |
+|---|---|
+| `modules/validator/models.py` | `TestResult`, `ValidatorReport`, `TEST_ORDER` |
+| `modules/validator/runner.py` | `Validator` — `run_full_battery`, `run_single_check`, `run_slot_revalidation` |
+| `modules/validator/checks/d_infra.py` | DB `SELECT 1` + FS probe |
+| `modules/validator/checks/a_fixtures.py` | `load_fixture` sobre slots enabled |
+| `modules/validator/checks/b_canonicals.py` | Hash SHA-256 de canonicals (REG-020) |
+| `modules/validator/checks/c_registry.py` | Reload `load_registry` + report |
+| `modules/validator/checks/e_e2e.py` | Shape check sobre `scan_executor` inyectable |
+| `modules/validator/checks/f_parity.py` | Parity exhaustivo vs `parity_qqq_sample.json` |
+| `modules/validator/checks/g_connectivity.py` | `td_probe` + `s3_probe` inyectables |
+| `modules/validator/log_writer.py` | TXT a `/LOG/` con retención 5 días |
+| `api/routes/validator.py` | `/api/v1/validator/{run,connectivity,report/latest}` |
+
+### Módulos nuevos del Slot Registry runtime
+
+| Archivo | Rol |
+|---|---|
+| `engines/registry_runtime.py:RegistryRuntime` | `disable_slot`, `enable_slot` (con warmup overlay + persist), `mark_warming/warmed`, `replace_registry` |
+| `modules/slot_registry/writer.py` | `save_registry()` con escritura atómica (`tempfile` + `os.replace`) |
+| `api/routes/slots.py` | REST + spawn warmup task + spawn revalidation task |
 
 ### Pendiente
 
+- **Frontend:** React + TS + Vite + Tailwind + shadcn + Zustand + TanStack Query (aún no iniciado). Bloque grande — desbloquea el producto entero; backend ya expone todo lo necesario.
 - **Fase 5.4 cierre:** el parity está en **189/245 (77%)** — baseline funcional aceptado. Los 56 mismatches restantes NO son bugs del motor (lógica porteada bit-a-bit de Observatory `patterns.py`), sino diferencias probablemente en data sources: al debuggear el trigger MA cross 1H del 2025-04-21 09:45, mi aggregator replica la convención exacta del `CandleBuilder` del replay (open-stamped, `include_current=True`) pero los closes de las velas 1H no coinciden con los que Observatory tenía cuando generó el sample. Requiere correr el replay completo sobre el `observatory_v5_2.db` original para regenerar un sample con los closes actuales.
-- **Capa 2:** Validator module (batería D/A/B/C/E/F/G).
-- **Frontend:** React + TS + Zustand + TanStack Query (aún no iniciado).
-- **`PATCH /slots {enabled: true}`:** requiere reload de fixture desde disco + warmup explícito. Fuera de MVP actual.
-- **Persistencia del registry editado:** el `PATCH /slots` actual solo muta memoria. Falta escribir los cambios de vuelta a `slot_registry.json`.
-- **Archive DB + S3 backup** (Capa 5 scope futuro).
+- **Archive DB + S3 backup** (Capa 5 scope futuro, spec §3.5).
 - **Config encriptado `modules/config/`** para distribución Windows.
+- **Reportes históricos de Validator en DB:** actualmente solo se persiste el último reporte en memoria y el TXT en `/LOG/`. No hay tabla `validator_reports`.
+
+### Para el siguiente chat
+
+**Estado al 2026-04-22:** backend conceptualmente completo según spec §3. Último hito pushado (no PR todavía — Álvaro pide agrupar PRs por varios hitos):
+
+- SR.4 — `PATCH /slots {enabled: true}` con reload de fixture + warmup.
+- SR.5 — hot-reload auto-revalidation (`run_slot_revalidation` A→B→C).
+- V.8 — TXT log del Validator a `/LOG/` con retención 5 días.
+- Updates a `CLAUDE.md` (este mismo commit).
+
+**Branch de trabajo:** `claude/review-project-setup-4DnEm`. PR pendiente de crear — disparar cuando Álvaro diga.
+
+**Próximo bloque grande sugerido:** Frontend React + TS. Backend ya expone:
+- REST `/api/v1/slots/{id}` PATCH completo (disable + enable con warmup).
+- REST `/api/v1/validator/{run,connectivity,report/latest}`.
+- REST `/api/v1/signals/{latest,history,by_id}`.
+- REST `/api/v1/scan/manual`.
+- REST `/api/v1/engine/health`.
+- WS `/ws?token=...` con 6 eventos.
+
+**Comando de arranque end-to-end verificado:**
+```bash
+SCANNER_API_KEYS="sk-dev" \
+SCANNER_TWELVEDATA_KEYS="k1:sk-td-1:8:800" \
+SCANNER_REGISTRY_PATH="slot_registry.json" \
+python backend/main.py
+```
+
+Al arrancar, el Validator corre la batería completa, emite progress via WS, persiste reporte en `app.state` + TXT en `LOG/`.
 
 ### Divergencias conocidas con Observatory — estado post-Fase 5.2/5.4
 
@@ -211,13 +278,13 @@ El runner `parity_qqq_regenerate.py` implementa esta convención en su `slice_fo
 - **15M:** bucket open-stamped `[T, T+14]`. La última vela al momento T es **parcial** (close = 1min de T). El sample `price_at_signal` matchea ese close.
 - **1H:** bucket open-stamped `HH:00`. La convención exacta para el cálculo de MA20/MA40 al momento T sigue siendo ambigua — experimentalmente, incluir la parcial da 189/245 matches y excluirla da 160/245. El replay Observatory aclarará la convención real.
 
-### 10. Git: squash-merges se ven como "commits nuevos" en main
+### 10. Git: squash-merges se ven como "commits nuevos" en main (resuelto)
 
-GitHub squash-merge cambia el SHA. Cuando mergeás tu branch viejo a main vía PR, main obtiene un commit "nuevo" (squash) con el mismo código pero SHA distinto. Si después trabajás en la misma branch con correcciones, al intentar re-mergear git marca conflictos porque no reconoce que esos squashes son tu propio código viejo.
+**Histórico:** GitHub squash-merge cambia el SHA. Cuando mergeás tu branch viejo a main vía PR, main obtiene un commit "nuevo" (squash) con el mismo código pero SHA distinto. Reciclar la misma branch causaba conflictos porque git no reconocía los squashes como propios.
 
-**Resolución segura para esta branch específica:** `git merge origin/main -X ours --no-ff`. Es seguro **SOLO** cuando verificás que todos los commits nuevos de main son squash-merges de esta misma branch (mismo autor, mismo contenido aplastado). Si main tiene trabajo ajeno, **NO usar `-X ours`** — resolver a mano.
+**Resolución:** desde el PR #14 (2026-04-22) **el merge method de GitHub cambió a "Create a merge commit"** — preserva SHAs originales, permite reciclar la branch indefinidamente. Trade-off: main queda con merge bubbles en lugar de commits squash limpios. Los PRs #14, #15, #16, #17 se mergearon así sin fricción.
 
-**Ya ocurrió dos veces** (merge del PR #11 → PqMEL roto → 4DnEm; merge del PR #12 → 4DnEm conflicto con C/SR/DE.3.1). Si el patrón se vuelve a repetir, considerar cambiar el merge method de GitHub de "Squash and merge" a **"Create a merge commit"**: preserva SHAs originales, permite reciclar la misma branch indefinidamente. Trade-off: main queda con historia completa + merge bubbles en lugar de commits squash limpios.
+**Si en el futuro vuelve a squash-merge:** usar `git merge origin/main -X ours --no-ff` (seguro SOLO si main tiene squashes de la misma branch, mismo autor/contenido).
 
 ### 11. SQLite drop-ea tzinfo aunque declares `DateTime(timezone=True)`
 
@@ -238,6 +305,39 @@ En tests con `from httpx import ASGITransport, AsyncClient`, el startup/shutdown
 Tests unitarios corren desde `backend/` como cwd. `from backend.main import ...` falla con `ModuleNotFoundError` porque `backend` NO es un paquete importable — `backend/` es el sys.path root.
 
 **Usar `from main import ...` en tests.** Regla general: imports absolutos **desde el directorio `backend/`**, no **del directorio `backend/`**.
+
+### 14. Pydantic models cuyo nombre empieza con `Test*` colisionan con pytest
+
+`pyproject.toml` tiene `python_classes = ["Test*"]`. Si una clase Pydantic se llama `TestResult` (o similar), pytest la intenta colectar como clase de tests y emite `PytestCollectionWarning`.
+
+**Fix:** agregar `__test__ = False` como atributo de clase (antes de `model_config`).
+
+```python
+class TestResult(BaseModel):
+    __test__ = False  # evita colección por pytest
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    ...
+```
+
+Aplica a cualquier clase pública del dominio que coincida con el patrón — usar esto, NO renombrar la clase (rompería API pública).
+
+### 15. `RUF006` — guardar referencia a `asyncio.create_task`
+
+Python no mantiene referencias fuertes a tasks creados con `create_task` — si el GC los recoge antes de terminar, el task se cancela silenciosamente. Ruff lo detecta como `RUF006`.
+
+**Patrón:** mantener un set de tasks vivos en `app.state` + `add_done_callback(set.discard)`:
+
+```python
+task = asyncio.create_task(coro(), name="xxx")
+tasks = getattr(app.state, "my_tasks", None)
+if tasks is None:
+    tasks = set()
+    app.state.my_tasks = tasks
+tasks.add(task)
+task.add_done_callback(tasks.discard)
+```
+
+Se usa para el warmup post-enable y para la revalidation del Validator en `api/routes/slots.py`.
 
 ---
 
