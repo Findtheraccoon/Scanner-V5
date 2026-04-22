@@ -270,3 +270,75 @@ class TestReplaceRegistry:
         await rt.replace_registry(_registry([_slot(1, ticker="QQQ")]))
         # El warmup overlay se limpió
         assert await rt.effective_status(1) == "active"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# disable_slot — persistencia a disco (opt-in con registry_path)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestDisableSlotPersistence:
+    @pytest.mark.asyncio
+    async def test_no_path_means_no_write(self, tmp_path) -> None:
+        """Sin `registry_path`, el método solo muta memoria (comportamiento previo)."""
+        rt = RegistryRuntime(_registry([_slot(1, ticker="QQQ")]))
+        changed = await rt.disable_slot(1)
+        assert changed is True
+        # No se creó ningún archivo en tmp_path — ni lo teníamos configurado.
+        assert list(tmp_path.iterdir()) == []
+
+    @pytest.mark.asyncio
+    async def test_persists_to_configured_path(self, tmp_path) -> None:
+        path = tmp_path / "slot_registry.json"
+        rt = RegistryRuntime(
+            _registry([_slot(1, ticker="QQQ"), _slot(2, ticker="SPY")]),
+            registry_path=path,
+        )
+        await rt.disable_slot(1)
+
+        assert path.is_file()
+        import json
+        data = json.loads(path.read_text())
+        slot1 = next(s for s in data["slots"] if s["slot"] == 1)
+        slot2 = next(s for s in data["slots"] if s["slot"] == 2)
+        assert slot1["enabled"] is False
+        assert slot2["enabled"] is True  # sin tocar
+
+    @pytest.mark.asyncio
+    async def test_rollback_on_write_failure(
+        self, tmp_path, monkeypatch,
+    ) -> None:
+        """Si la escritura falla, memoria vuelve al estado anterior y se propaga."""
+        path = tmp_path / "slot_registry.json"
+        rt = RegistryRuntime(
+            _registry([_slot(1, ticker="QQQ")]), registry_path=path,
+        )
+        # Antes del disable: slot 1 está active
+        assert await rt.effective_status(1) == "active"
+
+        # Forzar fallo en save_registry
+        def _fail(*args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+            raise OSError("disk full")
+
+        monkeypatch.setattr(
+            "engines.registry_runtime.save_registry", _fail,
+        )
+
+        with pytest.raises(OSError, match="disk full"):
+            await rt.disable_slot(1)
+
+        # Memoria rollbackeada — el slot sigue active
+        assert await rt.effective_status(1) == "active"
+        # Y el archivo NO quedó creado
+        assert not path.exists()
+
+    @pytest.mark.asyncio
+    async def test_nonexistent_slot_does_not_write(self, tmp_path) -> None:
+        """Si el slot no existe, no se escribe al disco."""
+        path = tmp_path / "slot_registry.json"
+        rt = RegistryRuntime(
+            _registry([_slot(1, ticker="QQQ")]), registry_path=path,
+        )
+        changed = await rt.disable_slot(99)
+        assert changed is False
+        assert not path.exists()

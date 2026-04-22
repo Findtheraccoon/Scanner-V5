@@ -59,10 +59,15 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 
 | Capa | Módulo | Estado |
 |---|---|---|
-| 1 (Data Engine) | `backend/engines/data/` — KeyPool, TwelveDataClient stubs, market calendar, integrity, config | ✅ base |
-| 3 (Slot Registry) | `backend/modules/slot_registry/` | ✅ base |
-| 4 (Scoring Engine) | `backend/engines/scoring/` — Fases 1-5 + parity harness | ✅ |
+| 1 (Data Engine) | `backend/engines/data/` — KeyPool, TwelveDataClient, `DataEngine` orquestrador (warmup DB-first, fetch_for_scan retry), `auto_scan_loop` real con DEGRADED ENG-060 | ✅ |
+| 3 (Slot Registry) | `backend/modules/slot_registry/` + `backend/engines/registry_runtime.py` (runtime in-memory con hot-reload REST) | ✅ |
+| 4 (Scoring Engine) | `backend/engines/scoring/` — Fases 1-5 + parity harness (189/245 baseline) | ✅ |
+| 5 (Persistencia + API + WS) | `backend/modules/db/` + `backend/api/` + `backend/modules/signal_pipeline/` — SQLAlchemy async, Alembic híbrido, REST auth Bearer, WS con 6 eventos, pipeline scan→persist→broadcast | ✅ |
+| 6 (Database Engine) | `backend/engines/database/` — heartbeat + rotación retention | ✅ |
+| D (Entrypoint) | `backend/main.py` + `backend/settings.py` + `backend/api/workers.py` — Pydantic Settings, lifecycle, worker factories | ✅ |
 | Fixtures | `backend/modules/fixtures/` — loader | ✅ base |
+
+**Tests totales:** 851 passing en `backend/tests/`. `ruff check .` limpio.
 
 ### Scoring Engine — detalle por fase
 
@@ -78,7 +83,36 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
   - **5.3c** · Tests de integración con monkeypatch de detectores.
 - **Fase 5.4:** parity harness — `backend/engines/scoring/aggregator.py` (1min→15M/1H) + `backend/fixtures/parity_reference/parity_qqq_regenerate.py` (runner E2E). **Baseline 189/245 matches (77%)**.
 
-**Tests:** 643 passing en `backend/tests/engines/scoring/`.
+**Tests scoring:** 643 passing en `backend/tests/engines/scoring/` (sub-total del total global 851).
+
+### Capa 5 + Entrypoint + Data Engine — detalle por sub-fase
+
+**Capa 5 (persistencia + API + WS):**
+- **C5.1** · `modules/db/models.py` — SQLAlchemy async, tablas `signals` (schema híbrido 3: columnas planas + JSON blobs + snapshot gzip), `heartbeats`, `system_logs`, `candles_{daily,1h,15m}`. Custom `ETDateTime` TypeDecorator para persistir tz-aware ET en SQLite.
+- **C5.2** · `modules/db/helpers.py` — `write_signal`, `read_signals_{latest,history,by_id}` con cursor pagination, `write_heartbeat`, `write_system_log`, `write_candles_batch` (UPSERT sqlite), `read_candles_window`, `latest_candle_dt`. Tipo `CandleTF = Literal["daily","1h","15m"]`.
+- **C5.3** · `api/app.py` factory `create_app()` + `api/auth.py` Bearer dependency + `api/routes/health.py` (`GET /api/v1/engine/health`).
+- **C5.4** · `api/routes/signals.py` — `GET /api/v1/signals/{latest,history,by_id}` con cursor + snapshot base64.
+- **C5.5** · `api/routes/websocket.py` + `api/broadcaster.py` — `/ws?token=` con handshake y policy violation 1008. 6 eventos en `api/events.py`: `signal.new`, `slot.status`, `engine.status`, `api_usage.tick`, `validator.progress`, `system.log`.
+- **C5.6** · `modules/signal_pipeline/pipeline.py` — `scan_and_emit` analyze→persist→broadcast. Helpers `build_chat_format` v0 y `build_ws_payload`.
+- **C5.7** · `engines/database/heartbeat.py` + `engines/database/rotation.py` con `DEFAULT_RETENTION_POLICIES`.
+
+**D (Entrypoint):**
+- **D.1** · `backend/main.py` + `api/workers.py:heartbeat_worker`.
+- **D.2** · `api/routes/scan.py` — `POST /api/v1/scan/manual` con Pydantic `ScanManualRequest`.
+- **D.3** · `backend/settings.py` — `Settings(BaseSettings)` env prefix `SCANNER_`. Worker stub `auto_scheduler_worker` reemplazado después por el loop real.
+
+**Data Engine (Capa 1 expansión):**
+- **DE.1** · `modules/db/helpers.py:write_candles_batch` + `read_candles_window` + tablas `candles_*`.
+- **DE.2** · `engines/data/engine.py:DataEngine` orquestrador (`warmup`, `fetch_for_scan`, `pool_snapshot`).
+- **DE.3** · `engines/data/scan_loop.py:auto_scan_loop` real integrado con `main._build_scan_loop_factory` via `extra_workers` de `create_app`.
+- **C.1** · `auto_scan_loop` emite `api_usage.tick` por key al cierre de cada ciclo con snapshot de credits.
+- **C.2** · Retry nivel 1 (1s) en `fetch_for_scan` + `SlotFailureTracker` escala a DEGRADED ENG-060 tras 3 fallos consecutivos (ADR-0004). Emisión de `slot.status` en transiciones degraded↔recovered.
+- **DE.3.1** · Warmup DB-first (ADR-0003). `DataEngine.warmup()` consulta DB local por (ticker, TF); si la DB tiene al menos N velas frescas, skip fetch. Thresholds: `daily=7d`, `1h=3d`, `15m=1d`. Fase 1 check todos los pares, Fase 2 gather solo de los fetches pendientes.
+
+**Slot Registry runtime:**
+- **SR.1** · `engines/registry_runtime.py:RegistryRuntime` — wrapper sobre `SlotRegistry` con `asyncio.Lock`, warmup overlay (`mark_warming`/`mark_warmed`/`is_warming`/`warming_slots`), `effective_status`, `replace_registry` para hot-reload. Tipo `SlotRuntimeStatus = Literal["active","warming_up","degraded","disabled"]`.
+- **SR.2** · `auto_scan_loop(registry: RegistryRuntime, ...)` consulta `list_scannable_tickers()` cada ciclo 15M. Cambios en el registry toman efecto sin reiniciar.
+- **SR.3** · `api/routes/slots.py` — `GET /api/v1/slots`, `GET /api/v1/slots/{id}`, `PATCH /api/v1/slots/{id}` con body `{enabled: false}` → `disable_slot` + broadcast `slot.status=disabled`. Enable + swap de ticker/fixture queda fuera de MVP.
 
 ### Módulos nuevos del Scoring Engine (Fase 5)
 
@@ -96,9 +130,12 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 ### Pendiente
 
 - **Fase 5.4 cierre:** el parity está en **189/245 (77%)** — baseline funcional aceptado. Los 56 mismatches restantes NO son bugs del motor (lógica porteada bit-a-bit de Observatory `patterns.py`), sino diferencias probablemente en data sources: al debuggear el trigger MA cross 1H del 2025-04-21 09:45, mi aggregator replica la convención exacta del `CandleBuilder` del replay (open-stamped, `include_current=True`) pero los closes de las velas 1H no coinciden con los que Observatory tenía cuando generó el sample. Requiere correr el replay completo sobre el `observatory_v5_2.db` original para regenerar un sample con los closes actuales.
-- **Capa 2:** Validator module.
-- **Capa 5:** persistencia SQLAlchemy + FastAPI endpoints + WebSocket.
-- **Frontend:** React + TS (aún no iniciado en esta rama).
+- **Capa 2:** Validator module (batería D/A/B/C/E/F/G).
+- **Frontend:** React + TS + Zustand + TanStack Query (aún no iniciado).
+- **`PATCH /slots {enabled: true}`:** requiere reload de fixture desde disco + warmup explícito. Fuera de MVP actual.
+- **Persistencia del registry editado:** el `PATCH /slots` actual solo muta memoria. Falta escribir los cambios de vuelta a `slot_registry.json`.
+- **Archive DB + S3 backup** (Capa 5 scope futuro).
+- **Config encriptado `modules/config/`** para distribución Windows.
 
 ### Divergencias conocidas con Observatory — estado post-Fase 5.2/5.4
 
@@ -180,6 +217,28 @@ GitHub squash-merge cambia el SHA. Cuando mergeás tu branch viejo a main vía P
 
 **Resolución segura para esta branch específica:** `git merge origin/main -X ours --no-ff`. Es seguro **SOLO** cuando verificás que todos los commits nuevos de main son squash-merges de esta misma branch (mismo autor, mismo contenido aplastado). Si main tiene trabajo ajeno, **NO usar `-X ours`** — resolver a mano.
 
+**Ya ocurrió dos veces** (merge del PR #11 → PqMEL roto → 4DnEm; merge del PR #12 → 4DnEm conflicto con C/SR/DE.3.1). Si el patrón se vuelve a repetir, considerar cambiar el merge method de GitHub de "Squash and merge" a **"Create a merge commit"**: preserva SHAs originales, permite reciclar la misma branch indefinidamente. Trade-off: main queda con historia completa + merge bubbles en lugar de commits squash limpios.
+
+### 11. SQLite drop-ea tzinfo aunque declares `DateTime(timezone=True)`
+
+SQLAlchemy + SQLite no preserva la zona horaria — devuelve datetimes naive al leer. Para ET tz-aware (ADR-0002) hay que usar un `TypeDecorator` custom (`ETDateTime` en `modules/db/models.py`) que:
+- Valida `tzinfo is not None` al escribir (fail-fast si te pasan naive).
+- Reatacha `ET_TZ` al leer.
+
+**Lección:** en cualquier modelo nuevo con timestamps, usar `ETDateTime` y no `DateTime(timezone=True)` directo.
+
+### 12. httpx `AsyncClient` + `ASGITransport` no corre el lifespan
+
+En tests con `from httpx import ASGITransport, AsyncClient`, el startup/shutdown de FastAPI NO se ejecuta. Si tu app depende de `init_db()` en el lifespan, los tests fallan con tablas inexistentes.
+
+**Fix:** `create_app(auto_init_db=False)` + `await init_db(app.state.db_engine)` manual en el fixture.
+
+### 13. `backend.main` vs `main` en imports de tests
+
+Tests unitarios corren desde `backend/` como cwd. `from backend.main import ...` falla con `ModuleNotFoundError` porque `backend` NO es un paquete importable — `backend/` es el sys.path root.
+
+**Usar `from main import ...` en tests.** Regla general: imports absolutos **desde el directorio `backend/`**, no **del directorio `backend/`**.
+
 ---
 
 ## Observatory como autoridad de paridad
@@ -213,6 +272,7 @@ El código de Observatory vive en `docs/specs/Observatory/Current/scanner/`:
 - **Antes de commit:** correr `cd backend && python -m pytest tests/ -q` y asegurar que pasa.
 - **Commit messages:** español, conventional commits (`feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, `test:`). Scope entre paréntesis (`feat(scoring):`).
 - **Footer:** incluir `https://claude.ai/code/...` como manda la configuración del repo.
+- **Merge strategy GitHub:** actualmente "Squash and merge". Ver gotcha #10 — considerar cambiar a "Create a merge commit" si se sigue reciclando la misma branch long-lived.
 - **Nunca:**
   - `--no-verify` para saltear hooks.
   - `--amend` a commits ya pusheados.
@@ -246,9 +306,73 @@ git log --oneline HEAD..origin/main
 2. Leer este `CLAUDE.md` completo (ya lo estás haciendo).
 3. Leer `docs/specs/SCANNER_V5_HANDOFF_CURRENT.md` para contexto de producto.
 4. Si se va a tocar scoring: leer `docs/specs/SCORING_ENGINE_SPEC.md` + `docs/specs/Observatory/Current/scanner/scoring.py` + `patterns.py` + `engine.py`.
-5. Correr los tests antes de tocar nada para verificar baseline verde.
-6. Para el próximo paso del scoring (Fase 5 — confirms), leer `docs/specs/Observatory/Current/scanner/scoring.py` secciones de confirms y los pesos del fixture canonical.
+5. Si se va a tocar Validator (próximo gran bloque): leer `docs/specs/SCANNER_V5_FEATURE_DECISIONS.md` sección batería D/A/B/C/E/F/G.
+6. Correr los tests antes de tocar nada para verificar baseline verde (851 passing esperados).
 7. **No avanzar sin "ejecuta".** Proponer, esperar, ejecutar.
+
+### Arranque end-to-end del backend
+
+```bash
+SCANNER_API_KEYS="sk-dev" \
+SCANNER_TWELVEDATA_KEYS="k1:sk-td-1:8:800" \
+SCANNER_REGISTRY_PATH="slot_registry.json" \
+python backend/main.py
+```
+
+---
+
+## Protocolo Handoff al cerrar un chat
+
+Al terminar una sesión de desarrollo (antes de dejar el chat inactivo), correr
+este protocolo para dejar el proyecto listo para el siguiente chat. Álvaro lo
+dispara con "handoff" — no inferirlo por cuenta propia.
+
+### Pasos
+
+1. **Actualizar avances en `CLAUDE.md` — sección "Estado actual de la implementación":**
+   - Mover ítems nuevos de "Pendiente" a "Completado" (o agregar sub-fases en
+     el desglose por sub-fase).
+   - Actualizar el contador de **tests passing** (`cd backend && python -m
+     pytest tests/ -q` para el número global; añadir el sub-total del módulo
+     tocado si aplica).
+   - Actualizar "Divergencias conocidas" si se resolvió alguna.
+   - Agregar **gotchas nuevas** (sección #N) si se aprendió algo que no se
+     debe repetir en futuros chats — con ejemplo concreto de código o commit.
+
+2. **Actualizar descripciones de directorios y `README.md`:**
+   - Si se crearon directorios nuevos en `backend/modules/<x>/` o
+     `backend/engines/<x>/`, asegurar que aparecen en el árbol del
+     `README.md` raíz y que su `README.md` de módulo describe el alcance
+     actual.
+   - Si los `README.md` de módulos tocados quedaron obsoletos, refrescarlos
+     con el scope final (no narrar el what del código — reflejar
+     responsabilidades y puntos de entrada).
+
+3. **Indexar archivos nuevos en `CLAUDE.md`:**
+   - Agregar los módulos/archivos relevantes a la tabla correspondiente
+     ("Módulos nuevos del Scoring Engine" o crear sub-sección análoga por
+     capa si no existe).
+   - Mantener la tabla concisa: archivo + rol en 1 línea.
+
+4. **Dejar info relevante para el siguiente chat:**
+   - Sub-sección "Para el siguiente chat" (temporal, puede sobrescribirse en
+     el próximo handoff): decisiones abiertas, caminos recomendados,
+     bloqueos conocidos, tests o comandos puntuales que el próximo chat
+     necesitará correr.
+   - Si hay PR abierto: link + estado.
+
+5. **Commit + push:**
+   - `docs(claude): handoff <YYYY-MM-DD> — <resumen 1 línea>`.
+   - Push a la rama de trabajo actual (ver §Git workflow).
+   - Si hay PR abierto que refleja el trabajo de la sesión, actualizar la
+     descripción con los deltas del día.
+
+### Cuándo NO correr el protocolo
+
+- Commits WIP intermedios (cambio de contexto breve, va en el próximo
+  commit).
+- Sesiones exploratorias sin cambios de código.
+- Cuando el trabajo sigue en vuelo y no hay un "checkpoint" natural.
 
 ---
 
