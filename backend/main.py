@@ -4,9 +4,9 @@
 Levanta FastAPI (REST + WebSocket) + workers de background:
 
 - Heartbeat (`scoring=green` cada `heartbeat_interval_s` s).
-- Scan loop AUTO (si `scan_tickers` + `twelvedata_keys` están
-  configurados): al cierre de cada vela 15M + delay, fetch por slot y
-  `scan_and_emit`.
+- Scan loop AUTO (si `twelvedata_keys` + `registry_path` apuntan a un
+  `slot_registry.json` válido): al cierre de cada vela 15M + delay,
+  fetch por slot scannable y `scan_and_emit`.
 - Scheduler stub (si `auto_scheduler_enabled` y el scan real no está
   habilitado): tick periódico para frontend.
 
@@ -32,9 +32,7 @@ engine.
 
 from __future__ import annotations
 
-import json
 import sys
-from pathlib import Path
 
 import uvicorn
 from loguru import logger
@@ -47,7 +45,10 @@ from engines.data import (
     TwelveDataClient,
 )
 from engines.data.scan_loop import auto_scan_loop
+from engines.registry_runtime import RegistryRuntime
+from engines.scoring import ENGINE_VERSION
 from modules.db import default_url, make_engine, make_session_factory
+from modules.slot_registry import RegistryError, load_registry
 from settings import Settings
 
 
@@ -65,31 +66,45 @@ def _configure_logging(level: str) -> None:
     )
 
 
-def _load_fixture(path: str) -> dict:
-    return json.loads(Path(path).read_text())
-
-
 def _build_scan_loop_factory(settings: Settings):
-    """Si la config incluye provider + tickers + fixture, construye el
+    """Si la config incluye provider + slot_registry, construye el
     factory del scan loop real. Si no, retorna `None` — el stub queda
     activo en su lugar.
+
+    El registry (spec §3.3) es ahora la fuente de verdad de qué slots
+    operan y con qué fixture — reemplaza la env var `scan_tickers` +
+    `scan_fixture_path` estáticos.
     """
     td_keys = settings.parse_twelvedata_keys()
-    tickers = settings.scan_tickers_list
-    if not td_keys or not tickers:
+    if not td_keys:
         return None
 
     try:
-        fixture = _load_fixture(settings.scan_fixture_path)
+        registry = load_registry(
+            settings.registry_path, engine_version=ENGINE_VERSION,
+        )
     except FileNotFoundError:
         logger.error(
-            f"Fixture file not found: {settings.scan_fixture_path}. "
+            f"Slot registry not found at {settings.registry_path}. "
+            "Scan loop NOT enabled.",
+        )
+        return None
+    except RegistryError as e:
+        logger.error(
+            f"Slot registry invalid ({e.code}): {e.detail}. "
             "Scan loop NOT enabled.",
         )
         return None
 
-    # Engine + factory persisten fuera del closure para que se compartan
-    # con el rest de la app. Los construimos acá en main.
+    try:
+        registry.ensure_at_least_one_operative()
+    except RegistryError as e:
+        logger.error(
+            f"Slot registry has no operative slots ({e.code}). "
+            "Scan loop NOT enabled.",
+        )
+        return None
+
     pool = KeyPool([ApiKeyConfig(**k) for k in td_keys])
     db_engine = make_engine(default_url(settings.db_path))
     session_factory = make_session_factory(db_engine)
@@ -97,23 +112,14 @@ def _build_scan_loop_factory(settings: Settings):
     data_engine = DataEngine(
         pool=pool, client=client, session_factory=session_factory,
     )
-
-    async def factory():
-        from api import create_app as _  # noqa: F401 — referencia sólo para tipado
-
-        # El broadcaster se resuelve lazy desde `app.state`. Pero este
-        # factory se invoca DENTRO del lifespan con el app ya
-        # disponible. Para pasarlo, usamos un closure sobre `_app_ref`
-        # que se setea antes de invocar el factory (ver abajo).
-        raise NotImplementedError("Use build_scan_loop_factory_for_app")
+    runtime = RegistryRuntime(registry)
 
     return {
         "pool": pool,
         "client": client,
         "data_engine": data_engine,
         "session_factory": session_factory,
-        "tickers": tickers,
-        "fixture": fixture,
+        "registry": runtime,
         "delay_after_close_s": settings.scan_delay_after_close_s,
     }
 
@@ -123,8 +129,7 @@ def build_scan_loop_factory_for_app(
     app_broadcaster,
     data_engine: DataEngine,
     session_factory,
-    tickers: list[str],
-    fixture: dict,
+    registry: RegistryRuntime,
     delay_after_close_s: float,
 ):
     """Crea la corutina factory que el lifespan de `create_app` usa."""
@@ -134,8 +139,7 @@ def build_scan_loop_factory_for_app(
             data_engine=data_engine,
             session_factory=session_factory,
             broadcaster=app_broadcaster,
-            slot_tickers=tickers,
-            fixture=fixture,
+            registry=registry,
             delay_after_close_s=delay_after_close_s,
         )
 
@@ -187,11 +191,13 @@ def main() -> int:
             app_broadcaster=app.state.broadcaster,
             data_engine=scan_context["data_engine"],
             session_factory=scan_context["session_factory"],
-            tickers=scan_context["tickers"],
-            fixture=scan_context["fixture"],
+            registry=scan_context["registry"],
             delay_after_close_s=scan_context["delay_after_close_s"],
         )
         extra_workers.append(factory)
+        # Expose registry via app.state para que endpoints REST (SR.3)
+        # puedan consultarlo.
+        app.state.registry_runtime = scan_context["registry"]
 
     config = uvicorn.Config(
         app,

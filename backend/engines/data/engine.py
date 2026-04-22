@@ -30,17 +30,23 @@ tests, manual tools). Encapsula el flujo completo por ciclo:
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from loguru import logger
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from engines.data.api_keys import KeyPool
-from engines.data.constants import WARMUP_1H_N, WARMUP_15M_N, WARMUP_DAILY_N
+from engines.data.constants import (
+    ET,
+    RETRY_SHORT_DELAY_S,
+    WARMUP_1H_N,
+    WARMUP_15M_N,
+    WARMUP_DAILY_N,
+)
 from engines.data.fetcher import TwelveDataClient
-from engines.data.models import Candle, FetchResult, Timeframe
-from modules.db import CandleTF, write_candles_batch
+from engines.data.models import ApiKeyState, Candle, FetchResult, Timeframe
+from modules.db import CandleTF, read_candles_window, write_candles_batch
 
 # Mapeo local Timeframe (engines.data) → CandleTF (modules.db) para
 # evitar dependencia circular entre capas.
@@ -54,6 +60,15 @@ _DEFAULT_WARMUP_SIZES: dict[Timeframe, int] = {
     Timeframe.DAILY: WARMUP_DAILY_N,
     Timeframe.H1: WARMUP_1H_N,
     Timeframe.M15: WARMUP_15M_N,
+}
+
+# Ventanas de freshness para DB-first en warmup (ADR-0003).
+# Si la última vela en DB es más vieja que `now - threshold`, se
+# considera stale y se refetch.
+_WARMUP_FRESHNESS: dict[Timeframe, timedelta] = {
+    Timeframe.DAILY: timedelta(days=7),
+    Timeframe.H1: timedelta(days=3),
+    Timeframe.M15: timedelta(days=1),
 }
 
 
@@ -92,42 +107,57 @@ class DataEngine:
         self,
         tickers: list[str],
     ) -> dict[str, dict[Timeframe, FetchResult]]:
-        """Fetch paralelo de los 3 TFs para cada ticker + SPY daily.
+        """Warmup por ticker x TF con DB-first (ADR-0003).
 
-        Paraleliza con `asyncio.gather()` (spec §3.1 ADR-0003) —
-        típicamente el warmup de 6 slots + SPY toma segundos.
+        Para cada `(ticker, TF)`:
 
-        **Persistencia:** cada `FetchResult` con `integrity_ok=True` se
-        escribe a la tabla `candles_{tf}`. Si integrity falla, se
-        loguea pero NO se escribe y el ticker/TF queda con resultado
-        marcado; el caller decide cómo proceder.
+        1. Consulta `read_candles_window` las últimas N velas en DB.
+        2. Si hay ≥ N velas **y** la última está dentro del freshness
+           window (daily 7d, 1H 3d, 15M 1d), se SKIPPEA el fetch —
+           devuelve `FetchResult` sintético con `used_key_id=None`.
+        3. Si no, fetch normal al provider + UPSERT.
+
+        Los fetches que sí disparan corren en paralelo con
+        `asyncio.gather()`. El caso cotidiano (scanner re-arrancado al
+        día siguiente con la DB caliente) puede resultar en 0 fetches.
 
         Args:
-            tickers: lista de símbolos. "SPY" puede ir aparte si ya
-                está incluido para algún slot; el warmup es idempotente.
+            tickers: lista de símbolos. Idempotente.
 
         Returns:
-            Dict anidado `{ticker: {TF: FetchResult}}`. Si algún fetch
-            falló, el FetchResult tiene `integrity_ok=False` + notes.
+            Dict anidado `{ticker: {TF: FetchResult}}`. `used_key_id`
+            es `None` cuando el resultado salió de DB-cache.
         """
         logger.info(
             f"DataEngine warmup starting — tickers={tickers} "
             f"sizes={self._warmup_sizes}",
         )
-        tasks: list[tuple[str, Timeframe, asyncio.Task]] = []
+        results: dict[str, dict[Timeframe, FetchResult]] = {
+            t: {} for t in tickers
+        }
+        fetch_tasks: list[tuple[str, Timeframe, asyncio.Task]] = []
+
+        # Fase 1: verificar DB por cada (ticker, TF). Los que están
+        # frescos se resuelven localmente; los que faltan se agregan a
+        # la lista de fetch.
         for ticker in tickers:
             for tf, count in self._warmup_sizes.items():
+                cached = await self._load_from_db_if_fresh(ticker, tf, count)
+                if cached is not None:
+                    results[ticker][tf] = cached
+                    logger.debug(
+                        f"Warmup DB-hit — ticker={ticker} tf={tf.value} "
+                        f"candles={len(cached.candles)}",
+                    )
+                    continue
                 task = asyncio.create_task(
                     self._client.fetch_candles(ticker, tf, count),
                     name=f"warmup_{ticker}_{tf.value}",
                 )
-                tasks.append((ticker, tf, task))
+                fetch_tasks.append((ticker, tf, task))
 
-        # Gather + persist
-        results: dict[str, dict[Timeframe, FetchResult]] = {
-            t: {} for t in tickers
-        }
-        for ticker, tf, task in tasks:
+        # Fase 2: gather de los fetches pendientes + persist.
+        for ticker, tf, task in fetch_tasks:
             fetch = await task
             results[ticker][tf] = fetch
             if fetch.integrity_ok and fetch.candles:
@@ -137,8 +167,54 @@ class DataEngine:
                     f"Warmup fetch failed integrity: ticker={ticker} "
                     f"tf={tf.value} notes={fetch.integrity_notes}",
                 )
-        logger.info("DataEngine warmup completed")
+        hit = sum(
+            1 for ticker_results in results.values()
+            for fr in ticker_results.values()
+            if fr.used_key_id is None and fr.integrity_ok
+        )
+        fetched = len(fetch_tasks)
+        logger.info(
+            f"DataEngine warmup completed — db_hits={hit} "
+            f"provider_fetches={fetched}",
+        )
         return results
+
+    async def _load_from_db_if_fresh(
+        self,
+        ticker: str,
+        tf: Timeframe,
+        count: int,
+    ) -> FetchResult | None:
+        """Devuelve un `FetchResult` sintético si la DB tiene >= count
+        velas frescas. `None` si hay que refetch."""
+        db_tf = _TF_TO_DB[tf]
+        async with self._session_factory() as session:
+            rows = await read_candles_window(
+                session, timeframe=db_tf, ticker=ticker, limit=count,
+            )
+        if len(rows) < count:
+            return None
+        last_dt = rows[-1]["dt"]
+        freshness = _WARMUP_FRESHNESS[tf]
+        if datetime.now(tz=ET) - last_dt > freshness:
+            return None
+        candles = [
+            Candle(
+                dt=row["dt"],
+                o=row["o"], h=row["h"], l=row["l"], c=row["c"],
+                v=row["v"],
+            )
+            for row in rows
+        ]
+        return FetchResult(
+            ticker=ticker,
+            timeframe=tf,
+            candles=candles,
+            integrity_ok=True,
+            integrity_notes=[f"db_cache_hit: {len(candles)} candles"],
+            fetched_at=datetime.now(tz=ET),
+            used_key_id=None,
+        )
 
     # ─────────────────────────────────────────────────────────────────────
     # Scan fetch
@@ -153,9 +229,11 @@ class DataEngine:
     ) -> dict[str, Any] | None:
         """Obtiene las velas listas para un scan del `ticker`.
 
-        Fetch paralelo de los 3 TFs del ticker + (opcional) daily de
-        SPY. Persiste cada TF en DB. Si algún TF falla integrity,
-        retorna `None` (invariante I1).
+        Con retry nivel 1 (ADR-0004): si el primer intento falla
+        integrity, espera `RETRY_SHORT_DELAY_S` (1s default) y
+        reintenta una vez. Si el segundo también falla, retorna `None`
+        y el scan_loop escala al nivel 2 (skip del ciclo + incrementa
+        contador del slot).
 
         Args:
             ticker: símbolo del slot a escanear.
@@ -166,8 +244,32 @@ class DataEngine:
         Returns:
             Dict `{candles_daily, candles_1h, candles_15m, spy_daily,
             fetched_at}` listo para pasar a `scan_and_emit()`. `None`
-            si alguno de los fetches falló integrity.
+            si alguno de los fetches falló integrity incluso después
+            del retry.
         """
+        result = await self._fetch_for_scan_once(
+            ticker, include_spy=include_spy, spy_ticker=spy_ticker,
+        )
+        if result is not None:
+            return result
+        # Retry nivel 1 (ADR-0004)
+        logger.info(
+            f"fetch_for_scan retry after {RETRY_SHORT_DELAY_S}s — "
+            f"ticker={ticker}",
+        )
+        await asyncio.sleep(RETRY_SHORT_DELAY_S)
+        return await self._fetch_for_scan_once(
+            ticker, include_spy=include_spy, spy_ticker=spy_ticker,
+        )
+
+    async def _fetch_for_scan_once(
+        self,
+        ticker: str,
+        *,
+        include_spy: bool,
+        spy_ticker: str,
+    ) -> dict[str, Any] | None:
+        """Single attempt (sin retry) — usado por `fetch_for_scan`."""
         coros = [
             self._client.fetch_candles(ticker, Timeframe.DAILY, self._warmup_sizes[Timeframe.DAILY]),
             self._client.fetch_candles(ticker, Timeframe.H1, self._warmup_sizes[Timeframe.H1]),
@@ -189,13 +291,13 @@ class DataEngine:
         for fetch in (fetch_daily, fetch_1h, fetch_15m):
             if not fetch.integrity_ok:
                 logger.warning(
-                    f"fetch_for_scan aborting — ticker={ticker} "
+                    f"fetch_for_scan_once aborting — ticker={ticker} "
                     f"tf={fetch.timeframe.value} notes={fetch.integrity_notes}",
                 )
                 return None
         if fetch_spy is not None and not fetch_spy.integrity_ok:
             logger.warning(
-                f"fetch_for_scan SPY failed — notes={fetch_spy.integrity_notes}",
+                f"fetch_for_scan_once SPY failed — notes={fetch_spy.integrity_notes}",
             )
             return None
 
@@ -216,6 +318,18 @@ class DataEngine:
             ),
             "fetched_at": fetch_daily.fetched_at,
         }
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Introspección del pool — para eventos api_usage.tick
+    # ─────────────────────────────────────────────────────────────────────
+
+    def pool_snapshot(self) -> list[ApiKeyState]:
+        """Snapshot del estado de cada API key del pool.
+
+        Delega al `KeyPool.snapshot()`. Usado por el scan loop para
+        emitir `api_usage.tick` al final de cada ciclo (spec §5.3).
+        """
+        return self._pool.snapshot()
 
     # ─────────────────────────────────────────────────────────────────────
     # Internos

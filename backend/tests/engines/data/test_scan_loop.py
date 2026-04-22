@@ -135,6 +135,48 @@ async def engine_ctx(db_factory):
         yield de, db_factory
 
 
+def _make_registry_runtime(
+    tickers: list[str],
+    fixture_dict: dict,
+):
+    """Helper: construye un RegistryRuntime con los tickers dados como
+    slots OPERATIVE usando `fixture_dict` para todos."""
+    from datetime import UTC, datetime
+
+    from engines.registry_runtime import RegistryRuntime
+    from modules.fixtures import Fixture
+    from modules.slot_registry import RegistryMetadata, SlotRecord, SlotRegistry
+
+    metadata = RegistryMetadata(
+        registry_version="1.0.0",
+        engine_version_required=">=5.2.0,<6.0.0",
+        generated_at=datetime(2026, 4, 22, tzinfo=UTC),
+        description="test",
+    )
+    fixture_obj = Fixture.model_validate(fixture_dict)
+    slots_map = {}
+    for idx, t in enumerate(tickers, start=1):
+        slots_map[idx] = SlotRecord(
+            slot=idx, status="OPERATIVE", ticker=t,
+            fixture_path=f"fixtures/slot{idx}.json",
+            fixture=fixture_obj, benchmark="SPY",
+        )
+    full = []
+    for i in range(1, 7):
+        if i in slots_map:
+            full.append(slots_map[i])
+        else:
+            full.append(
+                SlotRecord(
+                    slot=i, status="DISABLED", ticker=None,
+                    fixture_path=None, fixture=None, benchmark=None,
+                ),
+            )
+    return RegistryRuntime(
+        SlotRegistry(metadata=metadata, slots=full, warnings=[]),
+    )
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Scan cycle
 # ═══════════════════════════════════════════════════════════════════════════
@@ -150,8 +192,7 @@ class TestAutoScanLoop:
                 data_engine=de,
                 session_factory=factory,
                 broadcaster=broadcaster,
-                slot_tickers=["QQQ", "SPY"],
-                fixture=_valid_fixture(),
+                registry=_make_registry_runtime(["QQQ", "SPY"], _valid_fixture()),
                 test_interval_s=0.05,
             ),
         )
@@ -180,8 +221,7 @@ class TestAutoScanLoop:
                 data_engine=de,
                 session_factory=factory,
                 broadcaster=broadcaster,
-                slot_tickers=["QQQ"],
-                fixture=_valid_fixture(),
+                registry=_make_registry_runtime(["QQQ"], _valid_fixture()),
                 test_interval_s=60.0,  # largo, tiene que cancelarse en sleep
             ),
         )
@@ -211,8 +251,7 @@ class TestAutoScanLoop:
                 data_engine=de,
                 session_factory=factory,
                 broadcaster=broadcaster,
-                slot_tickers=["QQQ"],
-                fixture=_valid_fixture(),
+                registry=_make_registry_runtime(["QQQ"], _valid_fixture()),
                 test_interval_s=0.05,
             ),
         )
@@ -228,3 +267,43 @@ class TestAutoScanLoop:
             and e["payload"].get("engine") == "data"
         ]
         assert len(ds_events) >= 1
+
+    @pytest.mark.asyncio
+    async def test_broadcasts_api_usage_tick_per_key(self, engine_ctx) -> None:
+        """Post-ciclo emite api_usage.tick por cada key del pool."""
+        de, factory = engine_ctx
+        broadcaster = Broadcaster()
+
+        class RecordingWS:
+            def __init__(self):
+                self.received: list[dict] = []
+
+            async def send_json(self, data):
+                self.received.append(data)
+
+        ws = RecordingWS()
+        await broadcaster.register(ws)
+
+        task = asyncio.create_task(
+            auto_scan_loop(
+                data_engine=de,
+                session_factory=factory,
+                broadcaster=broadcaster,
+                registry=_make_registry_runtime(["QQQ"], _valid_fixture()),
+                test_interval_s=0.05,
+            ),
+        )
+        await asyncio.sleep(0.25)
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+        ticks = [e for e in ws.received if e["event"] == "api_usage.tick"]
+        # Pool tiene 1 key → al menos 1 tick por ciclo, 1+ ciclo en 0.25s
+        assert len(ticks) >= 1
+        payload = ticks[0]["payload"]
+        assert set(payload.keys()) == {
+            "key_id", "used_minute", "max_minute",
+            "used_daily", "max_daily", "last_call_ts", "exhausted",
+        }
+        assert payload["key_id"] == "k1"

@@ -44,18 +44,14 @@ class Settings(BaseSettings):
     shutdown_timeout_s: float = Field(default=30.0, gt=0)
     log_level: str = Field(default="INFO")
 
-    # Scan loop real (DE.3) — requiere provider + slots + fixture
+    # Scan loop real (DE.3 + SR.2) — requiere provider + slot_registry
     twelvedata_keys: str = Field(
         default="",
         description="CSV de API keys de TwelveData (`key_id:secret:cpm:cpd`)",
     )
-    scan_tickers: str = Field(
-        default="",
-        description="CSV de tickers de slots operativos (ej. 'QQQ,SPY,AAPL')",
-    )
-    scan_fixture_path: str = Field(
-        default="fixtures/qqq_canonical_v1.json",
-        description="Ruta al fixture canonical que usan todos los slots (MVP)",
+    registry_path: str = Field(
+        default="slot_registry.json",
+        description="Ruta al `slot_registry.json` (spec §3.3 — fuente de verdad de slots + fixtures)",
     )
     scan_delay_after_close_s: float = Field(default=3.0, gt=0)
 
@@ -68,11 +64,6 @@ class Settings(BaseSettings):
     def api_keys_set(self) -> set[str]:
         """Parsea el CSV de api_keys → set."""
         return {k.strip() for k in self.api_keys.split(",") if k.strip()}
-
-    @property
-    def scan_tickers_list(self) -> list[str]:
-        """Parsea el CSV de scan_tickers → lista ordenada (slot_id = idx+1)."""
-        return [t.strip() for t in self.scan_tickers.split(",") if t.strip()]
 
     def parse_twelvedata_keys(self) -> list[dict]:
         """Parsea `twelvedata_keys` en formato `key_id:secret:cpm:cpd` CSV.
