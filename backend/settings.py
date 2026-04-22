@@ -24,6 +24,7 @@ spec §5.4), las credenciales encriptadas vendrán del Config via
 | `SCANNER_VALIDATOR_PARITY_LIMIT` | `30`                  | Señales del parity por corrida (None=245) |
 | `SCANNER_ARCHIVE_DB_PATH`        | `"data/archive/scanner_archive.db"` | Ruta al archive (spec §3.7) |
 | `SCANNER_ROTATE_ON_SHUTDOWN`     | `false`               | Dispara rotación en shutdown |
+| `SCANNER_DB_SIZE_LIMIT_MB`       | `5000`                | Umbral para rotación agresiva (§9.4) |
 """
 
 from __future__ import annotations
@@ -73,6 +74,9 @@ class Settings(BaseSettings):
         description="Ruta al archive. Pasar vacío deshabilita el archive.",
     )
     rotate_on_shutdown: bool = Field(default=False)
+
+    # Retención agresiva (§9.4, spec pendiente decisión — 5 GB tentativo)
+    db_size_limit_mb: int = Field(default=5000, gt=0)
 
     @field_validator("log_level")
     @classmethod

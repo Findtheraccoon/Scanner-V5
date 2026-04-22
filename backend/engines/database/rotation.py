@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import datetime as _dt
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import delete, func, select
@@ -58,6 +59,23 @@ DEFAULT_RETENTION_POLICIES: Mapping[str, _dt.timedelta] = {
     "candles_15m": _dt.timedelta(days=90),
     "validator_reports": _dt.timedelta(days=30),
 }
+
+# Políticas agresivas (~50% de las normales) para rotación de emergencia
+# cuando la DB operativa supera `SCANNER_DB_SIZE_LIMIT_MB` — spec §9.4
+# pendiente "retención más agresiva". heartbeat ya está al mínimo de
+# la spec (24h), no se agresiva más.
+AGGRESSIVE_RETENTION_POLICIES: Mapping[str, _dt.timedelta] = {
+    "signals": _dt.timedelta(days=180),
+    "heartbeat": _dt.timedelta(hours=24),
+    "system_log": _dt.timedelta(days=15),
+    "candles_daily": _dt.timedelta(days=365),
+    "candles_1h": _dt.timedelta(days=91),
+    "candles_15m": _dt.timedelta(days=45),
+    "validator_reports": _dt.timedelta(days=15),
+}
+
+# Default del spec §9.4 (tentativo revisable) — 5 GB.
+DEFAULT_SIZE_LIMIT_MB: int = 5000
 
 # Mapeo tabla → (modelo, columna timestamp). Centralizado para evitar
 # hardcodear nombres en cada función.
@@ -207,6 +225,73 @@ async def compute_stats(
             entry["rows_archive"] = None
         stats[table] = entry
     return stats
+
+
+async def check_and_rotate_aggressive(
+    op_session: AsyncSession,
+    archive_session: AsyncSession,
+    db_path: Path,
+    *,
+    size_limit_mb: int = DEFAULT_SIZE_LIMIT_MB,
+    policies: Mapping[str, _dt.timedelta] | None = None,
+    now: _dt.datetime | None = None,
+) -> dict[str, Any]:
+    """Dispara rotación agresiva si el archivo supera `size_limit_mb`
+    (spec §9.4 — retención más agresiva cuando crece demasiado).
+
+    Semántica:
+
+    1. Mide `size_mb_before` del archivo `db_path`.
+    2. Si <= `size_limit_mb`: no-op, devuelve `triggered=False`.
+    3. Si > `size_limit_mb`: corre `rotate_with_archive` con
+       `AGGRESSIVE_RETENTION_POLICIES` (50% de las normales). Mide
+       `size_mb_after`.
+
+    El tamaño NO baja inmediatamente después del DELETE — SQLite
+    necesita `VACUUM` para reclamar espacio. Documentamos ese detalle
+    en la respuesta con `vacuum_recommended=True`.
+
+    Returns:
+        `{triggered, size_mb_before, size_mb_after, rotation, vacuum_recommended}`
+    """
+    policies = policies or AGGRESSIVE_RETENTION_POLICIES
+    size_mb_before = _db_size_mb(db_path)
+
+    if size_mb_before <= size_limit_mb:
+        return {
+            "triggered": False,
+            "size_mb_before": size_mb_before,
+            "size_mb_after": size_mb_before,
+            "size_limit_mb": size_limit_mb,
+            "rotation": None,
+            "vacuum_recommended": False,
+        }
+
+    rotation = await rotate_with_archive(
+        op_session, archive_session, policies, now=now,
+    )
+    size_mb_after = _db_size_mb(db_path)
+
+    return {
+        "triggered": True,
+        "size_mb_before": size_mb_before,
+        "size_mb_after": size_mb_after,
+        "size_limit_mb": size_limit_mb,
+        "rotation": rotation,
+        # DELETE no reclama espacio en SQLite hasta VACUUM — en la
+        # práctica `size_mb_after` va a ser ~igual que antes. El caller
+        # puede correr VACUUM si quiere el reclaim físico (no lo
+        # hacemos acá porque VACUUM bloquea la DB).
+        "vacuum_recommended": True,
+    }
+
+
+def _db_size_mb(db_path: Path) -> float:
+    """Tamaño del archivo en MB (0 si no existe — ej. `:memory:`)."""
+    try:
+        return db_path.stat().st_size / (1024 * 1024)
+    except OSError:
+        return 0.0
 
 
 def _row_to_dict(model: type[Base], row: Any) -> dict[str, Any]:

@@ -52,6 +52,7 @@ def create_app(
     auto_scheduler_interval_s: float = DEFAULT_AUTO_SCHEDULER_INTERVAL_S,
     extra_workers: list | None = None,
     rotate_on_shutdown: bool = False,
+    db_size_limit_mb: int = 5000,
 ) -> FastAPI:
     """Construye una `FastAPI` lista para correr.
 
@@ -88,6 +89,9 @@ def create_app(
             dispara `rotate_with_archive` en el shutdown del lifespan
             (spec §3.7 — opción configurable). Logea el resultado y no
             crashea si falla.
+        db_size_limit_mb: umbral para rotación agresiva (§9.4). Se
+            expone vía `app.state.db_size_limit_mb` para que el
+            endpoint `/database/rotate/aggressive` lo consulte.
 
     Returns:
         `FastAPI` con lifecycle, routers y workers registrados.
@@ -164,6 +168,7 @@ def create_app(
     app.state.archive_engine = archive_engine
     app.state.archive_session_factory = archive_session_factory
     app.state.broadcaster = broadcaster
+    app.state.db_size_limit_mb = db_size_limit_mb
 
     _register_routes(app)
     return app
