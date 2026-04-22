@@ -22,6 +22,8 @@ spec §5.4), las credenciales encriptadas vendrán del Config via
 | `SCANNER_VALIDATOR_RUN_AT_STARTUP` | `true`              | Corre la batería al arrancar (spec §3.2) |
 | `SCANNER_VALIDATOR_PARITY_ENABLED` | `true`              | Habilita Check F (parity exhaustivo) |
 | `SCANNER_VALIDATOR_PARITY_LIMIT` | `30`                  | Señales del parity por corrida (None=245) |
+| `SCANNER_ARCHIVE_DB_PATH`        | `"data/archive/scanner_archive.db"` | Ruta al archive (spec §3.7) |
+| `SCANNER_ROTATE_ON_SHUTDOWN`     | `false`               | Dispara rotación en shutdown |
 """
 
 from __future__ import annotations
@@ -64,6 +66,13 @@ class Settings(BaseSettings):
     validator_run_at_startup: bool = Field(default=True)
     validator_parity_enabled: bool = Field(default=True)
     validator_parity_limit: int | None = Field(default=30)
+
+    # Archive + rotación (AR.1, spec §3.7)
+    archive_db_path: str = Field(
+        default="data/archive/scanner_archive.db",
+        description="Ruta al archive. Pasar vacío deshabilita el archive.",
+    )
+    rotate_on_shutdown: bool = Field(default=False)
 
     @field_validator("log_level")
     @classmethod

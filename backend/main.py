@@ -260,16 +260,22 @@ def main() -> int:
         f"shutdown_timeout={settings.shutdown_timeout_s}s",
     )
 
+    archive_db_url = (
+        default_url(settings.archive_db_path) if settings.archive_db_path else None
+    )
+
     extra_workers: list = []
     app = create_app(
         valid_api_keys=keys,
         db_url=default_url(settings.db_path),
+        archive_db_url=archive_db_url,
         auto_init_db=True,
         enable_heartbeat=True,
         heartbeat_interval_s=settings.heartbeat_interval_s,
         enable_auto_scheduler=use_stub_scheduler,
         auto_scheduler_interval_s=settings.auto_scheduler_interval_s,
         extra_workers=extra_workers,
+        rotate_on_shutdown=settings.rotate_on_shutdown,
     )
 
     if use_real_scan_loop:

@@ -25,7 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import require_auth
-from api.deps import get_session
+from api.deps import get_archive_session, get_session
 from modules.db import (
     DEFAULT_PAGE_LIMIT,
     ET_TZ,
@@ -65,9 +65,11 @@ async def signals_history(
     cursor: int | None = Query(None, ge=1),
     limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
     session: AsyncSession = Depends(get_session),
+    archive_session: AsyncSession | None = Depends(get_archive_session),
     _token: str = Depends(require_auth),
 ) -> dict:
-    """Histórico paginado cursor-based.
+    """Histórico paginado cursor-based con lectura transparente del
+    archive si está configurado (spec §3.7 Opción X).
 
     Response shape:
         {
@@ -77,6 +79,7 @@ async def signals_history(
     """
     items, next_cursor = await read_signals_history(
         session,
+        archive_session=archive_session,
         slot_id=slot_id,
         from_ts=_ensure_et(from_ts),
         to_ts=_ensure_et(to_ts),
@@ -90,13 +93,18 @@ async def signals_history(
 async def signal_by_id(
     signal_id: int,
     session: AsyncSession = Depends(get_session),
+    archive_session: AsyncSession | None = Depends(get_archive_session),
     _token: str = Depends(require_auth),
 ) -> dict:
-    """Señal completa con snapshot de inputs opcional (base64).
+    """Señal completa con snapshot de inputs opcional (base64). Busca
+    primero en op, luego en archive (transparent read).
 
-    404 si el `id` no existe.
+    404 si el `id` no existe en ninguna.
     """
-    sig = await read_signal_by_id(session, signal_id, include_snapshot=True)
+    sig = await read_signal_by_id(
+        session, signal_id,
+        archive_session=archive_session, include_snapshot=True,
+    )
     if sig is None:
         raise HTTPException(status_code=404, detail="Signal not found")
     # El snapshot en bytes no es JSON-friendly — lo encodeamos en base64.
