@@ -29,7 +29,12 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from api.broadcaster import Broadcaster
-from api.events import EVENT_API_USAGE_TICK, EVENT_ENGINE_STATUS
+from api.events import (
+    EVENT_API_USAGE_TICK,
+    EVENT_ENGINE_STATUS,
+    EVENT_SLOT_STATUS,
+)
+from engines.data.constants import ENG_060, ENG_060_CYCLES_THRESHOLD
 from engines.data.engine import DataEngine
 from engines.data.market_calendar import is_market_open
 from modules.db import now_et
@@ -37,6 +42,50 @@ from modules.signal_pipeline import scan_and_emit
 
 DEFAULT_DELAY_AFTER_CLOSE_S: float = 3.0
 DEFAULT_MARKET_CLOSED_SLEEP_S: float = 60.0
+
+
+class SlotFailureTracker:
+    """Estado por slot de fallos consecutivos y flag DEGRADED (ADR-0004).
+
+    - `register_failure(slot_id)`: incrementa el contador. Si cruza el
+      umbral `ENG_060_CYCLES_THRESHOLD` y el slot NO estaba degraded,
+      retorna `(count, True)` — el caller broadcast `slot.status` con
+      `ENG-060`.
+    - `register_success(slot_id)`: resetea a 0. Si el slot venía
+      degraded, retorna `True` — el caller broadcast recovery.
+
+    Stateful a lo largo del scan loop. No es thread-safe — el loop
+    corre en un único event loop.
+    """
+
+    def __init__(self) -> None:
+        self._failures: dict[int, int] = {}
+        self._degraded: set[int] = set()
+
+    def register_failure(self, slot_id: int) -> tuple[int, bool]:
+        """Incrementa el contador. Retorna `(count, just_went_degraded)`."""
+        count = self._failures.get(slot_id, 0) + 1
+        self._failures[slot_id] = count
+        just_went = (
+            count >= ENG_060_CYCLES_THRESHOLD
+            and slot_id not in self._degraded
+        )
+        if just_went:
+            self._degraded.add(slot_id)
+        return count, just_went
+
+    def register_success(self, slot_id: int) -> bool:
+        """Resetea el contador. Retorna `True` si el slot venía degraded."""
+        was_degraded = slot_id in self._degraded
+        self._failures[slot_id] = 0
+        self._degraded.discard(slot_id)
+        return was_degraded
+
+    def is_degraded(self, slot_id: int) -> bool:
+        return slot_id in self._degraded
+
+    def failure_count(self, slot_id: int) -> int:
+        return self._failures.get(slot_id, 0)
 
 
 async def auto_scan_loop(
@@ -48,6 +97,7 @@ async def auto_scan_loop(
     fixture: dict,
     delay_after_close_s: float = DEFAULT_DELAY_AFTER_CLOSE_S,
     test_interval_s: float | None = None,
+    tracker: SlotFailureTracker | None = None,
 ) -> None:
     """Loop infinito: detecta cierre 15M y dispara scan por cada slot.
 
@@ -65,6 +115,7 @@ async def auto_scan_loop(
         test_interval_s: si se pasa, bypasea market calendar — dispara
             un ciclo cada `test_interval_s` segundos. Útil para tests.
     """
+    tracker = tracker or SlotFailureTracker()
     logger.info(
         f"Auto-scan loop started — slots={slot_tickers} "
         f"delay_after_close={delay_after_close_s}s "
@@ -90,6 +141,7 @@ async def auto_scan_loop(
                     slot_tickers=slot_tickers,
                     fixture=fixture,
                     candle_timestamp=candle_ts,
+                    tracker=tracker,
                 )
             except Exception:
                 logger.exception("Scan cycle failed unexpectedly")
@@ -142,6 +194,7 @@ async def _run_scan_cycle(
     slot_tickers: list[str],
     fixture: dict,
     candle_timestamp: _dt.datetime,
+    tracker: SlotFailureTracker,
 ) -> None:
     """Dispara el scan paralelo por cada slot operativo."""
     logger.info(
@@ -163,6 +216,7 @@ async def _run_scan_cycle(
                 ticker=ticker,
                 fixture=fixture,
                 candle_timestamp=candle_timestamp,
+                tracker=tracker,
             ),
             name=f"scan_slot_{idx}_{ticker}",
         )
@@ -222,19 +276,50 @@ async def _scan_slot(
     ticker: str,
     fixture: dict,
     candle_timestamp: _dt.datetime,
+    tracker: SlotFailureTracker,
 ) -> None:
-    """Scan de un slot: fetch → integrity gate → scan_and_emit."""
+    """Scan de un slot: fetch → integrity gate → scan_and_emit.
+
+    Integra el tracker de fallos (ADR-0004):
+    - Fetch falla → `register_failure`. Si cruza umbral → slot.status
+      DEGRADED + ENG-060.
+    - Fetch OK → `register_success`. Si venía degraded → slot.status
+      active (recovery).
+    """
     try:
         inputs = await data_engine.fetch_for_scan(ticker)
     except Exception:
         logger.exception(f"fetch_for_scan failed — slot={slot_id} ticker={ticker}")
-        return
+        inputs = None
 
     if inputs is None:
+        count, went_degraded = tracker.register_failure(slot_id)
         logger.warning(
-            f"Slot {slot_id} ({ticker}): integrity gate failed, skipping scan",
+            f"Slot {slot_id} ({ticker}): fetch/integrity failed "
+            f"(count={count}, degraded={tracker.is_degraded(slot_id)})",
         )
+        if went_degraded:
+            await _emit_slot_status(
+                broadcaster,
+                slot_id=slot_id,
+                status="degraded",
+                error_code=ENG_060,
+                message=(
+                    f"Ticker {ticker} sin datos por {count} ciclos "
+                    f"(umbral ENG-060)"
+                ),
+            )
         return
+
+    # Fetch exitoso — resetear y, si venía degraded, broadcast recovery.
+    was_degraded = tracker.register_success(slot_id)
+    if was_degraded:
+        await _emit_slot_status(
+            broadcaster,
+            slot_id=slot_id,
+            status="active",
+            message=f"Ticker {ticker} recovered",
+        )
 
     try:
         sim_dt = candle_timestamp.strftime("%Y-%m-%d %H:%M:%S")
@@ -259,3 +344,25 @@ async def _scan_slot(
         logger.exception(
             f"scan_and_emit failed — slot={slot_id} ticker={ticker}",
         )
+
+
+async def _emit_slot_status(
+    broadcaster: Broadcaster,
+    *,
+    slot_id: int,
+    status: str,
+    message: str,
+    error_code: str | None = None,
+) -> None:
+    """Emite `slot.status` con payload del spec §5.3."""
+    payload: dict = {
+        "slot_id": slot_id,
+        "status": status,
+        "message": message,
+    }
+    if error_code is not None:
+        payload["error_code"] = error_code
+    try:
+        await broadcaster.broadcast(EVENT_SLOT_STATUS, payload)
+    except Exception:
+        logger.exception(f"slot.status broadcast failed slot={slot_id}")

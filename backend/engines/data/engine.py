@@ -37,7 +37,12 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from engines.data.api_keys import KeyPool
-from engines.data.constants import WARMUP_1H_N, WARMUP_15M_N, WARMUP_DAILY_N
+from engines.data.constants import (
+    RETRY_SHORT_DELAY_S,
+    WARMUP_1H_N,
+    WARMUP_15M_N,
+    WARMUP_DAILY_N,
+)
 from engines.data.fetcher import TwelveDataClient
 from engines.data.models import ApiKeyState, Candle, FetchResult, Timeframe
 from modules.db import CandleTF, write_candles_batch
@@ -153,9 +158,11 @@ class DataEngine:
     ) -> dict[str, Any] | None:
         """Obtiene las velas listas para un scan del `ticker`.
 
-        Fetch paralelo de los 3 TFs del ticker + (opcional) daily de
-        SPY. Persiste cada TF en DB. Si algún TF falla integrity,
-        retorna `None` (invariante I1).
+        Con retry nivel 1 (ADR-0004): si el primer intento falla
+        integrity, espera `RETRY_SHORT_DELAY_S` (1s default) y
+        reintenta una vez. Si el segundo también falla, retorna `None`
+        y el scan_loop escala al nivel 2 (skip del ciclo + incrementa
+        contador del slot).
 
         Args:
             ticker: símbolo del slot a escanear.
@@ -166,8 +173,32 @@ class DataEngine:
         Returns:
             Dict `{candles_daily, candles_1h, candles_15m, spy_daily,
             fetched_at}` listo para pasar a `scan_and_emit()`. `None`
-            si alguno de los fetches falló integrity.
+            si alguno de los fetches falló integrity incluso después
+            del retry.
         """
+        result = await self._fetch_for_scan_once(
+            ticker, include_spy=include_spy, spy_ticker=spy_ticker,
+        )
+        if result is not None:
+            return result
+        # Retry nivel 1 (ADR-0004)
+        logger.info(
+            f"fetch_for_scan retry after {RETRY_SHORT_DELAY_S}s — "
+            f"ticker={ticker}",
+        )
+        await asyncio.sleep(RETRY_SHORT_DELAY_S)
+        return await self._fetch_for_scan_once(
+            ticker, include_spy=include_spy, spy_ticker=spy_ticker,
+        )
+
+    async def _fetch_for_scan_once(
+        self,
+        ticker: str,
+        *,
+        include_spy: bool,
+        spy_ticker: str,
+    ) -> dict[str, Any] | None:
+        """Single attempt (sin retry) — usado por `fetch_for_scan`."""
         coros = [
             self._client.fetch_candles(ticker, Timeframe.DAILY, self._warmup_sizes[Timeframe.DAILY]),
             self._client.fetch_candles(ticker, Timeframe.H1, self._warmup_sizes[Timeframe.H1]),
@@ -189,13 +220,13 @@ class DataEngine:
         for fetch in (fetch_daily, fetch_1h, fetch_15m):
             if not fetch.integrity_ok:
                 logger.warning(
-                    f"fetch_for_scan aborting — ticker={ticker} "
+                    f"fetch_for_scan_once aborting — ticker={ticker} "
                     f"tf={fetch.timeframe.value} notes={fetch.integrity_notes}",
                 )
                 return None
         if fetch_spy is not None and not fetch_spy.integrity_ok:
             logger.warning(
-                f"fetch_for_scan SPY failed — notes={fetch_spy.integrity_notes}",
+                f"fetch_for_scan_once SPY failed — notes={fetch_spy.integrity_notes}",
             )
             return None
 
