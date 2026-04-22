@@ -27,10 +27,28 @@ from pathlib import Path
 from typing import Any, Literal
 
 from loguru import logger
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import InvalidVersion, Version
 
-from modules.slot_registry import SlotRecord, SlotRegistry, save_registry
+from modules.fixtures import Fixture, load_fixture
+from modules.slot_registry import (
+    REG_011,
+    REG_012,
+    REG_013,
+    RegistryError,
+    SlotRecord,
+    SlotRegistry,
+    save_registry,
+)
 
 SlotRuntimeStatus = Literal["active", "warming_up", "degraded", "disabled"]
+
+
+def _version_in_range(version: str, range_spec: str) -> bool:
+    try:
+        return Version(version) in SpecifierSet(range_spec)
+    except (InvalidVersion, InvalidSpecifier):
+        return False
 
 
 class RegistryRuntime:
@@ -201,6 +219,131 @@ class RegistryRuntime:
                         raise
                 return True
             return False
+
+    async def enable_slot(
+        self,
+        slot_id: int,
+        *,
+        ticker: str,
+        fixture_path: str,
+        benchmark: str | None,
+        fixtures_root: Path,
+        engine_version: str,
+    ) -> SlotRecord:
+        """Habilita (o re-habilita) un slot con un ticker + fixture nuevos.
+
+        Pipeline:
+
+        1. Cargar + validar la fixture (`load_fixture` puede lanzar
+           `FixtureError` con código FIX-XXX).
+        2. Validar coherencia ticker/benchmark/engine_compat_range con
+           la fixture (propaga REG-011/012/013 como `RegistryError`).
+        3. Construir un `SlotRecord` `OPERATIVE` con la fixture parseada.
+        4. Reemplazar el slot en memoria + persistir a disco
+           atómicamente (rollback si falla).
+        5. Marcar el slot como `warming_up` en el overlay — el scan loop
+           lo excluye hasta que el caller invoque `mark_warmed()`.
+
+        El caller es responsable de:
+
+        - Spawn del warmup real via `DataEngine.warmup([ticker])`.
+        - Llamar `mark_warmed(slot_id)` cuando termine.
+        - Emitir los eventos `slot.status` correspondientes.
+
+        Raises:
+            KeyError: si `slot_id` no existe (1..6).
+            FixtureError: si la fixture es inválida (código FIX-XXX).
+            RegistryError: con REG-011/012/013 si la fixture es
+                incompatible con lo pedido.
+            OSError: si la escritura a disco falla (y el cambio
+                in-memory se revierte).
+        """
+        # Fase 1: cargar+validar fixture FUERA del lock — I/O y CPU.
+        # El lock solo protege la mutación en memoria + persist.
+        full_fixture_path = fixtures_root / fixture_path
+        fixture = load_fixture(full_fixture_path)
+        self._validate_fixture_coherence(
+            fixture,
+            ticker=ticker,
+            benchmark=benchmark,
+            engine_version=engine_version,
+        )
+
+        async with self._lock:
+            for i, s in enumerate(self._registry.slots):
+                if s.slot != slot_id:
+                    continue
+                new_slot = SlotRecord(
+                    slot=s.slot,
+                    status="OPERATIVE",
+                    ticker=ticker,
+                    fixture_path=fixture_path,
+                    fixture=fixture,
+                    benchmark=benchmark,
+                    priority=s.priority,
+                    notes=s.notes,
+                    error_code=None,
+                    error_detail=None,
+                )
+                new_slots = list(self._registry.slots)
+                new_slots[i] = new_slot
+                prev_registry = self._registry
+                prev_warming = set(self._warming)
+                self._registry = SlotRegistry(
+                    metadata=prev_registry.metadata,
+                    slots=new_slots,
+                    warnings=prev_registry.warnings,
+                )
+                self._warming.add(slot_id)
+                if self._registry_path is not None:
+                    try:
+                        save_registry(self._registry, self._registry_path)
+                    except OSError:
+                        self._registry = prev_registry
+                        self._warming = prev_warming
+                        logger.exception(
+                            f"enable_slot({slot_id}): failed to persist "
+                            f"registry to {self._registry_path}. "
+                            "In-memory change rolled back.",
+                        )
+                        raise
+                return new_slot
+            raise KeyError(f"slot {slot_id} not found (must be 1..6)")
+
+    @staticmethod
+    def _validate_fixture_coherence(
+        fixture: Fixture,
+        *,
+        ticker: str,
+        benchmark: str | None,
+        engine_version: str,
+    ) -> None:
+        """Reusa la semántica del loader (spec §5.4 reglas 13/14/17).
+
+        Centralizada acá para que el PATCH enable rechace con el mismo
+        código REG-XXX que usaría `load_registry()` al arrancar.
+        """
+        if fixture.ticker_info.ticker != ticker:
+            raise RegistryError(
+                REG_012,
+                f"fixture declara ticker {fixture.ticker_info.ticker!r} "
+                f"pero el slot pide {ticker!r}",
+            )
+        if benchmark != fixture.ticker_info.benchmark:
+            raise RegistryError(
+                REG_013,
+                f"fixture declara benchmark {fixture.ticker_info.benchmark!r} "
+                f"pero el slot pide {benchmark!r}",
+            )
+        if not _version_in_range(
+            engine_version, fixture.metadata.engine_compat_range,
+        ):
+            raise RegistryError(
+                REG_011,
+                f"fixture engine_compat_range "
+                f"{fixture.metadata.engine_compat_range!r} no incluye el "
+                f"motor {engine_version!r}",
+            )
 
     # ─────────────────────────────────────────────────────────────────────
     # Introspección (NO acquire lock — solo para uso interno)
