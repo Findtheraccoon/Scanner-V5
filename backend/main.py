@@ -112,7 +112,7 @@ def _build_scan_loop_factory(settings: Settings):
     data_engine = DataEngine(
         pool=pool, client=client, session_factory=session_factory,
     )
-    runtime = RegistryRuntime(registry)
+    runtime = RegistryRuntime(registry, registry_path=settings.registry_path)
 
     return {
         "pool": pool,

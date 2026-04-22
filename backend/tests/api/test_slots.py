@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -306,6 +308,50 @@ class TestSlotStatusBroadcast:
 # ═══════════════════════════════════════════════════════════════════════════
 # OpenAPI coverage
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestPatchSlotPersistence:
+    """Verifica que el PATCH disable persiste al `slot_registry.json`."""
+
+    @pytest.mark.asyncio
+    async def test_disable_persists_to_disk(self, tmp_path: Path) -> None:
+        from httpx import ASGITransport, AsyncClient
+
+        registry_path = tmp_path / "slot_registry.json"
+        app = create_app(
+            valid_api_keys={"sk-test"},
+            db_url="sqlite+aiosqlite:///:memory:",
+            auto_init_db=False,
+        )
+        await init_db(app.state.db_engine)
+        # Runtime con path → escritura real al disco
+        base_rt = _make_registry()
+        app.state.registry_runtime = RegistryRuntime(
+            base_rt._registry,
+            registry_path=registry_path,
+        )
+
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                r = await client.patch(
+                    "/api/v1/slots/1",
+                    json={"enabled": False},
+                    headers=AUTH,
+                )
+            assert r.status_code == 200
+
+            # El archivo fue creado y refleja el cambio
+            assert registry_path.is_file()
+            data = json.loads(registry_path.read_text())
+            slot1 = next(s for s in data["slots"] if s["slot"] == 1)
+            slot2 = next(s for s in data["slots"] if s["slot"] == 2)
+            assert slot1["enabled"] is False
+            assert slot2["enabled"] is True  # no se tocó
+        finally:
+            await app.state.db_engine.dispose()
 
 
 class TestOpenApiCoverage:

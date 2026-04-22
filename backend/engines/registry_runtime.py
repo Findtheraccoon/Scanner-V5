@@ -11,9 +11,10 @@ parseado por `load_registry()`) que:
    más la overlay a un **status runtime** consumible por el frontend:
    `"active" | "warming_up" | "degraded" | "disabled"`.
 
-**No edita el archivo** `slot_registry.json` en disco — eso lo hará
-la capa REST (`SR.3`) que construye un nuevo `SlotRegistry` parseado
-y llama `replace_registry()`.
+**Persistencia:** si se pasó `registry_path` al construir, las
+mutaciones que cambian el base state (`disable_slot`,
+`replace_registry`) escriben el nuevo estado a disco de forma atómica.
+Si la escritura falla, el cambio in-memory se revierte (fail-fast).
 
 **Slot "scannable":** `status == "active"` (base OPERATIVE + no
 warming_up). El scan loop consume `list_scannable_tickers()`.
@@ -22,9 +23,12 @@ warming_up). El scan loop consume `list_scannable_tickers()`.
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any, Literal
 
-from modules.slot_registry import SlotRecord, SlotRegistry
+from loguru import logger
+
+from modules.slot_registry import SlotRecord, SlotRegistry, save_registry
 
 SlotRuntimeStatus = Literal["active", "warming_up", "degraded", "disabled"]
 
@@ -32,10 +36,18 @@ SlotRuntimeStatus = Literal["active", "warming_up", "degraded", "disabled"]
 class RegistryRuntime:
     """Estado runtime del registry. Single source of truth del scan loop."""
 
-    def __init__(self, registry: SlotRegistry) -> None:
+    def __init__(
+        self,
+        registry: SlotRegistry,
+        *,
+        registry_path: str | Path | None = None,
+    ) -> None:
         self._registry = registry
         self._warming: set[int] = set()
         self._lock = asyncio.Lock()
+        self._registry_path: Path | None = (
+            Path(registry_path) if registry_path is not None else None
+        )
 
     # ─────────────────────────────────────────────────────────────────────
     # Lecturas
@@ -127,19 +139,22 @@ class RegistryRuntime:
         **Reset de warmup:** el overlay se limpia — los slots recién
         cargados pasarán por el warmup normal del scan loop según
         corresponda (scope SR.2).
+
+        **No persiste a disco** — asume que el caller ya escribió el
+        archivo antes de pasar el `new_registry` (el flujo típico es
+        frontend PUT → file write → `load_registry()` → `replace_registry()`).
         """
         async with self._lock:
             self._registry = new_registry
             self._warming.clear()
 
     async def disable_slot(self, slot_id: int) -> bool:
-        """Marca el slot como `DISABLED` en memoria.
+        """Marca el slot como `DISABLED` en memoria y persiste a disco.
 
-        **No persiste en disco** — la persistencia la orquesta la capa
-        REST (SR.3 / frontend) reescribiendo `slot_registry.json` y
-        llamando `replace_registry()`. Este método es el cambio
-        in-memory inmediato para que el próximo ciclo del scan loop
-        NO incluya el slot.
+        Si el runtime fue construido con `registry_path=`, escribe el
+        registry actualizado de forma atómica. Si la escritura falla,
+        el cambio in-memory se revierte (fail-fast) y se propaga la
+        excepción — garantiza consistencia disco/memoria.
 
         Returns:
             `True` si el slot existía y cambió. `False` si no existe.
@@ -162,12 +177,28 @@ class RegistryRuntime:
                 )
                 new_slots = list(self._registry.slots)
                 new_slots[i] = new_slot
+                prev_registry = self._registry
+                prev_warming = set(self._warming)
                 self._registry = SlotRegistry(
-                    metadata=self._registry.metadata,
+                    metadata=prev_registry.metadata,
                     slots=new_slots,
-                    warnings=self._registry.warnings,
+                    warnings=prev_registry.warnings,
                 )
                 self._warming.discard(slot_id)
+                if self._registry_path is not None:
+                    try:
+                        save_registry(self._registry, self._registry_path)
+                    except OSError:
+                        # Rollback: la memoria vuelve al estado anterior
+                        # y propagamos el error al caller.
+                        self._registry = prev_registry
+                        self._warming = prev_warming
+                        logger.exception(
+                            f"disable_slot({slot_id}): failed to persist "
+                            f"registry to {self._registry_path}. "
+                            "In-memory change rolled back.",
+                        )
+                        raise
                 return True
             return False
 

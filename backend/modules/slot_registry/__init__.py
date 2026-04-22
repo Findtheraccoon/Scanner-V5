@@ -35,6 +35,7 @@ from modules.slot_registry.models import (
     SlotRegistry,
     SlotState,
 )
+from modules.slot_registry.writer import save_registry
 
 __all__ = [
     "REG_001",
@@ -55,4 +56,5 @@ __all__ = [
     "SlotRegistry",
     "SlotState",
     "load_registry",
+    "save_registry",
 ]
