@@ -39,7 +39,15 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from api.broadcaster import Broadcaster
 from api.events import EVENT_VALIDATOR_PROGRESS
 from modules.db import now_et
-from modules.validator.checks import a_fixtures, b_canonicals, c_registry, d_infra
+from modules.validator.checks import (
+    a_fixtures,
+    b_canonicals,
+    c_registry,
+    d_infra,
+    e_e2e,
+    f_parity,
+    g_connectivity,
+)
 from modules.validator.models import (
     TEST_ORDER,
     TestId,
@@ -49,6 +57,8 @@ from modules.validator.models import (
 
 if TYPE_CHECKING:
     from engines.registry_runtime import RegistryRuntime
+    from modules.validator.checks.e_e2e import ScanExecutor
+    from modules.validator.checks.g_connectivity import S3Probe, TDProbe
 
 
 class Validator:
@@ -67,6 +77,11 @@ class Validator:
         registry: RegistryRuntime | None = None,
         registry_path: str | Path | None = None,
         fixtures_root: str | Path | None = None,
+        scan_executor: ScanExecutor | None = None,
+        parity_enabled: bool = True,
+        parity_limit: int | None = None,
+        td_probe: TDProbe | None = None,
+        s3_probe: S3Probe | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._broadcaster = broadcaster
@@ -83,6 +98,11 @@ class Validator:
             self._fixtures_root = self._registry_path.parent
         else:
             self._fixtures_root = None
+        self._scan_executor = scan_executor
+        self._parity_enabled = parity_enabled
+        self._parity_limit = parity_limit
+        self._td_probe = td_probe
+        self._s3_probe = s3_probe
 
     async def run_full_battery(self) -> ValidatorReport:
         """Corre los 7 tests en orden y devuelve el reporte."""
@@ -117,6 +137,24 @@ class Validator:
         )
         return report
 
+    async def run_single_check(self, test_id: TestId) -> TestResult:
+        """Corre UN test de la batería y emite sus dos progress events.
+
+        Útil para botones del Dashboard como "Test conectividad API"
+        (Check G) o "Revalidar slot N" (un slot específico — futuro).
+        """
+        run_id = str(uuid.uuid4())
+        await self._emit_progress(run_id, test_id, status="running")
+        result = await self._run_test(test_id)
+        await self._emit_progress(
+            run_id,
+            test_id,
+            status=result.status,
+            message=result.message,
+            error_code=result.error_code,
+        )
+        return result
+
     async def _run_test(self, test_id: TestId) -> TestResult:
         """Despacha a la implementación del test.
 
@@ -142,6 +180,24 @@ class Validator:
             return await c_registry.run(
                 registry_path=self._registry_path,
                 fixtures_root=self._fixtures_root,
+            )
+        if test_id == "E":
+            return await e_e2e.run(scan_executor=self._scan_executor)
+        if test_id == "F":
+            if not self._parity_enabled:
+                return TestResult(
+                    test_id="F",
+                    status="skip",
+                    message="parity disabled (parity_enabled=False)",
+                )
+            kwargs: dict[str, Any] = {}
+            if self._parity_limit is not None:
+                kwargs["limit"] = self._parity_limit
+            return await f_parity.run(**kwargs)
+        if test_id == "G":
+            return await g_connectivity.run(
+                td_probe=self._td_probe,
+                s3_probe=self._s3_probe,
             )
         return TestResult(
             test_id=test_id,

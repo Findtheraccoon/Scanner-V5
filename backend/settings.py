@@ -18,6 +18,10 @@ spec §5.4), las credenciales encriptadas vendrán del Config via
 | `SCANNER_AUTO_SCHEDULER_INTERVAL_S` | `60.0`             | Segundos entre ticks stub |
 | `SCANNER_SHUTDOWN_TIMEOUT_S`     | `30.0`                | Timeout graceful (spec §4.3) |
 | `SCANNER_LOG_LEVEL`              | `"INFO"`              | Nivel de loguru |
+| `SCANNER_LOG_DIR`                | `"LOG"`               | Dir de logs rotables |
+| `SCANNER_VALIDATOR_RUN_AT_STARTUP` | `true`              | Corre la batería al arrancar (spec §3.2) |
+| `SCANNER_VALIDATOR_PARITY_ENABLED` | `true`              | Habilita Check F (parity exhaustivo) |
+| `SCANNER_VALIDATOR_PARITY_LIMIT` | `30`                  | Señales del parity por corrida (None=245) |
 """
 
 from __future__ import annotations
@@ -54,6 +58,12 @@ class Settings(BaseSettings):
         description="Ruta al `slot_registry.json` (spec §3.3 — fuente de verdad de slots + fixtures)",
     )
     scan_delay_after_close_s: float = Field(default=3.0, gt=0)
+
+    # Validator (V.7)
+    log_dir: str = Field(default="LOG", description="Dir para logs rotables")
+    validator_run_at_startup: bool = Field(default=True)
+    validator_parity_enabled: bool = Field(default=True)
+    validator_parity_limit: int | None = Field(default=30)
 
     @field_validator("log_level")
     @classmethod
