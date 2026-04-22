@@ -23,6 +23,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
+from api.broadcaster import Broadcaster
 from modules.db import default_url, init_db, make_engine, make_session_factory
 
 _APP_TITLE = "Scanner V5 Backend"
@@ -65,18 +66,21 @@ def create_app(
     app.state.valid_api_keys = valid_api_keys or set()
     app.state.db_engine = engine
     app.state.session_factory = session_factory
+    app.state.broadcaster = Broadcaster()
 
     _register_routes(app)
     return app
 
 
 def _register_routes(app: FastAPI) -> None:
-    """Registra los routers REST. Sub-fases futuras (ws) agregan."""
+    """Registra los routers REST + WebSocket."""
     from api.routes.health import router as health_router
     from api.routes.signals import router as signals_router
+    from api.routes.websocket import router as websocket_router
 
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(signals_router, prefix="/api/v1")
+    app.include_router(websocket_router)  # `/ws` sin prefijo /api/v1
 
 
 # Helpers exportados para testing (evitan replicar el acceso a state).
