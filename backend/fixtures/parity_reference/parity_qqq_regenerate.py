@@ -32,17 +32,20 @@ import sqlite3
 import sys
 from typing import Any
 
-# Ajustar sys.path para poder importar `engines` y `modules` desde el repo
-ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, ROOT)
+# Ajustar sys.path para poder importar `engines` y `modules` desde backend.
+# __file__ → backend/fixtures/parity_reference/parity_qqq_regenerate.py
+# 3x dirname → backend/, 4x dirname → repo root.
+BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+REPO_ROOT = os.path.dirname(BACKEND_ROOT)
+sys.path.insert(0, BACKEND_ROOT)
 
 from engines.scoring import analyze  # noqa: E402
 from engines.scoring.aggregator import aggregate_to_1h, aggregate_to_15m  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(HERE, "parity_qqq_candles.db")
+DB_PATH = os.path.join(REPO_ROOT, "data", "parity_qqq_candles.db")
 SAMPLE_PATH = os.path.join(HERE, "fixtures", "parity_qqq_sample.json")
-FIXTURE_PATH = os.path.join(ROOT, "fixtures", "qqq_canonical_v1.json")
+FIXTURE_PATH = os.path.join(BACKEND_ROOT, "fixtures", "qqq_canonical_v1.json")
 
 DEFAULT_TOLERANCE = 0.01
 
