@@ -38,6 +38,10 @@ para paridad con el output de Observatory.
 
 from engines.scoring.confirms._helpers import ConfirmDict
 from engines.scoring.confirms.bollinger import detect_bollinger_confirms
+from engines.scoring.confirms.categorize import (
+    apply_confirm_weights,
+    categorize_confirm,
+)
 from engines.scoring.confirms.gap import detect_gap_confirm
 from engines.scoring.confirms.relative_strength import (
     detect_divspy_confirm,
@@ -51,6 +55,8 @@ from engines.scoring.confirms.volume import (
 
 __all__ = [
     "ConfirmDict",
+    "apply_confirm_weights",
+    "categorize_confirm",
     "detect_bollinger_confirms",
     "detect_divspy_confirm",
     "detect_fzarel_confirm",
