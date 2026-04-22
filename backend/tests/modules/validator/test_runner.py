@@ -9,8 +9,12 @@ import pytest
 
 from api.broadcaster import Broadcaster
 from api.events import EVENT_VALIDATOR_PROGRESS
+from engines.registry_runtime import RegistryRuntime
+from engines.scoring import ENGINE_VERSION
 from modules.db import make_engine, make_session_factory
+from modules.slot_registry import load_registry
 from modules.validator import TEST_ORDER, Validator
+from tests.modules.slot_registry.test_loader import _write_registry
 
 
 class _CapturingBroadcaster(Broadcaster):
@@ -44,8 +48,8 @@ async def test_runs_7_tests_in_canonical_order(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_d_passes_others_skip(tmp_path: Path) -> None:
-    """V.1: solo D está implementado, el resto sigue stubbed."""
+async def test_without_registry_abc_skip(tmp_path: Path) -> None:
+    """Sin `registry`/`registry_path`, A/B/C emiten skip con mensaje explicativo."""
     engine = make_engine("sqlite+aiosqlite:///:memory:")
     factory = make_session_factory(engine)
     broadcaster = _CapturingBroadcaster()
@@ -60,11 +64,59 @@ async def test_d_passes_others_skip(tmp_path: Path) -> None:
         d = next(t for t in report.tests if t.test_id == "D")
         assert d.status == "pass"
 
-        for t in report.tests:
-            if t.test_id == "D":
-                continue
+        # A, B, C: skip por falta de inputs (mensaje específico)
+        for tid in ("A", "B", "C"):
+            t = next(t for t in report.tests if t.test_id == tid)
+            assert t.status == "skip"
+            assert "no provistos" in (t.message or "") or "no provisto" in (
+                t.message or ""
+            )
+
+        # E, F, G siguen "not implemented yet"
+        for tid in ("E", "F", "G"):
+            t = next(t for t in report.tests if t.test_id == tid)
             assert t.status == "skip"
             assert t.message == "not implemented yet"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_with_registry_abc_run(tmp_path: Path) -> None:
+    """Con registry + path pasados, los checks A/B/C corren y pasan."""
+    engine = make_engine("sqlite+aiosqlite:///:memory:")
+    factory = make_session_factory(engine)
+    broadcaster = _CapturingBroadcaster()
+
+    registry_path = _write_registry(tmp_path)
+    registry = load_registry(registry_path, engine_version=ENGINE_VERSION)
+    runtime = RegistryRuntime(registry)
+
+    try:
+        v = Validator(
+            session_factory=factory,
+            broadcaster=broadcaster,
+            log_dir=tmp_path,
+            registry=runtime,
+            registry_path=registry_path,
+        )
+        report = await v.run_full_battery()
+
+        # D pasa (infra)
+        assert next(t for t in report.tests if t.test_id == "D").status == "pass"
+        # A pasa (fixture QQQ válida)
+        assert next(t for t in report.tests if t.test_id == "A").status == "pass"
+        # B pasa (hash canonical coincide)
+        assert next(t for t in report.tests if t.test_id == "B").status == "pass"
+        # C pasa (registry healthy)
+        assert next(t for t in report.tests if t.test_id == "C").status == "pass"
+        # E/F/G siguen skipped
+        for tid in ("E", "F", "G"):
+            t = next(t for t in report.tests if t.test_id == tid)
+            assert t.status == "skip"
+            assert t.message == "not implemented yet"
+
+        assert report.overall_status == "pass"
     finally:
         await engine.dispose()
 
