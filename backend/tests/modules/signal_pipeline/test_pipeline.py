@@ -192,6 +192,86 @@ class TestScanAndEmitSetup:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+# scan_and_emit con persist=False (is_validator_test — V.3)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestScanAndEmitNoPersist:
+    @pytest.mark.asyncio
+    async def test_no_persist_no_broadcast(
+        self, session, broadcaster_with_client,
+    ) -> None:
+        """persist=False: no escribe en DB ni broadcasta. Retorna output igual."""
+        b, ws = broadcaster_with_client
+        from engines.scoring import MIN_CANDLES_1H, MIN_CANDLES_15M, MIN_CANDLES_DAILY
+
+        result = await scan_and_emit(
+            session=session,
+            broadcaster=b,
+            candle_timestamp=dt.datetime(2026, 4, 22, 10, 30, tzinfo=ET_TZ),
+            slot_id=1,
+            ticker="QQQ",
+            candles_daily=_monotonic_candles(MIN_CANDLES_DAILY),
+            candles_1h=_monotonic_candles(MIN_CANDLES_1H),
+            candles_15m=_monotonic_candles(MIN_CANDLES_15M),
+            fixture=_valid_fixture(),
+            spy_daily=_monotonic_candles(MIN_CANDLES_DAILY, start=600.0),
+            bench_daily=_monotonic_candles(MIN_CANDLES_DAILY, start=600.0),
+            persist=False,
+        )
+
+        # Output del analyze sigue llegando
+        assert result["ticker"] == "QQQ"
+        assert "signal" in result
+        # Pero sin id (no persistido) y con flag explícito
+        assert result["id"] is None
+        assert result["persisted"] is False
+        # WS no recibió nada
+        assert len(ws.received) == 0
+
+    @pytest.mark.asyncio
+    async def test_no_persist_accepts_none_session_and_broadcaster(self) -> None:
+        """Con persist=False, session y broadcaster pueden ser None."""
+        from engines.scoring import MIN_CANDLES_1H, MIN_CANDLES_15M, MIN_CANDLES_DAILY
+
+        result = await scan_and_emit(
+            session=None,
+            broadcaster=None,
+            candle_timestamp=dt.datetime(2026, 4, 22, 10, 30, tzinfo=ET_TZ),
+            slot_id=1,
+            ticker="QQQ",
+            candles_daily=_monotonic_candles(MIN_CANDLES_DAILY),
+            candles_1h=_monotonic_candles(MIN_CANDLES_1H),
+            candles_15m=_monotonic_candles(MIN_CANDLES_15M),
+            fixture=_valid_fixture(),
+            spy_daily=_monotonic_candles(MIN_CANDLES_DAILY, start=600.0),
+            bench_daily=_monotonic_candles(MIN_CANDLES_DAILY, start=600.0),
+            persist=False,
+        )
+        assert result["persisted"] is False
+
+    @pytest.mark.asyncio
+    async def test_persist_true_with_none_session_raises(self) -> None:
+        """Salvaguarda: persist=True + session=None es un bug del caller."""
+        from engines.scoring import MIN_CANDLES_1H, MIN_CANDLES_15M, MIN_CANDLES_DAILY
+
+        with pytest.raises(ValueError, match="requeridos cuando persist=True"):
+            await scan_and_emit(
+                session=None,
+                broadcaster=None,
+                candle_timestamp=dt.datetime(2026, 4, 22, 10, 30, tzinfo=ET_TZ),
+                slot_id=1,
+                ticker="QQQ",
+                candles_daily=_monotonic_candles(MIN_CANDLES_DAILY),
+                candles_1h=_monotonic_candles(MIN_CANDLES_1H),
+                candles_15m=_monotonic_candles(MIN_CANDLES_15M),
+                fixture=_valid_fixture(),
+                spy_daily=_monotonic_candles(MIN_CANDLES_DAILY, start=600.0),
+                bench_daily=_monotonic_candles(MIN_CANDLES_DAILY, start=600.0),
+            )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 # build_chat_format
 # ═══════════════════════════════════════════════════════════════════════════
 

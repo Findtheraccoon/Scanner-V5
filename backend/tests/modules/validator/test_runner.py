@@ -38,6 +38,7 @@ async def test_runs_7_tests_in_canonical_order(tmp_path: Path) -> None:
             session_factory=factory,
             broadcaster=broadcaster,
             log_dir=tmp_path,
+            parity_enabled=False,
         )
         report = await v.run_full_battery()
 
@@ -48,8 +49,9 @@ async def test_runs_7_tests_in_canonical_order(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_without_registry_abc_skip(tmp_path: Path) -> None:
-    """Sin `registry`/`registry_path`, A/B/C emiten skip con mensaje explicativo."""
+async def test_without_inputs_abce_skip_with_reason(tmp_path: Path) -> None:
+    """Sin registry / registry_path / scan_executor, A/B/C/E emiten skip
+    con mensaje explicativo (no con 'not implemented yet')."""
     engine = make_engine("sqlite+aiosqlite:///:memory:")
     factory = make_session_factory(engine)
     broadcaster = _CapturingBroadcaster()
@@ -58,25 +60,28 @@ async def test_without_registry_abc_skip(tmp_path: Path) -> None:
             session_factory=factory,
             broadcaster=broadcaster,
             log_dir=tmp_path,
+            parity_enabled=False,
         )
         report = await v.run_full_battery()
 
         d = next(t for t in report.tests if t.test_id == "D")
         assert d.status == "pass"
 
-        # A, B, C: skip por falta de inputs (mensaje específico)
-        for tid in ("A", "B", "C"):
+        # A, B, C, E: skip por falta de inputs (mensaje específico)
+        for tid in ("A", "B", "C", "E"):
             t = next(t for t in report.tests if t.test_id == tid)
             assert t.status == "skip"
-            assert "no provistos" in (t.message or "") or "no provisto" in (
-                t.message or ""
-            )
+            assert "no provisto" in (t.message or "")
 
-        # E, F, G siguen "not implemented yet"
-        for tid in ("E", "F", "G"):
-            t = next(t for t in report.tests if t.test_id == tid)
-            assert t.status == "skip"
-            assert t.message == "not implemented yet"
+        # F skip por parity_enabled=False
+        f_test = next(t for t in report.tests if t.test_id == "F")
+        assert f_test.status == "skip"
+        assert "parity disabled" in (f_test.message or "")
+
+        # G skip por falta de probes
+        g_test = next(t for t in report.tests if t.test_id == "G")
+        assert g_test.status == "skip"
+        assert "sin probes" in (g_test.message or "")
     finally:
         await engine.dispose()
 
@@ -99,6 +104,7 @@ async def test_with_registry_abc_run(tmp_path: Path) -> None:
             log_dir=tmp_path,
             registry=runtime,
             registry_path=registry_path,
+            parity_enabled=False,
         )
         report = await v.run_full_battery()
 
@@ -110,13 +116,125 @@ async def test_with_registry_abc_run(tmp_path: Path) -> None:
         assert next(t for t in report.tests if t.test_id == "B").status == "pass"
         # C pasa (registry healthy)
         assert next(t for t in report.tests if t.test_id == "C").status == "pass"
-        # E/F/G siguen skipped
-        for tid in ("E", "F", "G"):
-            t = next(t for t in report.tests if t.test_id == tid)
-            assert t.status == "skip"
-            assert t.message == "not implemented yet"
+        # E skip por falta de scan_executor
+        e_test = next(t for t in report.tests if t.test_id == "E")
+        assert e_test.status == "skip"
+        assert "no provisto" in (e_test.message or "")
+        # F skip (parity_enabled=False en este test — evita lentitud)
+        f_test = next(t for t in report.tests if t.test_id == "F")
+        assert f_test.status == "skip"
+        # G skip por falta de probes
+        g_test = next(t for t in report.tests if t.test_id == "G")
+        assert g_test.status == "skip"
+        assert "sin probes" in (g_test.message or "")
 
         assert report.overall_status == "pass"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_parity_disabled_skips_f(tmp_path: Path) -> None:
+    """Con parity_enabled=False, Check F emite skip con mensaje específico."""
+    engine = make_engine("sqlite+aiosqlite:///:memory:")
+    factory = make_session_factory(engine)
+    broadcaster = _CapturingBroadcaster()
+    try:
+        v = Validator(
+            session_factory=factory,
+            broadcaster=broadcaster,
+            log_dir=tmp_path,
+            parity_enabled=False,
+        )
+        report = await v.run_full_battery()
+        f_test = next(t for t in report.tests if t.test_id == "F")
+        assert f_test.status == "skip"
+        assert "parity disabled" in (f_test.message or "")
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_parity_enabled_runs_f_with_default_db(tmp_path: Path) -> None:
+    """Con parity_enabled (default) + DB del repo, F corre con la DB real.
+
+    Uso limit=5 para mantenerlo rápido.
+    """
+    engine = make_engine("sqlite+aiosqlite:///:memory:")
+    factory = make_session_factory(engine)
+    broadcaster = _CapturingBroadcaster()
+    try:
+        v = Validator(
+            session_factory=factory,
+            broadcaster=broadcaster,
+            log_dir=tmp_path,
+            parity_limit=5,
+        )
+        report = await v.run_full_battery()
+        f_test = next(t for t in report.tests if t.test_id == "F")
+        # La DB está en el repo → no skip. Pass o warning según match rate.
+        assert f_test.status in ("pass", "fail")
+        assert f_test.details["total"] == 5
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_with_probes_g_runs(tmp_path: Path) -> None:
+    """Con td_probe + s3_probe, Check G corre y reporta."""
+    engine = make_engine("sqlite+aiosqlite:///:memory:")
+    factory = make_session_factory(engine)
+    broadcaster = _CapturingBroadcaster()
+
+    async def _td() -> list[dict]:
+        return [{"key_id": "k1", "ok": True}]
+
+    async def _s3() -> dict:
+        return {"ok": True}
+
+    try:
+        v = Validator(
+            session_factory=factory,
+            broadcaster=broadcaster,
+            log_dir=tmp_path,
+            parity_enabled=False,
+            td_probe=_td,
+            s3_probe=_s3,
+        )
+        report = await v.run_full_battery()
+        g_test = next(t for t in report.tests if t.test_id == "G")
+        assert g_test.status == "pass"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_with_scan_executor_e_runs(tmp_path: Path) -> None:
+    """Con scan_executor pasado, Check E corre y pasa."""
+    engine = make_engine("sqlite+aiosqlite:///:memory:")
+    factory = make_session_factory(engine)
+    broadcaster = _CapturingBroadcaster()
+
+    async def _fake_executor() -> dict:
+        return {
+            "ticker": "QQQ",
+            "signal": "NEUTRAL",
+            "score": 0.0,
+            "persisted": False,
+            "id": None,
+        }
+
+    try:
+        v = Validator(
+            session_factory=factory,
+            broadcaster=broadcaster,
+            log_dir=tmp_path,
+            scan_executor=_fake_executor,
+            parity_enabled=False,
+        )
+        report = await v.run_full_battery()
+        e_test = next(t for t in report.tests if t.test_id == "E")
+        assert e_test.status == "pass"
     finally:
         await engine.dispose()
 
@@ -133,6 +251,7 @@ async def test_overall_status_pass_when_only_d_and_skips(
             session_factory=factory,
             broadcaster=broadcaster,
             log_dir=tmp_path,
+            parity_enabled=False,
         )
         report = await v.run_full_battery()
         assert report.overall_status == "pass"
@@ -151,6 +270,7 @@ async def test_emits_running_and_terminal_per_test(tmp_path: Path) -> None:
             session_factory=factory,
             broadcaster=broadcaster,
             log_dir=tmp_path,
+            parity_enabled=False,
         )
         await v.run_full_battery()
 
@@ -186,6 +306,7 @@ async def test_all_emissions_share_run_id(tmp_path: Path) -> None:
             session_factory=factory,
             broadcaster=broadcaster,
             log_dir=tmp_path,
+            parity_enabled=False,
         )
         report = await v.run_full_battery()
 
@@ -218,6 +339,7 @@ async def test_broadcast_failure_does_not_break_run(
             session_factory=factory,
             broadcaster=broadcaster,
             log_dir=tmp_path,
+            parity_enabled=False,
         )
         report = await v.run_full_battery()
         # La batería completó de todas formas

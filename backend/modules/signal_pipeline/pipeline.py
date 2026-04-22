@@ -17,6 +17,15 @@ WS) alrededor del motor puro `engines.scoring.analyze()`.
   se mantiene acá también. Si el persist o el broadcast fallan, se
   loguea y se sigue.
 
+**Modo `is_validator_test` (V.3):** el Validator Check E usa este
+pipeline con `persist=False`. En ese modo:
+
+- NO se escribe en `signals` (no contamina la DB de producción).
+- NO se emite `signal.new` al WebSocket.
+- La señal se corre completa contra `analyze()` y el output se
+  retorna para que el caller valide shape/estado.
+- `session` y `broadcaster` pasan a ser opcionales (`None` permitido).
+
 **`chat_format`:** v0 mínimo — template compacto con bloque por
 sección. El template rico (v1.1.0 del spec) queda para una fase
 posterior junto con el frontend.
@@ -39,8 +48,8 @@ SIGNAL_NEUTRAL = "NEUTRAL"
 
 async def scan_and_emit(
     *,
-    session: AsyncSession,
-    broadcaster: Broadcaster,
+    session: AsyncSession | None,
+    broadcaster: Broadcaster | None,
     candle_timestamp: _dt.datetime,
     slot_id: int | None,
     ticker: str,
@@ -53,23 +62,31 @@ async def scan_and_emit(
     sim_datetime: str | None = None,
     sim_date: str | None = None,
     candles_snapshot_gzip: bytes | None = None,
+    persist: bool = True,
 ) -> dict[str, Any]:
     """Corre el pipeline completo y devuelve el output de `analyze()`
-    aumentado con el `id` de la señal persistida.
+    aumentado con el `id` de la señal persistida (o `None` si
+    `persist=False`).
 
     Args:
-        session: sesión async para escribir.
-        broadcaster: broadcaster para emitir `signal.new`.
+        session: sesión async para escribir. Requerido si
+            `persist=True`.
+        broadcaster: broadcaster para emitir `signal.new`. Requerido
+            si `persist=True`.
         candle_timestamp: tz-aware ET del candle 15M que disparó el scan.
         slot_id: id del slot (puede ser `None` para scans ad-hoc).
         ticker, candles_*, fixture, spy_daily, bench_daily,
         sim_datetime, sim_date: args de `analyze()`.
         candles_snapshot_gzip: opcional — snapshot comprimido de los
             inputs para reproducibilidad post-hoc.
+        persist: si `True` (default), escribe en `signals` y emite
+            `signal.new`. Si `False` (is_validator_test), solo corre
+            `analyze()` y retorna el output — no toca DB ni WS.
 
     Returns:
-        Output de `analyze()` con la clave extra `id` (int del registro
-        en `signals`).
+        Output de `analyze()` con las claves extra `id` (int del
+        registro en `signals`, o `None` si `persist=False`) y
+        `persisted` (bool).
     """
     out = analyze(
         ticker=ticker,
@@ -82,6 +99,14 @@ async def scan_and_emit(
         sim_date=sim_date,
         bench_daily=bench_daily,
     )
+
+    if not persist:
+        return {**out, "id": None, "persisted": False}
+
+    if session is None or broadcaster is None:
+        raise ValueError(
+            "scan_and_emit: session y broadcaster son requeridos cuando persist=True",
+        )
 
     # Persistir siempre — histórico completo para auditoría.
     sig_id = await write_signal(
@@ -103,7 +128,7 @@ async def scan_and_emit(
         )
         await broadcaster.broadcast(EVENT_SIGNAL_NEW, payload)
 
-    return {**out, "id": sig_id}
+    return {**out, "id": sig_id, "persisted": True}
 
 
 def build_ws_payload(

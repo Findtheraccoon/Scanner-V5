@@ -33,6 +33,7 @@ engine.
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import uvicorn
 from loguru import logger
@@ -49,6 +50,7 @@ from engines.registry_runtime import RegistryRuntime
 from engines.scoring import ENGINE_VERSION
 from modules.db import default_url, make_engine, make_session_factory
 from modules.slot_registry import RegistryError, load_registry
+from modules.validator import Validator
 from settings import Settings
 
 
@@ -105,7 +107,8 @@ def _build_scan_loop_factory(settings: Settings):
         )
         return None
 
-    pool = KeyPool([ApiKeyConfig(**k) for k in td_keys])
+    key_configs = [ApiKeyConfig(**k) for k in td_keys]
+    pool = KeyPool(key_configs)
     db_engine = make_engine(default_url(settings.db_path))
     session_factory = make_session_factory(db_engine)
     client = TwelveDataClient(pool)
@@ -121,6 +124,7 @@ def _build_scan_loop_factory(settings: Settings):
         "session_factory": session_factory,
         "registry": runtime,
         "delay_after_close_s": settings.scan_delay_after_close_s,
+        "key_configs": key_configs,
     }
 
 
@@ -141,6 +145,77 @@ def build_scan_loop_factory_for_app(
             broadcaster=app_broadcaster,
             registry=registry,
             delay_after_close_s=delay_after_close_s,
+        )
+
+    return factory
+
+
+def _build_td_probe(keys: list[ApiKeyConfig], client: TwelveDataClient):
+    """Construye un callable async que prueba cada key via `test_key`."""
+
+    async def probe() -> list[dict]:
+        results: list[dict] = []
+        for key in keys:
+            try:
+                ok = await client.test_key(key)
+                results.append({"key_id": key.key_id, "ok": ok})
+            except Exception as e:
+                results.append(
+                    {"key_id": key.key_id, "ok": False,
+                     "error": f"{type(e).__name__}: {e}"},
+                )
+        return results
+
+    return probe
+
+
+def _build_validator(
+    settings: Settings,
+    app,
+    scan_context: dict | None,
+) -> Validator:
+    """Construye el Validator con los inputs disponibles del entrypoint.
+
+    - `scan_context` presente → wire registry, registry_path, td_probe.
+    - `scan_context` None → validator stand-alone (D + F funcionan con
+      paths default; A/B/C/E/G harán `skip` por falta de inputs).
+    """
+    registry_runtime = scan_context["registry"] if scan_context else None
+    registry_path = settings.registry_path if scan_context else None
+    td_probe = None
+    if scan_context is not None:
+        td_probe = _build_td_probe(
+            scan_context["key_configs"], scan_context["client"],
+        )
+
+    return Validator(
+        session_factory=app.state.session_factory,
+        broadcaster=app.state.broadcaster,
+        log_dir=Path(settings.log_dir),
+        registry=registry_runtime,
+        registry_path=registry_path,
+        td_probe=td_probe,
+        parity_enabled=settings.validator_parity_enabled,
+        parity_limit=settings.validator_parity_limit,
+    )
+
+
+def _build_validator_startup_factory(app):
+    """Factory para el lifespan: corre la batería al arrancar y guarda
+    el reporte en `app.state.last_validator_report`.
+
+    Loggea el `overall_status`. No crashea si algún test falla —
+    continue-on-fatal según decisión de diseño V.7.
+    """
+
+    async def factory():
+        validator: Validator = app.state.validator
+        logger.info("Validator startup run — launching full battery")
+        report = await validator.run_full_battery()
+        app.state.last_validator_report = report
+        logger.info(
+            f"Validator startup run done — overall={report.overall_status} "
+            f"run_id={report.run_id}",
         )
 
     return factory
@@ -198,6 +273,14 @@ def main() -> int:
         # Expose registry via app.state para que endpoints REST (SR.3)
         # puedan consultarlo.
         app.state.registry_runtime = scan_context["registry"]
+
+    # V.7 — Validator wiring. Se construye siempre (standalone si no
+    # hay scan_context) y se engancha al app.state para que los
+    # endpoints REST funcionen. Si `validator_run_at_startup`, se
+    # agrega un worker que corre la batería completa post-startup.
+    app.state.validator = _build_validator(settings, app, scan_context)
+    if settings.validator_run_at_startup:
+        extra_workers.append(_build_validator_startup_factory(app))
 
     config = uvicorn.Config(
         app,

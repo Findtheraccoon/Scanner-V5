@@ -174,3 +174,58 @@ class TestAppLifespan:
         )
         async with app.router.lifespan_context(app):
             assert app.state.workers == []
+
+
+class TestValidatorWiring:
+    """V.7 — Validator adjunto al app.state y corrida al arrancar."""
+
+    @pytest.mark.asyncio
+    async def test_build_validator_standalone(self, tmp_path) -> None:
+        """Sin scan_context, el validator se construye standalone
+        (A/B/C/E/G harán skip)."""
+        from api import create_app
+        from main import _build_validator
+        from settings import Settings
+
+        app = create_app(
+            valid_api_keys={"sk-test"},
+            db_url="sqlite+aiosqlite:///:memory:",
+            auto_init_db=False,
+        )
+        settings = Settings(
+            log_dir=str(tmp_path),
+            validator_parity_enabled=False,
+        )
+        v = _build_validator(settings, app, scan_context=None)
+        assert v is not None
+        # Run a smoke battery — D pasa (infra), resto skip
+        report = await v.run_full_battery()
+        assert report.overall_status == "pass"
+        d_test = next(t for t in report.tests if t.test_id == "D")
+        assert d_test.status == "pass"
+        await app.state.db_engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_startup_factory_stores_report(self, tmp_path) -> None:
+        """El factory de arranque persiste el reporte en app.state."""
+        from api import create_app
+        from main import _build_validator, _build_validator_startup_factory
+        from settings import Settings
+
+        app = create_app(
+            valid_api_keys={"sk-test"},
+            db_url="sqlite+aiosqlite:///:memory:",
+            auto_init_db=False,
+        )
+        settings = Settings(
+            log_dir=str(tmp_path),
+            validator_parity_enabled=False,
+        )
+        app.state.validator = _build_validator(settings, app, scan_context=None)
+
+        factory = _build_validator_startup_factory(app)
+        await factory()
+
+        assert hasattr(app.state, "last_validator_report")
+        assert app.state.last_validator_report.overall_status == "pass"
+        await app.state.db_engine.dispose()

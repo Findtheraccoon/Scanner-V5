@@ -145,12 +145,14 @@ def _register_routes(app: FastAPI) -> None:
     from api.routes.scan import router as scan_router
     from api.routes.signals import router as signals_router
     from api.routes.slots import router as slots_router
+    from api.routes.validator import router as validator_router
     from api.routes.websocket import router as websocket_router
 
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(signals_router, prefix="/api/v1")
     app.include_router(scan_router, prefix="/api/v1")
     app.include_router(slots_router, prefix="/api/v1")
+    app.include_router(validator_router, prefix="/api/v1")
     app.include_router(websocket_router)  # `/ws` sin prefijo /api/v1
 
 
