@@ -71,10 +71,12 @@ def create_app(
 
 
 def _register_routes(app: FastAPI) -> None:
-    """Registra los routers REST. Sub-fases futuras (signals, ws) agregan."""
+    """Registra los routers REST. Sub-fases futuras (ws) agregan."""
     from api.routes.health import router as health_router
+    from api.routes.signals import router as signals_router
 
     app.include_router(health_router, prefix="/api/v1")
+    app.include_router(signals_router, prefix="/api/v1")
 
 
 # Helpers exportados para testing (evitan replicar el acceso a state).
