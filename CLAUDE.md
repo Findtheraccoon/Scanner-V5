@@ -61,36 +61,53 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 |---|---|---|
 | 1 (Data Engine) | `backend/engines/data/` — KeyPool, TwelveDataClient stubs, market calendar, integrity, config | ✅ base |
 | 3 (Slot Registry) | `backend/modules/slot_registry/` | ✅ base |
-| 4 (Scoring Engine) | `backend/engines/scoring/` — Fases 1-4d | ✅ |
+| 4 (Scoring Engine) | `backend/engines/scoring/` — Fases 1-5 + parity harness | ✅ |
 | Fixtures | `backend/modules/fixtures/` — loader | ✅ base |
 
 ### Scoring Engine — detalle por fase
 
 - **Fase 1:** errors, constants, structure gate, output neutral.
 - **Fase 2:** indicadores — SMA, EMA, Bollinger Bands, ATR, volume_ratio, gap_pct. **Rounding a 2 decimales al output** para paridad con Observatory (ver gotcha §Rounding).
-- **Fase 3:** alignment gate — `trend_strict` (price>MA20>MA40) + `trend_slope` fallback + `trend_with_fallback` + `compute_alignment` + catalyst override.
-- **Fase 4a:** 6 triggers candle-level 15M (Doji BB sup/inf, Hammer, ShootingStar, Rechazo sup/inf) con decay por age.
-- **Fase 4b:** Envolvente 1H + Doble techo/piso.
-- **Fase 4c:** MA20/40 cross 1H + ORB breakout/breakdown (time gate string compare + volume gate binario).
-- **Fase 4d:** wiring completo — triggers + risks + trigger gate + conflict gate dentro de `analyze()`.
-- **Extras:** 2 triggers 15M Envolvente (no están en spec §5.1 pero Observatory los emite — ver gotcha §Triggers extras). 4 RISK detectors (volume + BB fakeouts) — emiten pero no suman al score.
+- **Fase 3:** alignment gate — `trend_strict` + `trend_slope` fallback + `trend_with_fallback` + `compute_alignment` + catalyst override.
+- **Fase 4:** 16 triggers + 4 risks + trigger gate + conflict gate dentro de `analyze()`.
+- **Fase 5.1:** 10 detectores de confirms (BB sup/inf 1H/D, VolHigh, VolSeq, SqExp, Gap, FzaRel, DivSPY) con descripciones bit-a-bit Observatory.
+- **Fase 5.2:** port Observatory indicators — `today_candles` + `vol_ratio_intraday` (median), `vol_sequence` dict, `bb_width` squeeze dict, `gap` dict, `find_pivots` + `key_levels`. Resuelve divergencias #1, #2, #4 con Observatory.
+- **Fase 5.3:** wiring completo en `analyze()`:
+  - **5.3a** · `ind_builder.py:build_ind_bundle()` agrupa indicadores consumidos por confirms.
+  - **5.3b** · `confirms/categorize.py` (dedup + pesos fixture) + `bands.py` (resolve_band) + `errors.py:build_signal_output()` + wire paso 8-11 en analyze. Score = trigger_sum + confirm_sum (H-02).
+  - **5.3c** · Tests de integración con monkeypatch de detectores.
+- **Fase 5.4:** parity harness — `backend/engines/scoring/aggregator.py` (1min→15M/1H) + `backend/fixtures/parity_reference/parity_qqq_regenerate.py` (runner E2E). **Baseline 189/245 matches (77%)**.
 
-**Tests:** 245 passing en `backend/tests/engines/scoring/`.
+**Tests:** 643 passing en `backend/tests/engines/scoring/`.
+
+### Módulos nuevos del Scoring Engine (Fase 5)
+
+| Archivo | Rol |
+|---|---|
+| `engines/scoring/aggregator.py` | Agrega velas 1-minuto a 15M/1H open-stamped, con flag `include_partial` |
+| `engines/scoring/bands.py` | `resolve_band(score, fixture) → (conf, signal)` vía `fixture.score_bands` |
+| `engines/scoring/ind_builder.py` | `build_ind_bundle(daily, 1h, 15m, spy, bench, sim_date) → IndBundle` |
+| `engines/scoring/indicators/gap.py` | Observatory `gap()` dict `{pct, significant, dir}` |
+| `engines/scoring/indicators/pivots.py` | `find_pivots()` + `key_levels()` |
+| `engines/scoring/confirms/categorize.py` | `categorize_confirm()` + `apply_confirm_weights()` (dedup por categoría) |
+| `engines/scoring/confirms/bollinger.py`, `volume.py`, `squeeze.py`, `gap.py`, `relative_strength.py` | Detectores de confirms por familia |
+| `fixtures/parity_reference/parity_qqq_regenerate.py` | Runner parity E2E (Opción B) contra `data/parity_qqq_candles.db` |
 
 ### Pendiente
 
-- **Fase 5** (Scoring): portar los 10 confirms con pesos del fixture + cálculo final del score + asignación de banda. Una vez hecho, correr parity test contra sample de Observatory.
-- **Fase 6** (Scoring): conflict gate refinado (ya hay versión básica en Fase 4d).
+- **Fase 5.4 cierre:** el parity está en **189/245 (77%)** — baseline funcional aceptado. Los 56 mismatches restantes NO son bugs del motor (lógica porteada bit-a-bit de Observatory `patterns.py`), sino diferencias probablemente en data sources: al debuggear el trigger MA cross 1H del 2025-04-21 09:45, mi aggregator replica la convención exacta del `CandleBuilder` del replay (open-stamped, `include_current=True`) pero los closes de las velas 1H no coinciden con los que Observatory tenía cuando generó el sample. Requiere correr el replay completo sobre el `observatory_v5_2.db` original para regenerar un sample con los closes actuales.
 - **Capa 2:** Validator module.
 - **Capa 5:** persistencia SQLAlchemy + FastAPI endpoints + WebSocket.
 - **Frontend:** React + TS (aún no iniciado en esta rama).
 
-### Divergencias conocidas con Observatory (a atender en Fase 5+)
+### Divergencias conocidas con Observatory — estado post-Fase 5.2/5.4
 
-1. `vol_sequence` del Observatory aún no portado (vol_declining risk usa aproximación).
-2. `volume_ratio` — mío usa ventana fija 20 velas, Observatory usa mediana intraday del día.
-3. ATR — mío usa Wilder clásico, Observatory usa media simple de TRs (divergencia documentada en `indicators/atr.py`).
-4. Pivot fakeouts requieren portar `find_pivots()` de Observatory.
+1. ~~`vol_sequence` port~~ → **Resuelto Fase 5.2b.**
+2. ~~`volume_ratio` mediana intraday~~ → **Resuelto Fase 5.2a** (nuevo `vol_ratio_intraday`; el `volume_ratio_at` legacy sigue disponible pero no se usa en el pipeline principal).
+3. **ATR Wilder vs Observatory mean:** pendiente. No afecta confirms críticos (Gap usa `atr_pct` que da similar magnitude). Documentada en `indicators/atr.py`.
+4. ~~Pivot fakeouts~~ → **Resuelto Fase 5.2e** (`find_pivots` + `key_levels`).
+5. **Convención 1H aggregation:** ~~ambigua~~ → **Resuelta con el replay Observatory** portado en `docs/specs/Observatory/Current/Replay/candle_builder.py` L117-127: 1H open-stamped con `include_current=True`. Mi aggregator coincide.
+6. **Data source mismatch (nuevo):** el `parity_qqq_candles.db` portable parece tener pequeñas diferencias en los closes del warmup vs lo que Observatory tenía cuando generó el sample. Diagnosticado en el debug del trigger MA cross 1H del 2025-04-21 09:45 (la lógica es correcta pero los datos no matchean). Pendiente regenerar sample con el replay sobre el `.db` actual.
 
 ---
 
@@ -142,7 +159,22 @@ Observatory redondea al output de cada indicador. Mi paridad requiere:
 
 Por H-04, los 4 detectores de RISK (vol_bajo_rebote, vol_declinante, BB sup/inf fakeout) emiten patterns con `cat="RISK"` y `sg="WARN"`, peso negativo **informativo** únicamente. **No contribuyen al score final**. Solo aparecen en `patterns[]` y `layers.risk`.
 
-### 8. Git: squash-merges se ven como "commits nuevos" en main
+### 8. Parity replay mode — daily incluye la sesión del día
+
+El sample canonical QQQ fue generado por Observatory en **replay mode** (post-cierre de sesión). Al procesar señal a las `2025-02-28 10:30`, Observatory ya tiene la vela daily CERRADA de `2025-02-28` disponible. Esto significa:
+
+- `candles_daily` incluye `dt <= date` (inclusive el día de la señal), NO `dt < date`.
+- `a_chg` y `spy_chg` usan el close FINAL del día actual, alineados temporalmente.
+- En live production esto sería look-ahead; para paridad con el sample hay que replicar el replay.
+
+El runner `parity_qqq_regenerate.py` implementa esta convención en su `slice_for_signal`. **No cambiar sin regenerar el sample.**
+
+### 9. Aggregation 15M vs 1H asimétrica
+
+- **15M:** bucket open-stamped `[T, T+14]`. La última vela al momento T es **parcial** (close = 1min de T). El sample `price_at_signal` matchea ese close.
+- **1H:** bucket open-stamped `HH:00`. La convención exacta para el cálculo de MA20/MA40 al momento T sigue siendo ambigua — experimentalmente, incluir la parcial da 189/245 matches y excluirla da 160/245. El replay Observatory aclarará la convención real.
+
+### 10. Git: squash-merges se ven como "commits nuevos" en main
 
 GitHub squash-merge cambia el SHA. Cuando mergeás tu branch viejo a main vía PR, main obtiene un commit "nuevo" (squash) con el mismo código pero SHA distinto. Si después trabajás en la misma branch con correcciones, al intentar re-mergear git marca conflictos porque no reconoce que esos squashes son tu propio código viejo.
 

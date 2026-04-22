@@ -34,7 +34,6 @@ import sqlite3
 import sys
 from collections import defaultdict
 
-
 # ═══════════════════════════════════════════════════════════════════════════
 # CONFIG
 # ═══════════════════════════════════════════════════════════════════════════
@@ -337,7 +336,7 @@ def main():
     print("\n" + "=" * 72)
     if mismatches == 0:
         print(f"✓ PARITY OK — {total} señales comparadas, 0 diferencias")
-        print(f"  El motor actual matchea bit-por-bit el reference canonical.")
+        print("  El motor actual matchea bit-por-bit el reference canonical.")
         print("=" * 72)
         return 0
     else:

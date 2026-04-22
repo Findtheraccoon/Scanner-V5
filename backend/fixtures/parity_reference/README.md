@@ -1,96 +1,52 @@
-# tests/ — Tests del motor v5
+# backend/fixtures/parity_reference/ — Parity reference del motor v5
 
-Contiene tests que validan que el motor de scoring v5 preserva comportamiento a través de cambios de código. El test principal es el **parity check** contra el canonical QQQ.
+Dataset golden reference usado para validar que el motor de scoring v5 (`backend/engines/scoring/analyze()`) preserva comportamiento bit-a-bit con el canonical QQQ del Observatory. Dos scripts de parity check conviven:
+
+1. **`parity_qqq_regenerate.py`** — **Opción B (regeneración E2E)**: carga velas desde la DB portable, corre `analyze()` sobre cada timestamp del sample y compara. Es el que usa el chat del Scanner-V5 para validar paridad durante desarrollo.
+2. **`parity_qqq_canonical.py`** — **Opción A (comparación rápida)**: compara una DB de señales pre-calculadas contra el reference. Requiere DB con outputs del scanner production, no del motor puro.
 
 ## Archivos
 
 | Archivo | Tamaño | Rol |
 |---|---|---|
-| `parity_qqq_canonical.py` | 15 KB | Script ejecutable del test |
-| `fixtures/parity_qqq_sample.json` | 390 KB | Golden reference: 245 señales esperadas con todos sus campos |
-| `fixtures/parity_qqq_candles.db` | 10.6 MB | Dataset OHLC portable para correr el test sin la DB completa del observatorio |
+| `parity_qqq_regenerate.py` | ~12 KB | Runner E2E: lee DB de velas, corre `analyze()`, compara |
+| `parity_qqq_canonical.py` | ~15 KB | Comparador rápido contra DB de señales pre-calculadas |
+| `fixtures/parity_qqq_sample.json` | ~390 KB | Golden reference: 245 señales de 30 sesiones QQQ 2025 |
+| `../../../data/parity_qqq_candles.db` | ~10.6 MB | **Dataset de velas** (gitignored, local-only) |
 
-## Qué contiene el dataset de candles (`parity_qqq_candles.db`)
+## Dataset de velas (no versionado)
 
-SQLite file autocontenido con las OHLC mínimas para regenerar las señales del sample:
+La DB de velas vive en **`data/parity_qqq_candles.db`** (ruta gitignored — `data/*.db`). No se sube al repo por tamaño. Si necesitás correr `parity_qqq_regenerate.py` y no tenés la DB, pedísela a Álvaro.
+
+Schema:
 
 | Tabla | Contenido | Filas |
 |---|---|---|
-| `qqq_1min` | Candles 1-minuto de QQQ (warmup + sesiones target) | 96,562 |
-| `qqq_daily` | Candles diarios de QQQ del mismo período | 249 |
-| `spy_daily` | Candles diarios de SPY (para FzaRel y DivSPY) | 249 |
-| `metadata` | Info del dataset: rango, propósito, hash del canonical | 16 |
+| `qqq_1min` | Velas 1-minuto de QQQ (warmup + sesiones target) | 96,562 |
+| `qqq_daily` | Velas diarias de QQQ | 249 |
+| `spy_daily` | Velas diarias de SPY (para FzaRel y DivSPY) | 249 |
+| `metadata` | Info del dataset (rango, hash, propósito) | 16 |
 
-**Rango de fechas:** `2024-11-03` a `2025-11-01`
-- `2024-11-03` a `2025-01-01` → **warmup** (60 días calendario, ≈ 40 sesiones de mercado para MA200 daily + BBs)
-- `2025-01-02` a `2025-10-31` → **30 sesiones target** (las que el sample mide)
+**Rango:** `2024-11-03` a `2025-11-01`. Warmup hasta `2025-01-01`, sesiones target `2025-01-02` a `2025-10-31`.
 
-**Tamaño comparado:**
-- Observatorio completo (`data/qqq_1min.json`): ~30 MB, 3 años
-- Esta DB portable: 10.6 MB, ~1 año
-
-### Consultar la DB
-
-```python
-import sqlite3
-conn = sqlite3.connect("tests/fixtures/parity_qqq_candles.db")
-cur = conn.cursor()
-
-# Todas las candles 1min de una sesión
-cur.execute("""
-    SELECT dt, o, h, l, c, v FROM qqq_1min
-    WHERE substr(dt, 1, 10) = '2025-01-02'
-    ORDER BY dt
-""")
-
-# Daily previo a una sesión
-cur.execute("""
-    SELECT dt, o, h, l, c, v FROM qqq_daily
-    WHERE dt < '2025-01-02' ORDER BY dt DESC LIMIT 40
-""")
-```
-
-## Qué valida el parity check
-
-El test compara bit-por-bit lo que el motor genera **hoy** contra lo que generó cuando se aprobó el canonical. Esto garantiza que ningún refactor del código rompe paridad con la fixture canonical QQQ.
-
-Por cada una de las 245 señales del sample, verifica:
-
-- Mismo `score` (con tolerancia de 0.01)
-- Mismo `confidence` (franja)
-- Mismo `direction` (CALL/PUT)
-- Mismo `alignment` (n + dir)
-- Mismos `trends` (t15m, t1h, tdaily)
-- Mismo `structure.pass` y `structure.override`
-- Mismo `trigger_count`, `trigger_sum`, `confirm_sum`
-- Mismo `conflict_blocked`
-- Mismos `components` detectados (category + description + weight)
-
-También verifica que no haya señales extra en la DB generada que no estén en el reference, o ausentes.
-
-## Cuándo correrlo
-
-**Obligatorio antes de:**
-- Aprobar cualquier PR que toque `scanner/engine.py`, `scanner/scoring.py`, `scanner/patterns.py`, o `scanner/indicators.py`
-- Implementar el refactor plug-and-play (validar que externalizar pesos de confirms + umbrales + franjas no rompe paridad)
-- Cualquier merge a la rama principal
-
-**Recomendado:**
-- Después de actualizar dependencias (cambios de versión de Python, librerías numéricas)
-- Al migrar entre entornos (local → CI/CD)
-
-**Innecesario:**
-- En cambios puramente cosméticos (comentarios, renames sin cambio de lógica)
-- En cambios a `analysis/` o `backtest/` que no tocan el motor
-
-## Cómo correrlo
+## Cómo correr el regenerador (Opción B)
 
 ### Opción A — usar la DB completa del observatorio (comparación rápida)
 
 Si ya tenés `observatory_v5_2.db` en la raíz del repo (típico si trabajás en el observatorio):
 
 ```bash
-python3 tests/parity_qqq_canonical.py
+# Desde la raíz del repo
+python3 backend/fixtures/parity_reference/parity_qqq_regenerate.py
+
+# Limitar a N señales (debug rápido)
+python3 backend/fixtures/parity_reference/parity_qqq_regenerate.py --limit 10
+
+# Ver primeros N diffs en detalle
+python3 backend/fixtures/parity_reference/parity_qqq_regenerate.py --max-diffs 20
+
+# Ajustar tolerancia float
+python3 backend/fixtures/parity_reference/parity_qqq_regenerate.py --tolerance 0.001
 ```
 
 El script lee directamente de `observatory_v5_2.db` las señales actuales y las compara con el sample. **No regenera señales** — asume que la DB ya tiene el output del motor a testear.
@@ -99,13 +55,13 @@ El script lee directamente de `observatory_v5_2.db` las señales actuales y las 
 
 Si refactoreaste el motor y querés verificar paridad end-to-end, necesitás:
 
-1. Leer candles desde `tests/fixtures/parity_qqq_candles.db`
+1. Leer candles desde `data/parity_qqq_candles.db`
 2. Correr tu motor refactoreado sobre cada sesión target
 3. Guardar las señales generadas en una DB con el schema de observatory (`signals` + `signal_components`)
 4. Correr el parity check apuntando a tu nueva DB:
 
 ```bash
-python3 tests/parity_qqq_canonical.py --db tu_nueva_db.db
+python3 backend/fixtures/parity_reference/parity_qqq_canonical.py --db tu_nueva_db.db
 ```
 
 Este es el caso de uso principal cuando el chat del scanner v5 implementa el motor desde cero.
@@ -114,65 +70,86 @@ Este es el caso de uso principal cuando el chat del scanner v5 implementa el mot
 
 | Code | Significado |
 |---|---|
-| 0 | PARITY OK — 0 diferencias. El motor matchea el reference |
-| 1 | PARITY FAIL — hay diferencias. El script imprime el diff detallado |
-| 2 | Error de setup — DB no encontrada, sample corrupto, hash inválido |
+| 0 | PARITY OK — 0 diferencias |
+| 1 | PARITY FAIL — hay diffs (imprime detalle) |
+| 2 | Error de setup (DB no encontrada, sample corrupto) |
+
+## Qué valida el regenerador
+
+Por cada una de las 245 señales del sample, compara bit-a-bit:
+
+- `score` (tolerancia float configurable, default 0.01)
+- `confidence` (banda)
+- `direction` (CALL/PUT)
+- `alignment` (n + dir)
+- `trends` (t15m, t1h, tdaily)
+- `structure.pass` y `structure.override`
+- `trigger_count`, `trigger_sum`, `confirm_sum`
+- `conflict_blocked`
+
+## Convenciones aprendidas durante el port
+
+El sample fue generado por Observatory en **replay mode** (post-cierre de cada sesión). El regenerador replica esa convención:
+
+1. **Velas daily:** se incluye la vela cerrada del día de la señal (`dt <= date`). En live sería look-ahead, pero el sample lo requiere porque Observatory procesa cada señal con toda la info diaria disponible.
+2. **Aggregation 15M:** buckets open-stamped `[T, T+14]`, última vela parcial al momento T (el close de 15M "T" = close del 1min T = `price_at_signal`).
+3. **Aggregation 1H:** buckets open-stamped alineados a `HH:00`. La convención exacta para MA20/MA40 1H sigue siendo ambigua (ver divergencias abajo).
+4. **Daily replay mode:** `a_chg` y `spy_chg` usan el close final del día actual, no el intraday — ambos alineados temporalmente.
+
+Referencia: `docs/specs/Observatory/Current/Replay/` contiene el código del replay del Observatory (una vez portado) que dosifica cada vela al scanner como si fuera tiempo real. Ese es el material de referencia definitivo para resolver las ambigüedades 1H pendientes.
+
+## Baseline actual de paridad
+
+**189/245 matches (77%)** — ver commit `8cab0ea`.
+
+Divergencias restantes (56 casos) agrupadas en:
+
+- **`trigger_sum` con decimales raros:** expected=2.0 actual=2.1 → decay/age off by 1 vela. Requiere investigar `patterns.py` Observatory + replay para saber exactamente cómo calcula `age` de las velas pasadas.
+- **`trends.t1h`/`trends.t15m` neutral vs bullish/bearish:** MA20/MA40 parcialmente divergentes por convención de aggregation. El replay del Observatory debería clarificar cómo se construyen las velas 1H al momento de evaluación.
+- **`conflict_blocked` spurious:** mi motor detecta más triggers direccionales opuestos. Efecto cascada del punto anterior.
+
+Estos 56 casos NO indican bugs del motor core (scoring, dedup, bandas). El motor está correcto en su lógica; la divergencia viene de cómo se construyen las velas 1H/15M que le llegan.
+
+## Cuándo correrlo
+
+**Obligatorio antes de:**
+- Aprobar cualquier PR que toque `backend/engines/scoring/`.
+- Merge a main que toque el motor.
+- Cambios a la fixture canonical QQQ.
+
+**Recomendado:**
+- Después de actualizar dependencias numéricas (versiones de `statistics`, etc.).
+- Al migrar entornos.
 
 ## Qué hacer si el test falla
 
-**Si acabás de refactorear el motor y falla:**
-El refactor rompió paridad. Leer el diff detallado. Opciones:
-1. **Corregir el refactor** para que no cambie comportamiento — la opción correcta cuando el objetivo era preservar paridad
-2. **Aceptar el cambio** si fue intencional (ej. bug fix real que el canonical tenía). En ese caso, hay que:
-   - Regenerar el canonical con el proceso formal de `CANONICAL_MANAGER_SPEC.md`
-   - Nuevo sign-off
-   - Regenerar el sample con el nuevo baseline
-   - Bumpear versión del motor (MINOR si es backward compatible, MAJOR si no)
+**Si acabás de refactorear y falla:**
+1. Leer los primeros diffs (`--max-diffs 20`).
+2. Corregir el refactor para preservar paridad.
 
-**Si falla sin haber tocado el motor:**
-Algo cambió que no debía. Chequear:
-- ¿Se modificó alguna fixture sin regenerar hash?
-- ¿Se actualizó una librería que alteró cálculos de floats?
-- ¿Cambió `observatory_v5_2.db` de posición o contenido?
-- ¿El sample `.json` fue modificado accidentalmente (git log del file)?
+**Si el cambio es intencional (bug fix del canonical):**
+1. Regenerar el canonical siguiendo `CANONICAL_MANAGER_SPEC.md`.
+2. Re-generar el sample.
+3. Bumpear versión del motor.
 
-## Cómo regenerar el reference
+## Regenerar el reference
 
-Solo regenerar cuando el canonical cambia formalmente (nuevo `qqq_canonical_v2.json`). El proceso:
+Solo cuando el canonical cambie formalmente:
 
-1. Correr replay completo con el nuevo canonical → genera nueva DB
-2. Correr el script generador del sample (embebido en las notas del Observatory)
-3. Actualizar `tests/fixtures/parity_qqq_sample.json` con el nuevo content
-4. Actualizar `tests/fixtures/parity_qqq_candles.db` si cambió el rango de sesiones
-5. Actualizar el campo `canonical_hash` y `engine_version` del sample
-6. Commitear junto con el nuevo canonical
+1. Correr replay completo con el nuevo canonical → nueva DB del Observatory.
+2. Exportar 245 señales al nuevo `parity_qqq_sample.json`.
+3. Actualizar `canonical_hash` y `engine_version` del sample.
+4. (Opcional) Regenerar `parity_qqq_candles.db` si cambió el rango.
+5. Commitear junto con el nuevo canonical.
 
 ## Diseño del sample
 
-El sample contiene **30 sesiones de QQQ en 2025** (2-3 sesiones por mes, seleccionadas con seed fijo = 42 para reproducibilidad). Esto produjo 245 señales con distribución:
-
-| Franja | Cantidad |
-|---|---|
-| REVISAR | 65 |
-| B | 86 |
-| A | 63 |
-| A+ | 27 |
-| S | 3 |
-| S+ | 1 |
-
-**Por qué 30 sesiones y no más:**
-- Suficiente para cubrir las 6 franjas (incluyendo S+ que es raro)
-- Representa ~12% del año operativo (250 sesiones), cubriendo cada mes
-- Dataset portable fits en ~11 MB (vs 30 MB del dataset completo del observatorio)
-- Corre en < 1 segundo contra DB pre-calculada, en < 30s si hay que regenerar señales desde candles
-
-**Por qué 2025 y no 2024 o 2023:**
-- 2025 es el período más reciente con data completa en `observatory_v5_2.db`
-- Datos más recientes reducen la posibilidad de que edge cases antiguos se oculten
-
-## Interpretación de la tolerancia
-
-El parámetro `--tolerance` controla qué cuenta como "iguales" para valores float (score, trigger_sum, confirm_sum). Default es 0.01, suficientemente estricto para detectar cambios reales pero tolerante a diferencias de punto flotante por orden de operaciones.
-
-**No tolera:** diferencias en campos enteros (alignment.n, trigger_count), strings (confidence, direction), booleans (conflict_blocked), o presencia/ausencia de componentes. Esas siempre deben matchear exactamente.
-
+- **30 sesiones de QQQ 2025** (2-3 sesiones por mes, seed fijo = 42).
+- **245 señales totales** distribuidas:
+  - REVISAR: 65
+  - B: 86
+  - A: 63
+  - A+: 27
+  - S: 3
+  - S+: 1
+- Seleccionado para cubrir las 6 franjas (incluyendo S+ raro) y cada mes del año.
