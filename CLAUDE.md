@@ -220,7 +220,7 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 ### Pendiente
 
 - **Frontend:** React + TS + Vite + Tailwind + shadcn + Zustand + TanStack Query (aún no iniciado). Bloque grande — desbloquea el producto entero; backend ya expone todo lo necesario (REST + WS + stats + backup/restore).
-- **Fase 5.4 cierre:** el parity está en **189/245 (77%)** — baseline funcional aceptado. Los 56 mismatches restantes NO son bugs del motor (lógica porteada bit-a-bit de Observatory `patterns.py`), sino diferencias probablemente en data sources: al debuggear el trigger MA cross 1H del 2025-04-21 09:45, mi aggregator replica la convención exacta del `CandleBuilder` del replay (open-stamped, `include_current=True`) pero los closes de las velas 1H no coinciden con los que Observatory tenía cuando generó el sample. Requiere correr el replay completo sobre el `observatory_v5_2.db` original para regenerar un sample con los closes actuales.
+- ~~**Fase 5.4 cierre**~~ → **Cerrado 2026-04-22.** Baseline 189/245 (77.14%) confirmado como techo alcanzable: el sample ya era correcto, los mismatches son data-source (velas portables ≠ velas que Observatory usó). Ver divergencia #6.
 - **Config encriptado `modules/config/`** para distribución Windows. Bloqueante para:
   - Encriptar credenciales S3 del body de `/database/backup` (deuda técnica AR.2).
   - Encriptar API keys de Twelve Data actualmente en env var.
@@ -265,7 +265,7 @@ Al arrancar, el Validator corre la batería completa, emite progress via WS, per
 3. **ATR Wilder vs Observatory mean:** pendiente. No afecta confirms críticos (Gap usa `atr_pct` que da similar magnitude). Documentada en `indicators/atr.py`.
 4. ~~Pivot fakeouts~~ → **Resuelto Fase 5.2e** (`find_pivots` + `key_levels`).
 5. **Convención 1H aggregation:** ~~ambigua~~ → **Resuelta con el replay Observatory** portado en `docs/specs/Observatory/Current/Replay/candle_builder.py` L117-127: 1H open-stamped con `include_current=True`. Mi aggregator coincide.
-6. **Data source mismatch (nuevo):** el `parity_qqq_candles.db` portable parece tener pequeñas diferencias en los closes del warmup vs lo que Observatory tenía cuando generó el sample. Diagnosticado en el debug del trigger MA cross 1H del 2025-04-21 09:45 (la lógica es correcta pero los datos no matchean). Pendiente regenerar sample con el replay sobre el `.db` actual.
+6. **Data source mismatch (confirmado, cerrado):** el `parity_qqq_candles.db` portable tiene closes ligeramente distintos a las velas que Observatory usó al generar los 245 signals. Verificado **2026-04-22** regenerando el sample desde `observatory_v5_2.db` (68MB, pulled): cero diffs semánticos entre sample regenerado y sample actual → el sample ya era correcto. El match rate **189/245 (77.14%)** es el **techo alcanzable** con las velas portables. Observatory no preserva velas históricas (su DB solo tiene outputs), así que reproducir el 100% requiere el dataset de velas fuente original — fuera de alcance. `backend/fixtures/parity_reference/regenerate_from_observatory.py` queda como herramienta auditable. `DEFAULT_MIN_MATCH_RATE` del Check F subido a 0.75 (headroom explícito sobre el 77.14% real).
 
 ---
 
