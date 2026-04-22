@@ -39,7 +39,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from engines.data.api_keys import KeyPool
 from engines.data.constants import WARMUP_1H_N, WARMUP_15M_N, WARMUP_DAILY_N
 from engines.data.fetcher import TwelveDataClient
-from engines.data.models import Candle, FetchResult, Timeframe
+from engines.data.models import ApiKeyState, Candle, FetchResult, Timeframe
 from modules.db import CandleTF, write_candles_batch
 
 # Mapeo local Timeframe (engines.data) → CandleTF (modules.db) para
@@ -216,6 +216,18 @@ class DataEngine:
             ),
             "fetched_at": fetch_daily.fetched_at,
         }
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Introspección del pool — para eventos api_usage.tick
+    # ─────────────────────────────────────────────────────────────────────
+
+    def pool_snapshot(self) -> list[ApiKeyState]:
+        """Snapshot del estado de cada API key del pool.
+
+        Delega al `KeyPool.snapshot()`. Usado por el scan loop para
+        emitir `api_usage.tick` al final de cada ciclo (spec §5.3).
+        """
+        return self._pool.snapshot()
 
     # ─────────────────────────────────────────────────────────────────────
     # Internos

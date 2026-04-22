@@ -29,7 +29,7 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from api.broadcaster import Broadcaster
-from api.events import EVENT_ENGINE_STATUS
+from api.events import EVENT_API_USAGE_TICK, EVENT_ENGINE_STATUS
 from engines.data.engine import DataEngine
 from engines.data.market_calendar import is_market_open
 from modules.db import now_et
@@ -170,7 +170,47 @@ async def _run_scan_cycle(
     ]
     # Fallos individuales no rompen el loop — return_exceptions=True
     await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Post-ciclo: emitir snapshot del KeyPool al WebSocket para que el
+    # banner de 5 barras del Cockpit (spec §5.5) refleje el uso actual.
+    await _broadcast_api_usage(broadcaster, data_engine)
     logger.info(f"Scan cycle done at {candle_timestamp.isoformat()}")
+
+
+async def _broadcast_api_usage(
+    broadcaster: Broadcaster,
+    data_engine: DataEngine,
+) -> None:
+    """Emite un envelope `api_usage.tick` por cada key del pool.
+
+    Spec §5.3: el evento `api_usage.tick` lleva el estado de UNA key
+    (`{key_id, used_minute, max_minute, used_daily, max_daily,
+    last_call_ts}`). Se emite por cada key del pool una vez por ciclo
+    para que el frontend mantenga actualizado el banner del Cockpit
+    (5 barras, una por key).
+    """
+    try:
+        snapshot = data_engine.pool_snapshot()
+    except Exception:
+        logger.exception("pool_snapshot failed")
+        return
+    for state in snapshot:
+        payload = {
+            "key_id": state.key_id,
+            "used_minute": state.used_minute,
+            "max_minute": state.max_minute,
+            "used_daily": state.used_daily,
+            "max_daily": state.max_daily,
+            "last_call_ts": (
+                state.last_call_ts.isoformat()
+                if state.last_call_ts is not None else None
+            ),
+            "exhausted": state.exhausted,
+        }
+        try:
+            await broadcaster.broadcast(EVENT_API_USAGE_TICK, payload)
+        except Exception:
+            logger.exception(f"api_usage.tick broadcast failed key={state.key_id}")
 
 
 async def _scan_slot(

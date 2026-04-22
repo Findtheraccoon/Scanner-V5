@@ -228,3 +228,44 @@ class TestAutoScanLoop:
             and e["payload"].get("engine") == "data"
         ]
         assert len(ds_events) >= 1
+
+    @pytest.mark.asyncio
+    async def test_broadcasts_api_usage_tick_per_key(self, engine_ctx) -> None:
+        """Post-ciclo emite api_usage.tick por cada key del pool."""
+        de, factory = engine_ctx
+        broadcaster = Broadcaster()
+
+        class RecordingWS:
+            def __init__(self):
+                self.received: list[dict] = []
+
+            async def send_json(self, data):
+                self.received.append(data)
+
+        ws = RecordingWS()
+        await broadcaster.register(ws)
+
+        task = asyncio.create_task(
+            auto_scan_loop(
+                data_engine=de,
+                session_factory=factory,
+                broadcaster=broadcaster,
+                slot_tickers=["QQQ"],
+                fixture=_valid_fixture(),
+                test_interval_s=0.05,
+            ),
+        )
+        await asyncio.sleep(0.25)
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+        ticks = [e for e in ws.received if e["event"] == "api_usage.tick"]
+        # Pool tiene 1 key → al menos 1 tick por ciclo, 1+ ciclo en 0.25s
+        assert len(ticks) >= 1
+        payload = ticks[0]["payload"]
+        assert set(payload.keys()) == {
+            "key_id", "used_minute", "max_minute",
+            "used_daily", "max_daily", "last_call_ts", "exhausted",
+        }
+        assert payload["key_id"] == "k1"
