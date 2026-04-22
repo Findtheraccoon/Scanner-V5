@@ -15,9 +15,15 @@ decisión de qué hacer con un `fatal` la toma el caller (el arranque
 del backend en V.7 mostrará banner rojo y seguirá en DEGRADED,
 confiando en que el trader decida — nunca crashear por Validator).
 
-**Checks no implementados:** se listan acá y se emiten como `skip`
-con mensaje `"not implemented yet"`. Cuando se añadan las sub-fases
-V.2-V.6, este mapa crece.
+**Inputs opcionales en el constructor:** el Validator es standalone
+para los checks de infra (D). Los demás necesitan:
+
+- `registry` (RegistryRuntime) — para A, B, C leer los slots.
+- `registry_path` (Path) — para C recargar desde disco.
+- `fixtures_root` (Path) — base para resolver paths relativos de
+  fixtures. Por default, el directorio de `registry_path`.
+
+Si un input requerido falta, ese check emite `skip` con la razón.
 """
 
 from __future__ import annotations
@@ -25,7 +31,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loguru import logger
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -33,13 +39,16 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from api.broadcaster import Broadcaster
 from api.events import EVENT_VALIDATOR_PROGRESS
 from modules.db import now_et
-from modules.validator.checks import d_infra
+from modules.validator.checks import a_fixtures, b_canonicals, c_registry, d_infra
 from modules.validator.models import (
     TEST_ORDER,
     TestId,
     TestResult,
     ValidatorReport,
 )
+
+if TYPE_CHECKING:
+    from engines.registry_runtime import RegistryRuntime
 
 
 class Validator:
@@ -55,10 +64,25 @@ class Validator:
         session_factory: async_sessionmaker,
         broadcaster: Broadcaster,
         log_dir: Path | None = None,
+        registry: RegistryRuntime | None = None,
+        registry_path: str | Path | None = None,
+        fixtures_root: str | Path | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._broadcaster = broadcaster
         self._log_dir = log_dir
+        self._registry = registry
+        self._registry_path: Path | None = (
+            Path(registry_path) if registry_path is not None else None
+        )
+        # `fixtures_root` default: directorio del registry_path (misma
+        # convención que `load_registry()`).
+        if fixtures_root is not None:
+            self._fixtures_root: Path | None = Path(fixtures_root)
+        elif self._registry_path is not None:
+            self._fixtures_root = self._registry_path.parent
+        else:
+            self._fixtures_root = None
 
     async def run_full_battery(self) -> ValidatorReport:
         """Corre los 7 tests en orden y devuelve el reporte."""
@@ -103,6 +127,21 @@ class Validator:
             return await d_infra.run(
                 session_factory=self._session_factory,
                 log_dir=self._log_dir,
+            )
+        if test_id == "A":
+            return await a_fixtures.run(
+                registry=self._registry,
+                fixtures_root=self._fixtures_root,
+            )
+        if test_id == "B":
+            return await b_canonicals.run(
+                registry=self._registry,
+                fixtures_root=self._fixtures_root,
+            )
+        if test_id == "C":
+            return await c_registry.run(
+                registry_path=self._registry_path,
+                fixtures_root=self._fixtures_root,
             )
         return TestResult(
             test_id=test_id,
