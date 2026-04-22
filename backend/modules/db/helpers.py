@@ -42,7 +42,10 @@ from modules.db.models import (
     Heartbeat,
     Signal,
     SystemLog,
+    ValidatorReportRecord,
 )
+
+ValidatorTrigger = Literal["startup", "manual", "hot_reload", "connectivity"]
 
 DEFAULT_PAGE_LIMIT: int = 100
 MAX_PAGE_LIMIT: int = 500
@@ -172,6 +175,38 @@ async def write_system_log(
     await session.commit()
     await session.refresh(log)
     return log.id
+
+
+async def write_validator_report(
+    session: AsyncSession,
+    *,
+    report: Any,  # modules.validator.ValidatorReport (Pydantic — evito import circular)
+    trigger: ValidatorTrigger,
+) -> int:
+    """Persiste un `ValidatorReport` del módulo validator como row.
+
+    El Pydantic se serializa a dict via `model_dump`; `tests` se
+    guarda como lista de dicts en el campo JSON `tests_json`. El
+    `overall_status` se lee del property derivado.
+
+    Args:
+        session: sesión async.
+        report: instancia de `modules.validator.ValidatorReport`.
+        trigger: qué disparó la corrida — usado por el Dashboard para
+            filtrar ("solo startup", "solo hot-reload", etc.).
+    """
+    rec = ValidatorReportRecord(
+        run_id=report.run_id,
+        trigger=trigger,
+        started_at=report.started_at,
+        finished_at=report.finished_at,
+        overall_status=report.overall_status,
+        tests_json=[t.model_dump() for t in report.tests],
+    )
+    session.add(rec)
+    await session.commit()
+    await session.refresh(rec)
+    return rec.id
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -350,6 +385,118 @@ async def read_signal_by_id(
 # ═══════════════════════════════════════════════════════════════════════════
 # Serialización interna
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+async def read_validator_reports_latest(
+    session: AsyncSession,
+    *,
+    archive_session: AsyncSession | None = None,
+) -> dict | None:
+    """Último reporte del Validator (o `None` si no hay ninguno).
+
+    Transparent read op + archive — el último generalmente vive en op,
+    pero si la operativa se vació por rotación el fallback a archive
+    garantiza que el Dashboard siga mostrando algo.
+    """
+    stmt = (
+        select(ValidatorReportRecord)
+        .order_by(desc(ValidatorReportRecord.started_at))
+        .limit(1)
+    )
+    op_row = (await session.execute(stmt)).scalar_one_or_none()
+    if op_row is not None:
+        return _validator_report_to_dict(op_row)
+    if archive_session is None:
+        return None
+    ar_row = (await archive_session.execute(stmt)).scalar_one_or_none()
+    if ar_row is None:
+        return None
+    return _validator_report_to_dict(ar_row)
+
+
+async def read_validator_reports_history(
+    session: AsyncSession,
+    *,
+    archive_session: AsyncSession | None = None,
+    trigger: ValidatorTrigger | None = None,
+    overall_status: str | None = None,
+    cursor: int | None = None,
+    limit: int = DEFAULT_PAGE_LIMIT,
+) -> tuple[list[dict], int | None]:
+    """Histórico paginado de reportes. Cursor por `id` desc.
+
+    Transparent read igual que `read_signals_history`.
+    """
+    limit = min(max(limit, 1), MAX_PAGE_LIMIT)
+
+    def _build_stmt():
+        stmt = select(ValidatorReportRecord)
+        if trigger is not None:
+            stmt = stmt.where(ValidatorReportRecord.trigger == trigger)
+        if overall_status is not None:
+            stmt = stmt.where(
+                ValidatorReportRecord.overall_status == overall_status,
+            )
+        if cursor is not None:
+            stmt = stmt.where(ValidatorReportRecord.id < cursor)
+        return stmt.order_by(desc(ValidatorReportRecord.id)).limit(limit + 1)
+
+    op_rows = list((await session.execute(_build_stmt())).scalars().all())
+    if archive_session is None:
+        all_rows = op_rows
+    else:
+        ar_rows = list(
+            (await archive_session.execute(_build_stmt())).scalars().all(),
+        )
+        seen: set[int] = set()
+        merged = []
+        for r in sorted(op_rows + ar_rows, key=lambda x: x.id, reverse=True):
+            if r.id in seen:
+                continue
+            seen.add(r.id)
+            merged.append(r)
+        all_rows = merged[: limit + 1]
+
+    has_more = len(all_rows) > limit
+    items = all_rows[:limit]
+    next_cursor = items[-1].id if has_more and items else None
+    return [_validator_report_to_dict(r) for r in items], next_cursor
+
+
+async def read_validator_report_by_id(
+    session: AsyncSession,
+    report_id: int,
+    *,
+    archive_session: AsyncSession | None = None,
+) -> dict | None:
+    """Reporte completo por id. Transparent read (op → archive)."""
+    result = await session.execute(
+        select(ValidatorReportRecord).where(ValidatorReportRecord.id == report_id),
+    )
+    rec = result.scalar_one_or_none()
+    if rec is not None:
+        return _validator_report_to_dict(rec)
+    if archive_session is None:
+        return None
+    result = await archive_session.execute(
+        select(ValidatorReportRecord).where(ValidatorReportRecord.id == report_id),
+    )
+    rec = result.scalar_one_or_none()
+    if rec is None:
+        return None
+    return _validator_report_to_dict(rec)
+
+
+def _validator_report_to_dict(rec: ValidatorReportRecord) -> dict[str, Any]:
+    return {
+        "id": rec.id,
+        "run_id": rec.run_id,
+        "trigger": rec.trigger,
+        "started_at": rec.started_at.isoformat(),
+        "finished_at": rec.finished_at.isoformat() if rec.finished_at else None,
+        "overall_status": rec.overall_status,
+        "tests": rec.tests_json,
+    }
 
 
 def _signal_to_dict(sig: Signal, *, include_snapshot: bool = False) -> dict[str, Any]:

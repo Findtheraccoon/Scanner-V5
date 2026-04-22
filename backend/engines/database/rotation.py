@@ -43,11 +43,12 @@ from modules.db import (
     Heartbeat,
     Signal,
     SystemLog,
+    ValidatorReportRecord,
     now_et,
 )
 from modules.db.models import Base
 
-# Default del spec §3.7
+# Default del spec §3.7 + AR.4 (validator_reports alineado con system_log)
 DEFAULT_RETENTION_POLICIES: Mapping[str, _dt.timedelta] = {
     "signals": _dt.timedelta(days=365),
     "heartbeat": _dt.timedelta(hours=24),
@@ -55,6 +56,7 @@ DEFAULT_RETENTION_POLICIES: Mapping[str, _dt.timedelta] = {
     "candles_daily": _dt.timedelta(days=365 * 3),
     "candles_1h": _dt.timedelta(days=182),
     "candles_15m": _dt.timedelta(days=90),
+    "validator_reports": _dt.timedelta(days=30),
 }
 
 # Mapeo tabla → (modelo, columna timestamp). Centralizado para evitar
@@ -66,6 +68,7 @@ _TABLE_MODELS: dict[str, tuple[type[Base], str]] = {
     "candles_daily": (CandleDaily, "dt"),
     "candles_1h": (CandleH1, "dt"),
     "candles_15m": (CandleM15, "dt"),
+    "validator_reports": (ValidatorReportRecord, "started_at"),
 }
 
 # Tablas que NO van al archive (spec §3.7 tabla de retenciones).

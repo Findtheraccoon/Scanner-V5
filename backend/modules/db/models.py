@@ -194,6 +194,39 @@ class SystemLog(Base):
     )
 
 
+class ValidatorReportRecord(Base):
+    """Reportes históricos del Validator (AR.4, spec §3.2).
+
+    El `tests_json` guarda la lista completa de `TestResult` serializada
+    (`[{test_id, status, severity, error_code, message, duration_ms,
+    details}]`) para poder reconstruir el reporte sin perder info.
+
+    Retención 30 días en operativa, luego va al archive — alineado con
+    `system_log` porque son datos de diagnóstico similares.
+
+    **Nombre `Record` para evitar colisión con `modules.validator.ValidatorReport`
+    (Pydantic).** El wrapper Pydantic es el contrato público; este modelo
+    SQL es persistencia interna.
+    """
+
+    __tablename__ = "validator_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_id: Mapped[str] = mapped_column(String(64), index=True)
+    trigger: Mapped[str] = mapped_column(String(16))  # startup/manual/hot_reload/connectivity
+    started_at: Mapped[_dt.datetime] = mapped_column(ETDateTime())
+    finished_at: Mapped[_dt.datetime | None] = mapped_column(
+        ETDateTime(), nullable=True,
+    )
+    overall_status: Mapped[str] = mapped_column(String(8))  # pass/fail/partial
+    tests_json: Mapped[list] = mapped_column(JSON)
+
+    __table_args__ = (
+        Index("ix_validator_reports_started_at", "started_at"),
+        Index("ix_validator_reports_overall_status_started", "overall_status", "started_at"),
+    )
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Candles — 3 tablas con schema idéntico pero retenciones distintas
 # ═══════════════════════════════════════════════════════════════════════════
