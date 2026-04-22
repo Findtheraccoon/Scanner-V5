@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -171,6 +172,179 @@ class TestOpenApi:
         paths = r.json()["paths"]
         assert "/api/v1/database/rotate" in paths
         assert "/api/v1/database/stats" in paths
+
+
+class TestBackupEndpoints:
+    """Endpoints POST /backup, /restore, /backups usando moto."""
+
+    _BUCKET = "scanner-test-bucket"
+
+    @staticmethod
+    def _s3_body() -> dict:
+        return {
+            "s3": {
+                "bucket": "scanner-test-bucket",
+                "access_key_id": "testing",
+                "secret_access_key": "testing",
+                "region": "us-east-1",
+                "key_prefix": "scanner-backups/",
+            },
+        }
+
+    @pytest_asyncio.fixture
+    async def app_with_file_db(self, tmp_path):
+        """App con DB en archivo real (no :memory:) — backup/restore
+        requieren path físico."""
+        from api import create_app
+        from modules.db import init_db
+
+        db_path = tmp_path / "scanner.db"
+        app = create_app(
+            valid_api_keys={"sk-test"},
+            db_url=f"sqlite+aiosqlite:///{db_path}",
+            archive_db_url=None,
+            auto_init_db=False,
+        )
+        await init_db(app.state.db_engine)
+        # Forzar que el archivo se materialice en disco
+        async with app.state.session_factory() as op:
+            from sqlalchemy import text as sql_text
+            await op.execute(sql_text("SELECT 1"))
+        yield app, db_path
+        await app.state.db_engine.dispose()
+
+    @pytest.fixture
+    def mock_s3(self):
+        import boto3
+        from moto import mock_aws
+
+        with mock_aws():
+            boto3.client("s3", region_name="us-east-1").create_bucket(
+                Bucket=self._BUCKET,
+            )
+            yield
+
+    @pytest.mark.asyncio
+    async def test_backup_uploads_and_returns_metadata(
+        self, app_with_file_db, mock_s3,
+    ) -> None:
+        app, _ = app_with_file_db
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            r = await client.post(
+                "/api/v1/database/backup",
+                json=self._s3_body(),
+                headers=AUTH,
+            )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["bucket"] == self._BUCKET
+        assert body["key"].startswith("scanner-backups/scanner-")
+        assert body["key"].endswith(".db.gz")
+        assert body["size_bytes_gz"] > 0
+
+    @pytest.mark.asyncio
+    async def test_backup_rejects_memory_db(self, mock_s3) -> None:
+        """`:memory:` no tiene path físico → 400."""
+        from api import create_app
+        from modules.db import init_db
+
+        app = create_app(
+            valid_api_keys={"sk-test"},
+            db_url="sqlite+aiosqlite:///:memory:",
+            auto_init_db=False,
+        )
+        await init_db(app.state.db_engine)
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                r = await client.post(
+                    "/api/v1/database/backup",
+                    json=self._s3_body(),
+                    headers=AUTH,
+                )
+            assert r.status_code == 400
+            assert "in-memory" in r.text
+        finally:
+            await app.state.db_engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_restore_creates_sibling_file(
+        self, app_with_file_db, mock_s3,
+    ) -> None:
+        app, db_path = app_with_file_db
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            up = await client.post(
+                "/api/v1/database/backup",
+                json=self._s3_body(),
+                headers=AUTH,
+            )
+            key = up.json()["key"]
+
+            r = await client.post(
+                "/api/v1/database/restore",
+                json={**self._s3_body(), "key": key},
+                headers=AUTH,
+            )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["bucket"] == self._BUCKET
+        assert "notice" in body
+        restored = Path(body["restored_path"])
+        import asyncio as _asyncio
+        assert await _asyncio.to_thread(restored.is_file)
+        assert restored.parent == db_path.parent
+        assert restored.name.startswith("scanner.db.restored-")
+
+    @pytest.mark.asyncio
+    async def test_list_backups_empty_bucket(
+        self, app_with_file_db, mock_s3,
+    ) -> None:
+        app, _ = app_with_file_db
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            r = await client.post(
+                "/api/v1/database/backups",
+                json=self._s3_body(),
+                headers=AUTH,
+            )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["bucket"] == self._BUCKET
+        assert body["objects"] == []
+
+    @pytest.mark.asyncio
+    async def test_list_backups_sees_uploaded(
+        self, app_with_file_db, mock_s3,
+    ) -> None:
+        app, _ = app_with_file_db
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            await client.post(
+                "/api/v1/database/backup",
+                json=self._s3_body(),
+                headers=AUTH,
+            )
+            r = await client.post(
+                "/api/v1/database/backups",
+                json=self._s3_body(),
+                headers=AUTH,
+            )
+        assert r.status_code == 200
+        objs = r.json()["objects"]
+        assert len(objs) == 1
+        assert objs[0]["key"].startswith("scanner-backups/")
 
 
 class TestRotateOnShutdown:

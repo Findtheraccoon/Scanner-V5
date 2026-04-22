@@ -12,6 +12,12 @@ Invariantes (ver README):
    internamente según rango.
 """
 
+from modules.db.backup import (
+    S3Config,
+    backup_to_s3,
+    list_backups,
+    restore_from_s3,
+)
 from modules.db.bootstrap import init_db
 from modules.db.helpers import (
     DEFAULT_PAGE_LIMIT,
@@ -50,11 +56,14 @@ __all__ = [
     "CandleM15",
     "CandleTF",
     "Heartbeat",
+    "S3Config",
     "Signal",
     "SystemLog",
+    "backup_to_s3",
     "default_url",
     "init_db",
     "latest_candle_dt",
+    "list_backups",
     "make_engine",
     "make_session_factory",
     "now_et",
@@ -62,6 +71,7 @@ __all__ = [
     "read_signal_by_id",
     "read_signals_history",
     "read_signals_latest",
+    "restore_from_s3",
     "write_candles_batch",
     "write_heartbeat",
     "write_signal",
