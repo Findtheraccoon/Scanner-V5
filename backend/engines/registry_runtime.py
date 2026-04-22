@@ -132,6 +132,45 @@ class RegistryRuntime:
             self._registry = new_registry
             self._warming.clear()
 
+    async def disable_slot(self, slot_id: int) -> bool:
+        """Marca el slot como `DISABLED` en memoria.
+
+        **No persiste en disco** — la persistencia la orquesta la capa
+        REST (SR.3 / frontend) reescribiendo `slot_registry.json` y
+        llamando `replace_registry()`. Este método es el cambio
+        in-memory inmediato para que el próximo ciclo del scan loop
+        NO incluya el slot.
+
+        Returns:
+            `True` si el slot existía y cambió. `False` si no existe.
+        """
+        async with self._lock:
+            for i, s in enumerate(self._registry.slots):
+                if s.slot != slot_id:
+                    continue
+                new_slot = SlotRecord(
+                    slot=s.slot,
+                    status="DISABLED",
+                    ticker=None,
+                    fixture_path=None,
+                    fixture=None,
+                    benchmark=None,
+                    priority=s.priority,
+                    notes=s.notes,
+                    error_code=None,
+                    error_detail=None,
+                )
+                new_slots = list(self._registry.slots)
+                new_slots[i] = new_slot
+                self._registry = SlotRegistry(
+                    metadata=self._registry.metadata,
+                    slots=new_slots,
+                    warnings=self._registry.warnings,
+                )
+                self._warming.discard(slot_id)
+                return True
+            return False
+
     # ─────────────────────────────────────────────────────────────────────
     # Introspección (NO acquire lock — solo para uso interno)
     # ─────────────────────────────────────────────────────────────────────
