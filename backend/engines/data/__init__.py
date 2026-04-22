@@ -9,7 +9,6 @@ contratos con otros componentes.
 
 from engines.data.api_keys import KeyPool, KeyPoolExhaustedError
 from engines.data.config import DataEngineConfig
-from engines.data.engine import DataEngine
 from engines.data.constants import (
     AUTO_CYCLE_DELAY_AFTER_CLOSE_S,
     ENG_060,
@@ -22,6 +21,7 @@ from engines.data.constants import (
     WARMUP_15M_N,
     WARMUP_DAILY_N,
 )
+from engines.data.engine import DataEngine
 from engines.data.fetcher import TwelveDataClient, TwelveDataError
 from engines.data.integrity import check_integrity
 from engines.data.market_calendar import (
