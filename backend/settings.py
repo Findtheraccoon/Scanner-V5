@@ -44,6 +44,21 @@ class Settings(BaseSettings):
     shutdown_timeout_s: float = Field(default=30.0, gt=0)
     log_level: str = Field(default="INFO")
 
+    # Scan loop real (DE.3) — requiere provider + slots + fixture
+    twelvedata_keys: str = Field(
+        default="",
+        description="CSV de API keys de TwelveData (`key_id:secret:cpm:cpd`)",
+    )
+    scan_tickers: str = Field(
+        default="",
+        description="CSV de tickers de slots operativos (ej. 'QQQ,SPY,AAPL')",
+    )
+    scan_fixture_path: str = Field(
+        default="fixtures/qqq_canonical_v1.json",
+        description="Ruta al fixture canonical que usan todos los slots (MVP)",
+    )
+    scan_delay_after_close_s: float = Field(default=3.0, gt=0)
+
     @field_validator("log_level")
     @classmethod
     def _normalize_log_level(cls, v: str) -> str:
@@ -53,3 +68,37 @@ class Settings(BaseSettings):
     def api_keys_set(self) -> set[str]:
         """Parsea el CSV de api_keys → set."""
         return {k.strip() for k in self.api_keys.split(",") if k.strip()}
+
+    @property
+    def scan_tickers_list(self) -> list[str]:
+        """Parsea el CSV de scan_tickers → lista ordenada (slot_id = idx+1)."""
+        return [t.strip() for t in self.scan_tickers.split(",") if t.strip()]
+
+    def parse_twelvedata_keys(self) -> list[dict]:
+        """Parsea `twelvedata_keys` en formato `key_id:secret:cpm:cpd` CSV.
+
+        Returns:
+            Lista de dicts `{key_id, secret, credits_per_minute,
+            credits_per_day}` aptos para `ApiKeyConfig(**d)`.
+        """
+        out: list[dict] = []
+        for entry in self.twelvedata_keys.split(","):
+            entry = entry.strip()
+            if not entry:
+                continue
+            parts = entry.split(":")
+            if len(parts) != 4:
+                raise ValueError(
+                    f"TWELVEDATA_KEYS entry malformed: {entry!r}. "
+                    "Expected `key_id:secret:cpm:cpd`.",
+                )
+            key_id, secret, cpm, cpd = parts
+            out.append(
+                {
+                    "key_id": key_id,
+                    "secret": secret,
+                    "credits_per_minute": int(cpm),
+                    "credits_per_day": int(cpd),
+                },
+            )
+        return out

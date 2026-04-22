@@ -1,34 +1,53 @@
 #!/usr/bin/env python3
 """Entrypoint del backend Scanner V5.
 
-Levanta FastAPI (REST + WebSocket) + workers de background (heartbeat,
-auto scheduler stub). Config via Pydantic Settings (ver `settings.py`)
-que lee de variables de entorno con prefix `SCANNER_`.
+Levanta FastAPI (REST + WebSocket) + workers de background:
 
-**Uso local:**
+- Heartbeat (`scoring=green` cada `heartbeat_interval_s` s).
+- Scan loop AUTO (si `scan_tickers` + `twelvedata_keys` están
+  configurados): al cierre de cada vela 15M + delay, fetch por slot y
+  `scan_and_emit`.
+- Scheduler stub (si `auto_scheduler_enabled` y el scan real no está
+  habilitado): tick periódico para frontend.
 
-    SCANNER_API_KEYS="sk-dev-1,sk-dev-2" python -m backend.main
+**Uso local (sin provider real, solo stub):**
 
-    # Con auto scheduler stub + intervalo corto para testing:
     SCANNER_API_KEYS="sk-dev" \\
     SCANNER_AUTO_SCHEDULER_ENABLED=true \\
     SCANNER_AUTO_SCHEDULER_INTERVAL_S=10 \\
     python -m backend.main
 
+**Uso con provider real (scan loop completo):**
+
+    SCANNER_API_KEYS="sk-dev" \\
+    SCANNER_TWELVEDATA_KEYS="k1:sk-td-1:8:800,k2:sk-td-2:8:800" \\
+    SCANNER_SCAN_TICKERS="QQQ,SPY,AAPL,NVDA" \\
+    SCANNER_SCAN_FIXTURE_PATH="fixtures/qqq_canonical_v1.json" \\
+    python -m backend.main
+
 **Shutdown graceful (spec §4.3):** Uvicorn captura SIGINT/SIGTERM y
 dispara el shutdown del lifespan, que cancela workers + dispose del
-engine. Timeout de 30s default (configurable).
+engine.
 """
 
 from __future__ import annotations
 
+import json
 import sys
+from pathlib import Path
 
 import uvicorn
 from loguru import logger
 
 from api import create_app
-from modules.db import default_url
+from engines.data import (
+    ApiKeyConfig,
+    DataEngine,
+    KeyPool,
+    TwelveDataClient,
+)
+from engines.data.scan_loop import auto_scan_loop
+from modules.db import default_url, make_engine, make_session_factory
 from settings import Settings
 
 
@@ -46,6 +65,83 @@ def _configure_logging(level: str) -> None:
     )
 
 
+def _load_fixture(path: str) -> dict:
+    return json.loads(Path(path).read_text())
+
+
+def _build_scan_loop_factory(settings: Settings):
+    """Si la config incluye provider + tickers + fixture, construye el
+    factory del scan loop real. Si no, retorna `None` — el stub queda
+    activo en su lugar.
+    """
+    td_keys = settings.parse_twelvedata_keys()
+    tickers = settings.scan_tickers_list
+    if not td_keys or not tickers:
+        return None
+
+    try:
+        fixture = _load_fixture(settings.scan_fixture_path)
+    except FileNotFoundError:
+        logger.error(
+            f"Fixture file not found: {settings.scan_fixture_path}. "
+            "Scan loop NOT enabled.",
+        )
+        return None
+
+    # Engine + factory persisten fuera del closure para que se compartan
+    # con el rest de la app. Los construimos acá en main.
+    pool = KeyPool([ApiKeyConfig(**k) for k in td_keys])
+    db_engine = make_engine(default_url(settings.db_path))
+    session_factory = make_session_factory(db_engine)
+    client = TwelveDataClient(pool)
+    data_engine = DataEngine(
+        pool=pool, client=client, session_factory=session_factory,
+    )
+
+    async def factory():
+        from api import create_app as _  # noqa: F401 — referencia sólo para tipado
+
+        # El broadcaster se resuelve lazy desde `app.state`. Pero este
+        # factory se invoca DENTRO del lifespan con el app ya
+        # disponible. Para pasarlo, usamos un closure sobre `_app_ref`
+        # que se setea antes de invocar el factory (ver abajo).
+        raise NotImplementedError("Use build_scan_loop_factory_for_app")
+
+    return {
+        "pool": pool,
+        "client": client,
+        "data_engine": data_engine,
+        "session_factory": session_factory,
+        "tickers": tickers,
+        "fixture": fixture,
+        "delay_after_close_s": settings.scan_delay_after_close_s,
+    }
+
+
+def build_scan_loop_factory_for_app(
+    *,
+    app_broadcaster,
+    data_engine: DataEngine,
+    session_factory,
+    tickers: list[str],
+    fixture: dict,
+    delay_after_close_s: float,
+):
+    """Crea la corutina factory que el lifespan de `create_app` usa."""
+
+    async def factory():
+        await auto_scan_loop(
+            data_engine=data_engine,
+            session_factory=session_factory,
+            broadcaster=app_broadcaster,
+            slot_tickers=tickers,
+            fixture=fixture,
+            delay_after_close_s=delay_after_close_s,
+        )
+
+    return factory
+
+
 def main() -> int:
     settings = Settings()
     _configure_logging(settings.log_level)
@@ -54,28 +150,48 @@ def main() -> int:
     if not keys:
         logger.error(
             "SCANNER_API_KEYS env var missing or empty. "
-            "Set it to a CSV of allowed Bearer tokens before starting."
+            "Set it to a CSV of allowed Bearer tokens before starting.",
         )
         return 1
+
+    # Scan loop real si el config lo permite
+    scan_context = _build_scan_loop_factory(settings)
+    use_real_scan_loop = scan_context is not None
+    use_stub_scheduler = (
+        settings.auto_scheduler_enabled and not use_real_scan_loop
+    )
 
     logger.info(
         "Starting Scanner V5 backend — "
         f"host={settings.host} port={settings.port} "
         f"db={settings.db_path} keys={len(keys)} "
         f"heartbeat={settings.heartbeat_interval_s}s "
-        f"auto_scheduler={'on' if settings.auto_scheduler_enabled else 'off'} "
-        f"shutdown_timeout={settings.shutdown_timeout_s}s"
+        f"scan_loop={'real' if use_real_scan_loop else 'stub' if use_stub_scheduler else 'off'} "
+        f"shutdown_timeout={settings.shutdown_timeout_s}s",
     )
 
+    extra_workers: list = []
     app = create_app(
         valid_api_keys=keys,
         db_url=default_url(settings.db_path),
         auto_init_db=True,
         enable_heartbeat=True,
         heartbeat_interval_s=settings.heartbeat_interval_s,
-        enable_auto_scheduler=settings.auto_scheduler_enabled,
+        enable_auto_scheduler=use_stub_scheduler,
         auto_scheduler_interval_s=settings.auto_scheduler_interval_s,
+        extra_workers=extra_workers,
     )
+
+    if use_real_scan_loop:
+        factory = build_scan_loop_factory_for_app(
+            app_broadcaster=app.state.broadcaster,
+            data_engine=scan_context["data_engine"],
+            session_factory=scan_context["session_factory"],
+            tickers=scan_context["tickers"],
+            fixture=scan_context["fixture"],
+            delay_after_close_s=scan_context["delay_after_close_s"],
+        )
+        extra_workers.append(factory)
 
     config = uvicorn.Config(
         app,

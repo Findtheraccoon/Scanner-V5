@@ -77,6 +77,47 @@ class TestSettings:
             Settings()
 
 
+class TestSettingsScanLoop:
+    def test_scan_tickers_list_empty(self, monkeypatch) -> None:
+        from settings import Settings
+
+        monkeypatch.setenv("SCANNER_SCAN_TICKERS", "")
+        assert Settings().scan_tickers_list == []
+
+    def test_scan_tickers_list_csv(self, monkeypatch) -> None:
+        from settings import Settings
+
+        monkeypatch.setenv("SCANNER_SCAN_TICKERS", "QQQ, SPY, AAPL")
+        assert Settings().scan_tickers_list == ["QQQ", "SPY", "AAPL"]
+
+    def test_parse_twelvedata_keys_empty(self, monkeypatch) -> None:
+        from settings import Settings
+
+        monkeypatch.setenv("SCANNER_TWELVEDATA_KEYS", "")
+        assert Settings().parse_twelvedata_keys() == []
+
+    def test_parse_twelvedata_keys_ok(self, monkeypatch) -> None:
+        from settings import Settings
+
+        monkeypatch.setenv(
+            "SCANNER_TWELVEDATA_KEYS",
+            "k1:sk-abc:8:800,k2:sk-def:5:500",
+        )
+        keys = Settings().parse_twelvedata_keys()
+        assert len(keys) == 2
+        assert keys[0] == {
+            "key_id": "k1", "secret": "sk-abc",
+            "credits_per_minute": 8, "credits_per_day": 800,
+        }
+
+    def test_parse_twelvedata_keys_malformed_raises(self, monkeypatch) -> None:
+        from settings import Settings
+
+        monkeypatch.setenv("SCANNER_TWELVEDATA_KEYS", "k1:onlytwo")
+        with pytest.raises(ValueError, match="malformed"):
+            Settings().parse_twelvedata_keys()
+
+
 class TestMainExitCodes:
     def test_missing_keys_returns_1(self, monkeypatch) -> None:
         from main import main

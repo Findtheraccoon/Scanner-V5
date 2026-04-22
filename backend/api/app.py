@@ -49,6 +49,7 @@ def create_app(
     heartbeat_interval_s: float = DEFAULT_HEARTBEAT_INTERVAL_S,
     enable_auto_scheduler: bool = False,
     auto_scheduler_interval_s: float = DEFAULT_AUTO_SCHEDULER_INTERVAL_S,
+    extra_workers: list | None = None,
 ) -> FastAPI:
     """Construye una `FastAPI` lista para correr.
 
@@ -70,6 +71,11 @@ def create_app(
             esté disponible. Default `False`.
         auto_scheduler_interval_s: intervalo del scheduler stub
             (default 60s).
+        extra_workers: lista de factories `() -> Coroutine` que devuelven
+            la corutina a lanzar como task de background. Permite al
+            entrypoint registrar el `auto_scan_loop` real sin acoplar el
+            app factory a Data Engine. Cada factory se invoca una vez al
+            arranque del lifespan.
 
     Returns:
         `FastAPI` con lifecycle, routers y workers registrados.
@@ -105,6 +111,14 @@ def create_app(
                     name="auto_scheduler_worker",
                 ),
             )
+        if extra_workers:
+            for idx, factory in enumerate(extra_workers):
+                workers.append(
+                    asyncio.create_task(
+                        factory(),
+                        name=f"extra_worker_{idx}",
+                    ),
+                )
         app.state.workers = workers
         try:
             yield
