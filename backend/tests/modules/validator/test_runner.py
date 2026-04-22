@@ -209,6 +209,43 @@ async def test_with_probes_g_runs(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_slot_revalidation_runs_abc_only(tmp_path: Path) -> None:
+    """La revalidación post-hot-reload corre solo A → B → C."""
+    engine = make_engine("sqlite+aiosqlite:///:memory:")
+    factory = make_session_factory(engine)
+    broadcaster = _CapturingBroadcaster()
+
+    registry_path = _write_registry(tmp_path)
+    registry = load_registry(registry_path, engine_version=ENGINE_VERSION)
+    runtime = RegistryRuntime(registry)
+
+    try:
+        v = Validator(
+            session_factory=factory,
+            broadcaster=broadcaster,
+            log_dir=tmp_path,
+            registry=runtime,
+            registry_path=registry_path,
+        )
+        report = await v.run_slot_revalidation()
+        assert [t.test_id for t in report.tests] == ["A", "B", "C"]
+        # Todos deben pasar con el registry healthy
+        assert all(t.status == "pass" for t in report.tests)
+
+        # Progress events: 3 tests x 2 emisiones = 6
+        progress = [
+            e for e in broadcaster.emitted
+            if e["event"] == EVENT_VALIDATOR_PROGRESS
+        ]
+        assert len(progress) == 6
+        # Todos comparten el mismo run_id
+        run_ids = {e["payload"]["run_id"] for e in progress}
+        assert run_ids == {report.run_id}
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_with_scan_executor_e_runs(tmp_path: Path) -> None:
     """Con scan_executor pasado, Check E corre y pasa."""
     engine = make_engine("sqlite+aiosqlite:///:memory:")

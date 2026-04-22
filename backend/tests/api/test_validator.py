@@ -142,6 +142,45 @@ class TestLatestReport:
         assert latest.json()["run_id"] == run_id_2
 
 
+class TestLogPersistence:
+    """La ruta `POST /run` escribe el TXT a `app.state.log_dir` si existe."""
+
+    @pytest.mark.asyncio
+    async def test_run_writes_txt_log(
+        self, app_with_validator, tmp_path: Path,
+    ) -> None:
+        app_with_validator.state.log_dir = str(tmp_path / "LOG")
+        async with AsyncClient(
+            transport=ASGITransport(app=app_with_validator),
+            base_url="http://test",
+        ) as client:
+            r = await client.post("/api/v1/validator/run", headers=AUTH)
+        assert r.status_code == 200
+        run_id = r.json()["run_id"]
+        # Debe haber un archivo validator-*-<short_id>.txt en LOG/
+        # (FS sync IO en test es aceptable — ASYNC240 irrelevante acá.)
+        log_dir = tmp_path / "LOG"
+        files = sorted(log_dir.iterdir())
+        matching = [
+            f for f in files if f.name.startswith("validator-") and run_id[:8] in f.name
+        ]
+        assert len(matching) == 1
+        assert run_id in matching[0].read_text()
+
+    @pytest.mark.asyncio
+    async def test_run_without_log_dir_skips_file(
+        self, app_with_validator,
+    ) -> None:
+        """Sin `app.state.log_dir`, el endpoint funciona sin intentar escribir."""
+        # No seteamos log_dir
+        async with AsyncClient(
+            transport=ASGITransport(app=app_with_validator),
+            base_url="http://test",
+        ) as client:
+            r = await client.post("/api/v1/validator/run", headers=AUTH)
+        assert r.status_code == 200
+
+
 class TestOpenApi:
     @pytest.mark.asyncio
     async def test_endpoints_documented(self, app_with_validator) -> None:

@@ -342,3 +342,128 @@ class TestDisableSlotPersistence:
         changed = await rt.disable_slot(99)
         assert changed is False
         assert not path.exists()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# enable_slot — hot-reload con fixture + warmup overlay
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestEnableSlot:
+    @staticmethod
+    def _write_fixture(fixtures_root, *, ticker="QQQ", benchmark="SPY"):
+        """Escribe una fixture válida en fixtures_root/qqq.json y
+        devuelve el path relativo."""
+        import json
+        fixtures_dir = fixtures_root / "fixtures"
+        fixtures_dir.mkdir(exist_ok=True)
+        fx = _fixture_dict()
+        # Ajustar ticker/benchmark para el test
+        fx["ticker_info"]["ticker"] = ticker
+        fx["ticker_info"]["benchmark"] = benchmark
+        fx["ticker_info"]["requires_bench_daily"] = benchmark is not None
+        (fixtures_dir / "qqq.json").write_text(json.dumps(fx))
+        return "fixtures/qqq.json"
+
+    @pytest.mark.asyncio
+    async def test_enable_slot_puts_warming_up(self, tmp_path) -> None:
+        fx_rel = self._write_fixture(tmp_path)
+        path = tmp_path / "slot_registry.json"
+        rt = RegistryRuntime(
+            _registry([_slot(1, status="DISABLED", ticker=None, with_fixture=False)]),
+            registry_path=path,
+        )
+
+        new_slot = await rt.enable_slot(
+            1,
+            ticker="QQQ",
+            fixture_path=fx_rel,
+            benchmark="SPY",
+            fixtures_root=tmp_path,
+            engine_version="5.2.0",
+        )
+        assert new_slot.status == "OPERATIVE"
+        assert new_slot.ticker == "QQQ"
+
+        # El overlay de warmup está activo → effective_status=warming_up
+        assert await rt.effective_status(1) == "warming_up"
+        # Hasta que mark_warmed:
+        await rt.mark_warmed(1)
+        assert await rt.effective_status(1) == "active"
+
+    @pytest.mark.asyncio
+    async def test_enable_persists_to_disk(self, tmp_path) -> None:
+        import json
+        fx_rel = self._write_fixture(tmp_path)
+        path = tmp_path / "slot_registry.json"
+        rt = RegistryRuntime(
+            _registry([_slot(1, status="DISABLED", ticker=None, with_fixture=False)]),
+            registry_path=path,
+        )
+        await rt.enable_slot(
+            1,
+            ticker="QQQ",
+            fixture_path=fx_rel,
+            benchmark="SPY",
+            fixtures_root=tmp_path,
+            engine_version="5.2.0",
+        )
+        data = json.loads(path.read_text())
+        slot1 = next(s for s in data["slots"] if s["slot"] == 1)
+        assert slot1["enabled"] is True
+        assert slot1["ticker"] == "QQQ"
+        assert slot1["fixture"] == fx_rel
+
+    @pytest.mark.asyncio
+    async def test_enable_rejects_ticker_mismatch(self, tmp_path) -> None:
+        from modules.slot_registry import REG_012, RegistryError
+        fx_rel = self._write_fixture(tmp_path, ticker="QQQ")
+        rt = RegistryRuntime(
+            _registry([_slot(1, status="DISABLED", ticker=None, with_fixture=False)]),
+        )
+        with pytest.raises(RegistryError) as exc:
+            await rt.enable_slot(
+                1,
+                ticker="SPY",  # mismatch vs fixture
+                fixture_path=fx_rel,
+                benchmark="SPY",
+                fixtures_root=tmp_path,
+                engine_version="5.2.0",
+            )
+        assert exc.value.code == REG_012
+
+    @pytest.mark.asyncio
+    async def test_enable_rejects_engine_incompatible(self, tmp_path) -> None:
+        from modules.slot_registry import REG_011, RegistryError
+        fx_rel = self._write_fixture(tmp_path)
+        rt = RegistryRuntime(
+            _registry([_slot(1, status="DISABLED", ticker=None, with_fixture=False)]),
+        )
+        with pytest.raises(RegistryError) as exc:
+            await rt.enable_slot(
+                1,
+                ticker="QQQ",
+                fixture_path=fx_rel,
+                benchmark="SPY",
+                fixtures_root=tmp_path,
+                engine_version="9.9.9",  # fuera del range de la fixture
+            )
+        assert exc.value.code == REG_011
+
+    @pytest.mark.asyncio
+    async def test_enable_fixture_not_found(self, tmp_path) -> None:
+        """Archivo ausente: `load_fixture` lanza FixtureError FIX-000."""
+        from modules.fixtures import FIX_000, FixtureError
+        rt = RegistryRuntime(
+            _registry([_slot(1, status="DISABLED", ticker=None, with_fixture=False)]),
+        )
+        with pytest.raises(FixtureError) as exc:
+            await rt.enable_slot(
+                1,
+                ticker="QQQ",
+                fixture_path="fixtures/ghost.json",
+                benchmark="SPY",
+                fixtures_root=tmp_path,
+                engine_version="5.2.0",
+            )
+        assert exc.value.code == FIX_000

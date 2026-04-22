@@ -155,6 +155,40 @@ class Validator:
         )
         return result
 
+    async def run_slot_revalidation(self) -> ValidatorReport:
+        """Corre A → B → C para validar post-hot-reload (spec §3.3).
+
+        Se invoca tras un `PATCH /slots` exitoso. A/B/C son los
+        relevantes: validan fixtures + canonicals + registry en disco.
+        D/E/F/G no aplican — la infra no cambió y el parity es caro.
+
+        Retorna un reporte con 3 tests (D/E/F/G no incluidos).
+        """
+        run_id = str(uuid.uuid4())
+        started_at = now_et()
+        logger.info(f"Validator slot revalidation {run_id} — A→B→C")
+
+        results: list[TestResult] = []
+        for test_id in ("A", "B", "C"):
+            await self._emit_progress(run_id, test_id, status="running")
+            result = await self._run_test(test_id)
+            results.append(result)
+            await self._emit_progress(
+                run_id,
+                test_id,
+                status=result.status,
+                message=result.message,
+                error_code=result.error_code,
+            )
+
+        finished_at = now_et()
+        return ValidatorReport(
+            run_id=run_id,
+            started_at=started_at,
+            finished_at=finished_at,
+            tests=results,
+        )
+
     async def _run_test(self, test_id: TestId) -> TestResult:
         """Despacha a la implementación del test.
 

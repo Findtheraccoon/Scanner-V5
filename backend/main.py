@@ -51,6 +51,7 @@ from engines.scoring import ENGINE_VERSION
 from modules.db import default_url, make_engine, make_session_factory
 from modules.slot_registry import RegistryError, load_registry
 from modules.validator import Validator
+from modules.validator.log_writer import write_report_log
 from settings import Settings
 
 
@@ -201,8 +202,9 @@ def _build_validator(
 
 
 def _build_validator_startup_factory(app):
-    """Factory para el lifespan: corre la batería al arrancar y guarda
-    el reporte en `app.state.last_validator_report`.
+    """Factory para el lifespan: corre la batería al arrancar, guarda
+    el reporte en `app.state.last_validator_report` y escribe el TXT
+    a `/LOG/` si hay `app.state.log_dir`.
 
     Loggea el `overall_status`. No crashea si algún test falla —
     continue-on-fatal según decisión de diseño V.7.
@@ -213,6 +215,15 @@ def _build_validator_startup_factory(app):
         logger.info("Validator startup run — launching full battery")
         report = await validator.run_full_battery()
         app.state.last_validator_report = report
+        log_dir = getattr(app.state, "log_dir", None)
+        if log_dir is not None:
+            try:
+                target = write_report_log(report, Path(log_dir))
+                logger.info(f"Validator TXT log written to {target}")
+            except OSError:
+                logger.exception(
+                    f"could not write validator TXT log to {log_dir}",
+                )
         logger.info(
             f"Validator startup run done — overall={report.overall_status} "
             f"run_id={report.run_id}",
@@ -270,15 +281,17 @@ def main() -> int:
             delay_after_close_s=scan_context["delay_after_close_s"],
         )
         extra_workers.append(factory)
-        # Expose registry via app.state para que endpoints REST (SR.3)
-        # puedan consultarlo.
+        # Expose registry + data_engine via app.state para que los
+        # endpoints REST puedan consultarlos (SR.3 + PATCH enable).
         app.state.registry_runtime = scan_context["registry"]
+        app.state.data_engine = scan_context["data_engine"]
 
     # V.7 — Validator wiring. Se construye siempre (standalone si no
     # hay scan_context) y se engancha al app.state para que los
     # endpoints REST funcionen. Si `validator_run_at_startup`, se
     # agrega un worker que corre la batería completa post-startup.
     app.state.validator = _build_validator(settings, app, scan_context)
+    app.state.log_dir = settings.log_dir
     if settings.validator_run_at_startup:
         extra_workers.append(_build_validator_startup_factory(app))
 
