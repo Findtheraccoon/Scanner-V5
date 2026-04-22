@@ -347,6 +347,118 @@ class TestBackupEndpoints:
         assert objs[0]["key"].startswith("scanner-backups/")
 
 
+class TestAggressiveRotationEndpoint:
+    """`POST /database/rotate/aggressive` (§9.4)."""
+
+    @pytest_asyncio.fixture
+    async def app_file_db(self, tmp_path):
+        """App con DB en archivo real + archive + size_limit bajo."""
+        from api import create_app
+        from modules.db import init_db
+
+        db_path = tmp_path / "scanner.db"
+        archive_path = tmp_path / "archive.db"
+        app = create_app(
+            valid_api_keys={"sk-test"},
+            db_url=f"sqlite+aiosqlite:///{db_path}",
+            archive_db_url=f"sqlite+aiosqlite:///{archive_path}",
+            auto_init_db=False,
+            db_size_limit_mb=0,  # forzar trigger con cualquier contenido
+        )
+        await init_db(app.state.db_engine)
+        await init_db(app.state.archive_engine)
+        yield app, db_path
+        await app.state.db_engine.dispose()
+        await app.state.archive_engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_503_without_archive(self) -> None:
+        from api import create_app
+        from modules.db import init_db
+
+        app = create_app(
+            valid_api_keys={"sk-test"},
+            db_url="sqlite+aiosqlite:///:memory:",
+            archive_db_url=None,
+            auto_init_db=False,
+        )
+        await init_db(app.state.db_engine)
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                r = await client.post(
+                    "/api/v1/database/rotate/aggressive", headers=AUTH,
+                )
+            assert r.status_code == 503
+        finally:
+            await app.state.db_engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_400_with_memory_db(self) -> None:
+        from api import create_app
+        from modules.db import init_db
+
+        app = create_app(
+            valid_api_keys={"sk-test"},
+            db_url="sqlite+aiosqlite:///:memory:",
+            archive_db_url="sqlite+aiosqlite:///:memory:",
+            auto_init_db=False,
+        )
+        await init_db(app.state.db_engine)
+        await init_db(app.state.archive_engine)
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                r = await client.post(
+                    "/api/v1/database/rotate/aggressive", headers=AUTH,
+                )
+            assert r.status_code == 400
+        finally:
+            await app.state.db_engine.dispose()
+            await app.state.archive_engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_triggers_when_over_limit(self, app_file_db) -> None:
+        app, _ = app_file_db
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            r = await client.post(
+                "/api/v1/database/rotate/aggressive", headers=AUTH,
+            )
+        assert r.status_code == 200
+        body = r.json()
+        assert body["triggered"] is True
+        assert body["size_mb_before"] > 0
+        assert "rotation" in body
+        assert body["vacuum_recommended"] is True
+
+
+class TestStatsIncludesSize:
+    """`/stats` devuelve `size_mb_operative` + `size_limit_mb` (AR.5)."""
+
+    @pytest.mark.asyncio
+    async def test_stats_exposes_size_fields(
+        self, app_with_archive,
+    ) -> None:
+        async with AsyncClient(
+            transport=ASGITransport(app=app_with_archive),
+            base_url="http://test",
+        ) as client:
+            r = await client.get("/api/v1/database/stats", headers=AUTH)
+        assert r.status_code == 200
+        body = r.json()
+        # En :memory: size es None
+        assert "size_mb_operative" in body
+        assert "size_limit_mb" in body
+        assert body["size_limit_mb"] == 5000  # default
+
+
 class TestRotateOnShutdown:
     """Smoke test: `rotate_on_shutdown=True` dispara la rotación al
     cerrar el lifespan."""

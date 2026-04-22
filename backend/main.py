@@ -290,6 +290,7 @@ def main() -> int:
         auto_scheduler_interval_s=settings.auto_scheduler_interval_s,
         extra_workers=extra_workers,
         rotate_on_shutdown=settings.rotate_on_shutdown,
+        db_size_limit_mb=settings.db_size_limit_mb,
     )
 
     if use_real_scan_loop:

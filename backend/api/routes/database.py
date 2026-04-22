@@ -5,8 +5,11 @@
 - `POST /api/v1/database/rotate` — botón "Correr limpieza ahora" del
   Dashboard (spec §5.3). Con archive configurado corre
   `rotate_with_archive`; sin archive usa modo legacy `rotate_expired`.
+- `POST /api/v1/database/rotate/aggressive` — rotación agresiva §9.4
+  (50% de las retenciones normales). Solo dispara si la DB supera
+  `SCANNER_DB_SIZE_LIMIT_MB`; si no, retorna `triggered=false`.
 - `GET /api/v1/database/stats` — filas por tabla en operativa + (si
-  aplica) archive + retention_seconds. Alimenta §5.3 del Dashboard.
+  aplica) archive + retention_seconds + size_mb_operative + umbrales.
 
 **AR.2 — backup/restore S3:**
 
@@ -31,6 +34,8 @@ from pydantic import BaseModel, ConfigDict
 
 from api.auth import require_auth
 from engines.database.rotation import (
+    DEFAULT_SIZE_LIMIT_MB,
+    check_and_rotate_aggressive,
     compute_stats,
     rotate_expired,
     rotate_with_archive,
@@ -91,7 +96,11 @@ async def get_stats(
     request: Request,
     _token: str = Depends(require_auth),
 ) -> dict:
-    """Snapshot de filas por tabla en operativa + archive + retención."""
+    """Snapshot de filas por tabla en operativa + archive + retención.
+
+    Incluye también `size_mb_operative` y `size_limit_mb` — útil para
+    el Dashboard §5.3 que dibuja una barra hacia el umbral agresivo.
+    """
     session_factory = request.app.state.session_factory
     archive_factory = request.app.state.archive_session_factory
 
@@ -102,7 +111,82 @@ async def get_stats(
         else:
             stats = await compute_stats(op, None)
 
-    return {"archive_configured": archive_factory is not None, "tables": stats}
+    # Tamaño del archivo operativo (si existe).
+    size_mb = None
+    db_path = _try_derive_db_path(request)
+    if db_path is not None:
+        try:
+            size_mb = db_path.stat().st_size / (1024 * 1024)
+        except OSError:
+            size_mb = None
+
+    size_limit_mb = getattr(
+        request.app.state, "db_size_limit_mb", DEFAULT_SIZE_LIMIT_MB,
+    )
+
+    return {
+        "archive_configured": archive_factory is not None,
+        "tables": stats,
+        "size_mb_operative": size_mb,
+        "size_limit_mb": size_limit_mb,
+    }
+
+
+@router.post("/rotate/aggressive")
+async def rotate_aggressive(
+    request: Request,
+    _token: str = Depends(require_auth),
+) -> dict:
+    """Rotación agresiva (§9.4) — solo dispara si DB > `size_limit_mb`.
+
+    Con archive configurado: mueve al archive con políticas agresivas
+    (50% de las normales). Sin archive: 503, porque la versión
+    agresiva no tiene sentido sin destino.
+
+    Retorna `{triggered, size_mb_before, size_mb_after, rotation,
+    vacuum_recommended}`.
+    """
+    session_factory = request.app.state.session_factory
+    archive_factory = request.app.state.archive_session_factory
+
+    if archive_factory is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Aggressive rotation requires an archive DB configured. "
+                "Set SCANNER_ARCHIVE_DB_PATH."
+            ),
+        )
+
+    db_path = _try_derive_db_path(request)
+    if db_path is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Aggressive rotation requires a file-based SQLite DB.",
+        )
+
+    size_limit_mb = getattr(
+        request.app.state, "db_size_limit_mb", DEFAULT_SIZE_LIMIT_MB,
+    )
+
+    async with session_factory() as op, archive_factory() as ar:
+        result = await check_and_rotate_aggressive(
+            op, ar, db_path, size_limit_mb=size_limit_mb,
+        )
+    return result
+
+
+def _try_derive_db_path(request: Request):
+    """`:memory:` → None. Archivo físico → `Path`."""
+    from pathlib import Path as _Path
+
+    engine = request.app.state.db_engine
+    url = str(engine.url)
+    if ":memory:" in url:
+        return None
+    if "///" in url:
+        return _Path(url.split("///", 1)[1])
+    return None
 
 
 def _require_db_path(request: Request) -> Path:
