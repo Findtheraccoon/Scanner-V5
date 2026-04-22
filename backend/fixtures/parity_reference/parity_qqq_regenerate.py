@@ -88,17 +88,35 @@ def slice_for_signal(
 ) -> dict[str, Any]:
     """Construye los inputs de `analyze()` correspondientes al momento T.
 
-    - `candles_15m`: agg de 1min hasta `T` inclusive (última vela parcial).
-    - `candles_1h`: agg de 1min hasta `T` inclusive.
-    - `candles_daily`: todas las velas daily **anteriores** a `T[:10]`.
-      (La sesión del día de T aún no ha cerrado, no se incluye.)
-    - `spy_daily`: idem pero de SPY.
+    - `candles_15m` / `candles_1h`: agg de 1min hasta `T` inclusive
+      (última vela parcial).
+    - `candles_daily`: velas daily cerradas hasta e incluyendo la del
+      día actual (`dt <= date`).
+    - `spy_daily`: análogo.
+
+    **Por qué incluir la daily cerrada del día actual en replay mode:**
+
+    El sample canonical QQQ fue generado por Observatory en replay
+    mode: al procesar la sesión del 28-feb, Observatory ya tiene las
+    velas daily cerradas hasta 28-feb inclusive. Entonces `a_chg` usa
+    el close final del día (1.58%) y `spy_chg` el close final de SPY
+    (1.56%), ambos alineados. Un replay puro no inventa velas
+    parciales.
+
+    En live production esto sería look-ahead (al momento 10:30 no se
+    conoce el close_final del día), pero la paridad con el sample
+    requiere replicar la lógica del replay. El live path se adapta en
+    una fase posterior construyendo parciales coherentes para todos
+    los tickers al mismo tiempo.
     """
     date = signal_dt[:10]
-    c15 = aggregate_to_15m(qqq_1min, until_dt=signal_dt)
-    c1h = aggregate_to_1h(qqq_1min, until_dt=signal_dt)
-    cd = [c for c in qqq_daily if c["dt"] < date]
-    sd = [c for c in spy_daily if c["dt"] < date]
+    c15 = aggregate_to_15m(qqq_1min, until_dt=signal_dt, include_partial=True)
+    # 1H con parcial: mantiene paridad con más triggers aunque pierde
+    # algunos casos de trend por MA20 distorsionada (trade-off 189 vs 160).
+    # Ver notas de divergencia en CLAUDE.md para la investigación futura.
+    c1h = aggregate_to_1h(qqq_1min, until_dt=signal_dt, include_partial=True)
+    cd = [c for c in qqq_daily if c["dt"] <= date]
+    sd = [c for c in spy_daily if c["dt"] <= date]
     return {
         "candles_15m": c15,
         "candles_1h": c1h,

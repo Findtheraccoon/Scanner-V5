@@ -72,6 +72,7 @@ def aggregate_1min(
     candles_1min: list[dict],
     bucket_fn,
     until_dt: str | None = None,
+    include_partial: bool = True,
 ) -> list[dict]:
     """Agrega velas 1-minuto según `bucket_fn` (función que recibe dt
     y devuelve el dt del bucket).
@@ -82,10 +83,13 @@ def aggregate_1min(
         bucket_fn: `_bucket_15m_open` o `_bucket_1h_open`.
         until_dt: si se pasa, descarta velas 1min con `dt > until_dt`
             (permite slicing sin look-ahead).
+        include_partial: si `False`, descarta el último bucket si es
+            parcial (no tuvo el minuto final del bucket). Útil para
+            emular la convención Observatory donde 1H solo usa buckets
+            completamente cerrados mientras 15M sí incluye la parcial.
 
     Returns:
-        Lista ordenada de velas agregadas. La última puede ser parcial
-        si `until_dt` cae dentro de un bucket.
+        Lista ordenada de velas agregadas.
     """
     if not candles_1min:
         return []
@@ -110,7 +114,27 @@ def aggregate_1min(
 
     if bucket_candles:
         result.append(_agg_bucket(current_bucket, bucket_candles))
+
+    if not include_partial and result and until_dt is not None:
+        # El último bucket es parcial si su "next open" es posterior a until_dt.
+        # Para 15M [T, T+14]: bucket cerró cuando hay vela del bucket siguiente.
+        # Simplificación: detectar si el último 1min del bucket es el último
+        # minuto esperado (T+14 para 15M, HH:59 para 1H). Si no, descartar.
+        last_bucket = result[-1]
+        last_1min = bucket_candles[-1]
+        # Si el bucket no tiene la vela final esperada, es parcial.
+        if _is_partial_bucket(last_bucket["dt"], last_1min["dt"], bucket_fn):
+            result.pop()
     return result
+
+
+def _is_partial_bucket(bucket_dt: str, last_1min_dt: str, bucket_fn) -> bool:
+    """Heurística: un bucket es parcial si el siguiente minuto después
+    del último 1min sigue perteneciendo al mismo bucket."""
+    from datetime import datetime, timedelta
+    t = datetime.strptime(last_1min_dt, "%Y-%m-%d %H:%M:%S")
+    next_min = (t + timedelta(minutes=1)).strftime("%Y-%m-%d %H:%M:%S")
+    return bucket_fn(next_min) == bucket_dt
 
 
 def _agg_bucket(bucket_dt: str, candles: list[dict]) -> dict:
@@ -128,21 +152,30 @@ def _agg_bucket(bucket_dt: str, candles: list[dict]) -> dict:
 def aggregate_to_15m(
     candles_1min: list[dict],
     until_dt: str | None = None,
+    include_partial: bool = True,
 ) -> list[dict]:
     """Agrega 1-minuto a velas 15M open-stamped.
 
     Buckets: [HH:00, HH:14], [HH:15, HH:29], [HH:30, HH:44], [HH:45, HH:59].
+
+    **Por default `include_partial=True`** porque el scanner Observatory
+    construye la vela 15M en curso con los minutos disponibles — el
+    close del bucket abierto matchea `price_at_signal` del sample.
     """
-    return aggregate_1min(candles_1min, _bucket_15m_open, until_dt)
+    return aggregate_1min(candles_1min, _bucket_15m_open, until_dt, include_partial)
 
 
 def aggregate_to_1h(
     candles_1min: list[dict],
     until_dt: str | None = None,
+    include_partial: bool = True,
 ) -> list[dict]:
     """Agrega 1-minuto a velas 1H open-stamped alineadas a HH:00.
 
-    El primer bucket de cada día (09:00 en US market) puede ser parcial
-    — agrupa desde 09:30 en vez de 09:00.
+    **Por default `include_partial=True`** (comportamiento genérico).
+    Para paridad con Observatory en replay mode se recomienda pasar
+    `include_partial=False` — la MA20/MA40 1H se calcula sobre buckets
+    completamente cerrados únicamente, y `candles_1h[-1]` es la última
+    hora cerrada (no la en curso).
     """
-    return aggregate_1min(candles_1min, _bucket_1h_open, until_dt)
+    return aggregate_1min(candles_1min, _bucket_1h_open, until_dt, include_partial)
