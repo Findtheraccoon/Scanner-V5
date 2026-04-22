@@ -21,6 +21,7 @@ import zoneinfo
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     DateTime,
     Float,
     Index,
@@ -191,3 +192,70 @@ class SystemLog(Base):
         Index("ix_system_log_level_ts", "level", "ts"),
         Index("ix_system_log_ts", "ts"),
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Candles — 3 tablas con schema idéntico pero retenciones distintas
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# Schema común OHLCV + ticker + dt (tz-aware ET). PK compuesta
+# `(ticker, dt)` garantiza idempotencia de UPSERT: una vela por
+# timeframe para (ticker, momento). Retenciones (spec §3.7):
+#
+#     candles_daily → 3 años, luego archive.
+#     candles_1h    → 6 meses, luego archive.
+#     candles_15m   → 3 meses, luego archive.
+#
+# 3 tablas separadas (no una sola con columna `timeframe`) porque:
+#
+#   1. Retenciones distintas → rotación más simple.
+#   2. Queries por TF son más chicos (3x más chico que tabla unificada).
+#   3. SQLite no tiene particionado nativo.
+
+
+class CandleDaily(Base):
+    """Velas diarias. Retención operativa 3 años."""
+
+    __tablename__ = "candles_daily"
+
+    ticker: Mapped[str] = mapped_column(String(10), primary_key=True)
+    dt: Mapped[_dt.datetime] = mapped_column(ETDateTime(), primary_key=True)
+    o: Mapped[float] = mapped_column(Float)
+    h: Mapped[float] = mapped_column(Float)
+    l: Mapped[float] = mapped_column(Float)  # noqa: E741 — OHLC canonical name
+    c: Mapped[float] = mapped_column(Float)
+    v: Mapped[int] = mapped_column(BigInteger)
+
+    __table_args__ = (Index("ix_candles_daily_ticker_dt", "ticker", "dt"),)
+
+
+class CandleH1(Base):
+    """Velas 1-hora. Retención operativa 6 meses."""
+
+    __tablename__ = "candles_1h"
+
+    ticker: Mapped[str] = mapped_column(String(10), primary_key=True)
+    dt: Mapped[_dt.datetime] = mapped_column(ETDateTime(), primary_key=True)
+    o: Mapped[float] = mapped_column(Float)
+    h: Mapped[float] = mapped_column(Float)
+    l: Mapped[float] = mapped_column(Float)  # noqa: E741 — OHLC canonical name
+    c: Mapped[float] = mapped_column(Float)
+    v: Mapped[int] = mapped_column(BigInteger)
+
+    __table_args__ = (Index("ix_candles_1h_ticker_dt", "ticker", "dt"),)
+
+
+class CandleM15(Base):
+    """Velas 15-minuto. Retención operativa 3 meses."""
+
+    __tablename__ = "candles_15m"
+
+    ticker: Mapped[str] = mapped_column(String(10), primary_key=True)
+    dt: Mapped[_dt.datetime] = mapped_column(ETDateTime(), primary_key=True)
+    o: Mapped[float] = mapped_column(Float)
+    h: Mapped[float] = mapped_column(Float)
+    l: Mapped[float] = mapped_column(Float)  # noqa: E741 — OHLC canonical name
+    c: Mapped[float] = mapped_column(Float)
+    v: Mapped[int] = mapped_column(BigInteger)
+
+    __table_args__ = (Index("ix_candles_15m_ticker_dt", "ticker", "dt"),)

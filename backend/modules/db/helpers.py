@@ -29,15 +29,33 @@ objetos SQLAlchemy directamente (invariante #1 del README).
 from __future__ import annotations
 
 import datetime as _dt
-from typing import Any
+from typing import Any, Literal
 
-from sqlalchemy import desc, select
+from sqlalchemy import asc, desc, func, select
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from modules.db.models import Heartbeat, Signal, SystemLog
+from modules.db.models import (
+    CandleDaily,
+    CandleH1,
+    CandleM15,
+    Heartbeat,
+    Signal,
+    SystemLog,
+)
 
 DEFAULT_PAGE_LIMIT: int = 100
 MAX_PAGE_LIMIT: int = 500
+
+# Literal string para timeframes — evita dependencia circular con
+# `engines.data.models.Timeframe`. El caller (Data Engine) hace el mapeo.
+CandleTF = Literal["daily", "1h", "15m"]
+
+_CANDLE_MODELS = {
+    "daily": CandleDaily,
+    "1h": CandleH1,
+    "15m": CandleM15,
+}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -328,3 +346,138 @@ def _signal_to_dict(sig: Signal, *, include_snapshot: bool = False) -> dict[str,
     if include_snapshot:
         d["candles_snapshot_gzip"] = sig.candles_snapshot_gzip
     return d
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Candles — cache local de velas por timeframe
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+async def write_candles_batch(
+    session: AsyncSession,
+    *,
+    timeframe: CandleTF,
+    ticker: str,
+    candles: list[dict[str, Any]],
+) -> int:
+    """UPSERT de un batch de velas al TF correspondiente.
+
+    Idempotente por PK `(ticker, dt)` — si una vela ya existe con el
+    mismo `dt`, se sobrescribe con los valores nuevos (típicamente
+    velas del día actual que todavía están cerrándose).
+
+    Args:
+        session: sesión async abierta.
+        timeframe: `"daily"`, `"1h"` o `"15m"`.
+        ticker: símbolo.
+        candles: lista de dicts con `dt, o, h, l, c, v`. `dt` debe ser
+            `datetime` tz-aware ET (ADR-0002) — el type decorator
+            `ETDateTime` normaliza si viene en otra zona.
+
+    Returns:
+        Cantidad de filas procesadas (puede ser < len(candles) si hay
+        duplicados exactos, pero típicamente = len(candles)).
+    """
+    if not candles:
+        return 0
+
+    model = _CANDLE_MODELS[timeframe]
+    rows = [
+        {
+            "ticker": ticker,
+            "dt": c["dt"],
+            "o": c["o"],
+            "h": c["h"],
+            "l": c["l"],
+            "c": c["c"],
+            "v": c["v"],
+        }
+        for c in candles
+    ]
+    stmt = sqlite_insert(model).values(rows)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[model.ticker, model.dt],
+        set_={
+            "o": stmt.excluded.o,
+            "h": stmt.excluded.h,
+            "l": stmt.excluded.l,
+            "c": stmt.excluded.c,
+            "v": stmt.excluded.v,
+        },
+    )
+    result = await session.execute(stmt)
+    await session.commit()
+    return result.rowcount or len(rows)
+
+
+async def read_candles_window(
+    session: AsyncSession,
+    *,
+    timeframe: CandleTF,
+    ticker: str,
+    from_ts: _dt.datetime | None = None,
+    to_ts: _dt.datetime | None = None,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """Lee velas ordenadas por `dt` ascendente dentro del rango.
+
+    Args:
+        session: sesión async.
+        timeframe: `"daily"`, `"1h"` o `"15m"`.
+        ticker: símbolo.
+        from_ts: inclusivo. `None` = sin límite inferior.
+        to_ts: inclusivo. `None` = sin límite superior.
+        limit: cantidad máxima desde el final (las más recientes).
+            Si `None`, trae todo el rango.
+
+    Returns:
+        Lista de dicts `{dt, o, h, l, c, v}` ordenada por `dt` asc.
+    """
+    model = _CANDLE_MODELS[timeframe]
+    stmt = select(model).where(model.ticker == ticker)
+    if from_ts is not None:
+        stmt = stmt.where(model.dt >= from_ts)
+    if to_ts is not None:
+        stmt = stmt.where(model.dt <= to_ts)
+
+    if limit is not None:
+        # Traer las `limit` más recientes (desc), luego invertir al output
+        stmt = stmt.order_by(desc(model.dt)).limit(limit)
+        result = await session.execute(stmt)
+        rows = list(result.scalars().all())
+        rows.reverse()
+    else:
+        stmt = stmt.order_by(asc(model.dt))
+        result = await session.execute(stmt)
+        rows = list(result.scalars().all())
+
+    return [_candle_to_dict(r) for r in rows]
+
+
+async def latest_candle_dt(
+    session: AsyncSession,
+    *,
+    timeframe: CandleTF,
+    ticker: str,
+) -> _dt.datetime | None:
+    """Devuelve el `dt` de la vela más reciente del TF, o `None`.
+
+    Usado por el Data Engine para calcular el gap entre DB y provider
+    (ADR-0003: consultar DB antes de fetch).
+    """
+    model = _CANDLE_MODELS[timeframe]
+    stmt = select(func.max(model.dt)).where(model.ticker == ticker)
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+def _candle_to_dict(row: Any) -> dict[str, Any]:
+    """ORM → dict serializable. El `dt` queda tz-aware ET (del decorator)."""
+    return {
+        "dt": row.dt,
+        "o": row.o,
+        "h": row.h,
+        "l": row.l,
+        "c": row.c,
+        "v": row.v,
+    }
