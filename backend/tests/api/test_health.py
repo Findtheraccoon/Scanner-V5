@@ -7,25 +7,37 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from api import create_app
+from modules.db import init_db
 
 
 @pytest_asyncio.fixture
 async def client_with_auth():
-    app = create_app(valid_api_keys={"sk-test-1", "sk-test-2"}, db_url="sqlite+aiosqlite:///:memory:")
+    # auto_init_db=False + init_db manual — AsyncClient no corre lifespan.
+    app = create_app(
+        valid_api_keys={"sk-test-1", "sk-test-2"},
+        db_url="sqlite+aiosqlite:///:memory:",
+        auto_init_db=False,
+    )
+    await init_db(app.state.db_engine)
     transport = ASGITransport(app=app)
-    # `lifespan` corre al entrar/salir del contexto del AsyncClient si
-    # se inicializa con `base_url` y el app tiene lifespan.
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
+    await app.state.db_engine.dispose()
 
 
 @pytest_asyncio.fixture
 async def client_no_auth():
     """App sin keys válidas configuradas — todos los requests dan 401."""
-    app = create_app(valid_api_keys=None, db_url="sqlite+aiosqlite:///:memory:")
+    app = create_app(
+        valid_api_keys=None,
+        db_url="sqlite+aiosqlite:///:memory:",
+        auto_init_db=False,
+    )
+    await init_db(app.state.db_engine)
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
+    await app.state.db_engine.dispose()
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -119,6 +131,34 @@ class TestHealthEndpoint:
         )
         ts = dt.datetime.fromisoformat(r.json()["ts"])
         assert ts.tzinfo is not None
+
+    @pytest.mark.asyncio
+    async def test_no_heartbeat_returns_offline(self, client_with_auth) -> None:
+        """Sin heartbeats, el health endpoint retorna `offline`."""
+        r = await client_with_auth.get(
+            "/api/v1/engine/health",
+            headers={"Authorization": "Bearer sk-test-1"},
+        )
+        body = r.json()
+        assert body["status"] == "offline"
+
+    @pytest.mark.asyncio
+    async def test_reads_latest_heartbeat_status(self, client_with_auth) -> None:
+        """Si hay heartbeats, retorna el status del más reciente."""
+        from engines.database import emit_engine_heartbeat
+
+        factory = client_with_auth._transport.app.state.session_factory
+        await emit_engine_heartbeat(
+            factory, engine="scoring", status="yellow", memory_pct=82.3,
+        )
+
+        r = await client_with_auth.get(
+            "/api/v1/engine/health",
+            headers={"Authorization": "Bearer sk-test-1"},
+        )
+        body = r.json()
+        assert body["status"] == "yellow"
+        assert body["memory_pct"] == 82.3
 
 
 # ═══════════════════════════════════════════════════════════════════════════
