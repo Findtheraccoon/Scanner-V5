@@ -239,6 +239,7 @@ async def read_signals_latest(
 async def read_signals_history(
     session: AsyncSession,
     *,
+    archive_session: AsyncSession | None = None,
     slot_id: int | None = None,
     from_ts: _dt.datetime | None = None,
     to_ts: _dt.datetime | None = None,
@@ -247,12 +248,18 @@ async def read_signals_history(
 ) -> tuple[list[dict], int | None]:
     """Histórico paginado de señales. Pagination cursor-based.
 
-    Orden: por `compute_timestamp` descendente (más reciente primero),
-    desempate por `id` descendente. El cursor pagina por `id` para
-    evitar problemas con timestamps duplicados.
+    Orden: por `id` descendente (equivalente a `compute_timestamp` desc
+    porque `id` es autoincremental). El cursor pagina por `id`.
+
+    **Transparent reads (Opción X, spec §3.7):** si `archive_session`
+    se pasa, la query se corre sobre ambas DBs y los resultados se
+    mergean por `id` desc antes de paginar. El frontend no necesita
+    saber dónde vive cada fila — solo consulta este endpoint.
 
     Args:
-        session: sesión async abierta.
+        session: sesión async sobre la DB operativa.
+        archive_session: sesión async opcional sobre el archive. Si es
+            `None`, solo se mira la DB operativa.
         slot_id: filtro opcional por slot.
         from_ts: filtro inclusivo por `compute_timestamp >= from_ts`.
         to_ts: filtro inclusivo por `compute_timestamp <= to_ts`.
@@ -262,26 +269,43 @@ async def read_signals_history(
 
     Returns:
         `(items, next_cursor)`. `next_cursor` es el `id` del último item
-        de la página actual si hay más páginas, `None` si no.
+        si hay más páginas, `None` si no.
     """
     limit = min(max(limit, 1), MAX_PAGE_LIMIT)
 
-    stmt = select(Signal)
-    if slot_id is not None:
-        stmt = stmt.where(Signal.slot_id == slot_id)
-    if from_ts is not None:
-        stmt = stmt.where(Signal.compute_timestamp >= from_ts)
-    if to_ts is not None:
-        stmt = stmt.where(Signal.compute_timestamp <= to_ts)
-    if cursor is not None:
-        stmt = stmt.where(Signal.id < cursor)
+    def _build_stmt():
+        stmt = select(Signal)
+        if slot_id is not None:
+            stmt = stmt.where(Signal.slot_id == slot_id)
+        if from_ts is not None:
+            stmt = stmt.where(Signal.compute_timestamp >= from_ts)
+        if to_ts is not None:
+            stmt = stmt.where(Signal.compute_timestamp <= to_ts)
+        if cursor is not None:
+            stmt = stmt.where(Signal.id < cursor)
+        return stmt.order_by(desc(Signal.id)).limit(limit + 1)
 
-    stmt = stmt.order_by(desc(Signal.id)).limit(limit + 1)
-    result = await session.execute(stmt)
-    signals = list(result.scalars().all())
+    op_rows = list((await session.execute(_build_stmt())).scalars().all())
 
-    has_more = len(signals) > limit
-    items = signals[:limit]
+    if archive_session is None:
+        all_rows = op_rows
+    else:
+        ar_rows = list(
+            (await archive_session.execute(_build_stmt())).scalars().all(),
+        )
+        # Dedup defensivo por id (si la rotación dejó la misma fila en
+        # ambas DBs transitoriamente). op gana sobre archive.
+        seen: set[int] = set()
+        merged: list[Signal] = []
+        for r in sorted(op_rows + ar_rows, key=lambda s: s.id, reverse=True):
+            if r.id in seen:
+                continue
+            seen.add(r.id)
+            merged.append(r)
+        all_rows = merged[: limit + 1]
+
+    has_more = len(all_rows) > limit
+    items = all_rows[:limit]
     next_cursor = items[-1].id if has_more and items else None
 
     return [_signal_to_dict(s) for s in items], next_cursor
@@ -291,18 +315,32 @@ async def read_signal_by_id(
     session: AsyncSession,
     signal_id: int,
     *,
+    archive_session: AsyncSession | None = None,
     include_snapshot: bool = True,
 ) -> dict | None:
     """Devuelve la señal con ese `id`, o `None` si no existe.
 
+    **Transparent reads:** busca primero en `session` (operativa). Si
+    no está y hay `archive_session`, busca en el archive.
+
     Args:
-        session: sesión async abierta.
+        session: sesión async sobre la DB operativa.
         signal_id: id autogenerado de la señal.
-        include_snapshot: si `True` incluye `candles_snapshot_gzip` en
-            el dict de retorno (bytes). Default `True` — el endpoint
-            público `/signals/{id}` expone el snapshot bajo demanda.
+        archive_session: sesión sobre archive. Si `None` (o la fila ya
+            está en op), no se consulta.
+        include_snapshot: si `True` incluye `candles_snapshot_gzip`.
     """
     result = await session.execute(select(Signal).where(Signal.id == signal_id))
+    sig = result.scalar_one_or_none()
+    if sig is not None:
+        return _signal_to_dict(sig, include_snapshot=include_snapshot)
+
+    if archive_session is None:
+        return None
+
+    result = await archive_session.execute(
+        select(Signal).where(Signal.id == signal_id),
+    )
     sig = result.scalar_one_or_none()
     if sig is None:
         return None
@@ -415,16 +453,22 @@ async def read_candles_window(
     *,
     timeframe: CandleTF,
     ticker: str,
+    archive_session: AsyncSession | None = None,
     from_ts: _dt.datetime | None = None,
     to_ts: _dt.datetime | None = None,
     limit: int | None = None,
 ) -> list[dict[str, Any]]:
     """Lee velas ordenadas por `dt` ascendente dentro del rango.
 
+    **Transparent reads (Opción X):** si `archive_session` se pasa, la
+    query se corre sobre ambas DBs y los resultados se mergean por
+    `dt` asc (dedup por `dt` — op gana).
+
     Args:
-        session: sesión async.
+        session: sesión async sobre la DB operativa.
         timeframe: `"daily"`, `"1h"` o `"15m"`.
         ticker: símbolo.
+        archive_session: sesión sobre el archive. `None` = solo op.
         from_ts: inclusivo. `None` = sin límite inferior.
         to_ts: inclusivo. `None` = sin límite superior.
         limit: cantidad máxima desde el final (las más recientes).
@@ -434,22 +478,40 @@ async def read_candles_window(
         Lista de dicts `{dt, o, h, l, c, v}` ordenada por `dt` asc.
     """
     model = _CANDLE_MODELS[timeframe]
-    stmt = select(model).where(model.ticker == ticker)
-    if from_ts is not None:
-        stmt = stmt.where(model.dt >= from_ts)
-    if to_ts is not None:
-        stmt = stmt.where(model.dt <= to_ts)
+
+    def _build_stmt():
+        stmt = select(model).where(model.ticker == ticker)
+        if from_ts is not None:
+            stmt = stmt.where(model.dt >= from_ts)
+        if to_ts is not None:
+            stmt = stmt.where(model.dt <= to_ts)
+        if limit is not None:
+            return stmt.order_by(desc(model.dt)).limit(limit)
+        return stmt.order_by(asc(model.dt))
+
+    op_rows = list((await session.execute(_build_stmt())).scalars().all())
+
+    if archive_session is None:
+        rows = op_rows
+    else:
+        ar_rows = list(
+            (await archive_session.execute(_build_stmt())).scalars().all(),
+        )
+        # Dedup por (ticker, dt) — op gana sobre archive.
+        seen: set[_dt.datetime] = set()
+        merged = []
+        for r in sorted(op_rows + ar_rows, key=lambda c: c.dt, reverse=True):
+            if r.dt in seen:
+                continue
+            seen.add(r.dt)
+            merged.append(r)
+        rows = merged[:limit] if limit is not None else merged
 
     if limit is not None:
-        # Traer las `limit` más recientes (desc), luego invertir al output
-        stmt = stmt.order_by(desc(model.dt)).limit(limit)
-        result = await session.execute(stmt)
-        rows = list(result.scalars().all())
-        rows.reverse()
+        # Los más recientes ya vienen ordenados desc — invertimos a asc.
+        rows = sorted(rows, key=lambda c: c.dt)
     else:
-        stmt = stmt.order_by(asc(model.dt))
-        result = await session.execute(stmt)
-        rows = list(result.scalars().all())
+        rows = sorted(rows, key=lambda c: c.dt)
 
     return [_candle_to_dict(r) for r in rows]
 
