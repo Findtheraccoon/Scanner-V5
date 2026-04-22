@@ -9,6 +9,7 @@ contratos con otros componentes.
 
 from engines.data.api_keys import KeyPool, KeyPoolExhaustedError
 from engines.data.config import DataEngineConfig
+from engines.data.engine import DataEngine
 from engines.data.constants import (
     AUTO_CYCLE_DELAY_AFTER_CLOSE_S,
     ENG_060,
@@ -55,6 +56,7 @@ __all__ = [
     "ApiKeyConfig",
     "ApiKeyState",
     "Candle",
+    "DataEngine",
     "DataEngineConfig",
     "EngineStatus",
     "FetchResult",
