@@ -1,10 +1,10 @@
 # SCANNER_V5_FRONTEND_FOR_DESIGNER.md
 
-> **Propósito:** briefing de diseño visual para el frontend del Scanner v5 live. Dirigido al DESIGNER que va a producir mockups, design system y componentes. Sin jerga técnica de backend, sin códigos de error, sin detalles de implementación — solo vistas, estados, flujos y componentes.
+> **Propósito:** briefing de diseño visual para el frontend del Scanner v5 live. Dirigido al DESIGNER que va a producir mockups, design system y componentes. Las decisiones estéticas son el foco; el §16 (anexo técnico) aporta el contexto mínimo del backend que el DESIGNER necesita para dimensionar badges, estados push vs pull y microcomportamientos de pilotos.
 >
-> **Estado (v2.0.0):** las 4 pestañas completamente definidas. El Cockpit queda cerrado tras la sesión del 20-abril; decisiones estéticas + contenido del panel derecho + mecánica del botón Copiar ya resueltas.
+> **Estado (v2.1.0):** las 4 pestañas completamente definidas. El Cockpit queda cerrado tras la sesión del 20-abril; decisiones estéticas + contenido del panel derecho + mecánica del botón Copiar ya resueltas. Se suma anexo técnico §16 con la superficie backend real al 23-abril (healthcheck continuo, watchdog de rotación, histórico Validator, códigos de error, eventos WS).
 
-**Última actualización:** 2026-04-20 · **Versión del briefing:** 2.0.0
+**Última actualización:** 2026-04-23 · **Versión del briefing:** 2.1.0
 
 ---
 
@@ -145,9 +145,12 @@ El scanner tiene 4 pestañas de nivel superior. Orden visual en la navegación:
 - Configurado inactivo → card gris
 - Configurado activo pero esperando arranque → card normal, piloto apagado
 - Warming up → piloto amarillo + spinner + porcentaje + label "warming up"
+- **Revalidando** → transición que ocurre **automáticamente tras un cambio en el slot** (enable, disable, cambio de fixture). Piloto amarillo con label "revalidando" + spinner fino. Dura unos segundos. El usuario no la dispara manualmente; es consecuencia de cualquier PATCH. Durante esta ventana las señales del slot se pausan.
 - Operativo → piloto verde
 - DEGRADED → piloto amarillo + código de error expandible
 - Error fatal → piloto rojo + código
+
+**Nota técnica para el DESIGNER:** tras cualquier cambio en el registry de slots (enable, disable, cambio de fixture), el sistema corre automáticamente una mini-batería de validación en segundo plano (~2-5 segundos). El warmup y la revalidación pueden encadenarse: al enable → warming up → revalidando → operativo. El diseño debe soportar esta secuencia con transiciones claras entre estados.
 
 **Restricciones visibles en UI:**
 - Mínimo 1 slot activo → si el usuario intenta desactivar el último activo, bloqueado con mensaje
@@ -211,6 +214,8 @@ El scanner tiene 4 pestañas de nivel superior. Orden visual en la navegación:
 - Código de error si no verde (ej. "ENG-050 parity check")
 - Botón `Ver log` (abre modal/drawer con los últimos logs del motor)
 
+**Nota técnica para el DESIGNER — piloto del Scoring Engine:** el Scoring Engine corre un mini-test de integridad **cada ~2 minutos** en segundo plano (sin intervención del usuario). Si el test detecta drift, el piloto pasa **verde → amarillo (código ENG-050)** solo; si vuelve a pasar limpio, retorna a verde. Esto implica que el piloto del Scoring puede cambiar de color autónomamente durante la sesión. Para suavizar el impacto visual, la transición debería ser un **fade entre colores**, no un salto duro. Igual comportamiento aplica al Piloto Master del header (agregando un nivel más de amarillo si cualquier motor lo está).
+
 ### Sección 2 — Slots
 
 **Grid libre de cards** (uno por slot, layout no secuencial — el trader ve de un vistazo el estado de los 6 slots).
@@ -234,6 +239,13 @@ Card por tabla (signals, heartbeat, system_log, candles_daily, candles_1h, candl
 
 **Acción global:** botón `Correr limpieza ahora` que dispara la rotación manual hacia archive.
 
+**Barra de tamaño total de la DB operativa** (arriba del grid de tablas): barra horizontal grande que muestra `tamaño actual MB / límite configurado MB`. Verde hasta ~70%, amarillo 70-90%, rojo >90%.
+
+**Watchdog automático opt-in** — el usuario puede tener activado un watchdog que dispara rotación agresiva al superar el límite de tamaño. Cuando está on:
+- Badge en el header de la sección: `Watchdog: ON` (neutro informativo, no alarma).
+- La barra de tamaño puede **bajar sola en vivo** cuando el watchdog se dispara (transición animada, no salto).
+- Después de una rotación disparada, el sistema puede sugerir un VACUUM: badge amarillo `⚠ VACUUM recomendado — reclamar espacio en disco` con botón `Ejecutar VACUUM ahora` (operación de minutos, UI debe indicar que bloquea escrituras durante el run).
+
 **Sub-sección** (opcional, colapsable): "Últimos backups" con historial del S3 (timestamps + tamaños + botón restore por cada uno).
 
 ### Sección 4 — Pruebas de validación
@@ -244,11 +256,18 @@ Card por tabla (signals, heartbeat, system_log, candles_daily, candles_1h, candl
 
 **Último reporte Validator** (siempre visible, persistente):
 - Timestamp de última ejecución
+- **Trigger del run** (badge pequeño): `startup` · `manual` · `hot_reload` · `connectivity` — indica qué disparó la corrida
 - Estado general (verde/amarillo/rojo)
 - Tabla con 7 filas (categorías A-G) + resultado individual por cada una
 - Log expandible debajo
 
-**NOTA:** el dashboard **no muestra gráfico histórico de heartbeat** — solo estado actual. Los reportes de Validator se consultan puntualmente.
+**Histórico de reportes** (colapsable, debajo del último reporte):
+- Botón `Ver histórico` abre drawer/modal con timeline de runs anteriores
+- Cada entrada: timestamp + trigger + overall_status (verde/amarillo/rojo) + botón para expandir el detalle completo (mismas 7 filas + log)
+- Paginación por cursor (lista infinita con scroll)
+- Los reportes viejos (>30 días) viven en archive pero se leen de forma transparente — el usuario no distingue
+
+**NOTA:** el dashboard **no muestra gráfico histórico de heartbeat** — solo estado actual. Los reportes de Validator sí tienen histórico navegable porque son eventos discretos útiles para auditoría post-mortem.
 
 ---
 
@@ -496,13 +515,20 @@ Cálculo:    2026-04-20 14:30:04 ET
 
 Este bloque es para referencia del DESIGNER: **la estructura del panel de detalle técnico (§7.3.3) debe espejar este mismo ordenamiento** para que el trader reconozca visualmente los bloques cuando alterna entre UI y texto pegado.
 
-### 7.6 Scan manual
+### 7.6 Scan manual y Modo AUTO
 
 **Botón `Scan ahora`:**
 - Corre scan sobre todos los slots excepto los vacíos
 - No hay scan individual por slot
 - Durante el scan → indicador de progreso (~0.5-1 segundo total)
 - Al terminar → las cards de watchlist se actualizan con las señales nuevas
+
+**Toggle `Modo AUTO`:**
+- ON → las cards se actualizan automáticamente al cierre de cada vela de 15M (9:45, 10:00, 10:15…). Es el modo por default durante la sesión.
+- OFF → las cards solo se actualizan al presionar `Scan ahora`. El trader congela la vista.
+- Indicador visual del estado (ON/OFF) visible junto al toggle, sin ambigüedad.
+
+**Decisión técnica abierta (no bloquea al DESIGNER):** la semántica backend del toggle AUTO se define en fase de implementación — puede ser (a) solo visual (el backend sigue scanneando, el frontend filtra las actualizaciones), o (b) real (endpoint que pausa el loop). El diseño visual del toggle y sus dos estados es el mismo en ambos casos.
 
 ### 7.7 Lo que NO tiene el Cockpit
 
@@ -644,6 +670,110 @@ El DESIGNER debe producir los siguientes componentes reutilizables como parte de
 
 ---
 
-**Fin de `SCANNER_V5_FRONTEND_FOR_DESIGNER.md` v2.0.0.**
+**Fin del briefing principal.** El §16 que sigue es un anexo técnico con el contexto mínimo del backend que el DESIGNER necesita para dimensionar badges, estados push vs pull y microcomportamientos.
 
-**Nota final para el lector:** este briefing está cerrado. Incluye decisiones finales sobre estilo (icomat base + Runpod estructural), densidad (minimalismo con disclosure progresiva), animaciones de bandas (sobrias dentro de icomat), y mecánica completa del panel derecho del Cockpit + botón COPIAR. Si aparece una duda estética nueva durante la ejecución del diseño, DESIGNER la consulta con Álvaro en el ciclo de feedback.
+---
+
+## 16 · Anexo técnico — superficie backend al 23-abril
+
+**Propósito:** el DESIGNER no tiene que leer código, pero sí necesita saber **qué información está disponible, en qué forma (push vs pull) y qué códigos caben en un badge.** Este anexo aporta ese contexto mínimo sin exigir jerga de implementación.
+
+### 16.1 Push vs pull — qué se actualiza solo y qué se consulta
+
+El backend emite **6 eventos en tiempo real** que el frontend recibe por WebSocket. Saber qué vista depende de cuál evento es clave para decidir animaciones, transiciones y refresh rates.
+
+| Evento | Vista que alimenta | Frecuencia típica |
+|---|---|---|
+| `signal.new` | Watchlist del Cockpit (card pasa a nueva banda) + panel derecho si el slot está seleccionado | 1 cada 15 min por slot activo durante sesión de mercado |
+| `slot.status` | Piloto + label de card en Dashboard y watchlist del Cockpit | Puntual (warmup, enable/disable, degraded, recovery) |
+| `engine.status` | Piloto Master del Dashboard + pilotos individuales de motor | Cada 2 min (heartbeat + healthcheck del Scoring) |
+| `api_usage.tick` | Banner superior global del Cockpit — 5 barras + barra diaria | Cada cierre de ciclo (15 min en AUTO, o al `Scan ahora`) |
+| `validator.progress` | Progress bar del Paso 4 de Configuración + sub-panel del Validator | Por cada test A-G (2 eventos: started/finished) |
+| `system.log` | Drawer "Ver log" de cada motor en Dashboard | Por cada entrada nueva de log |
+
+**Todo lo demás se consulta bajo pedido** (pull) cuando el usuario abre una pestaña, presiona un botón o expande una sección:
+- Histórico de señales (Memento, REST).
+- Histórico de reportes Validator (Dashboard §4, REST).
+- Stats de DB (Dashboard §3, REST + refresh manual).
+- Lista de backups S3 (Dashboard §3, REST + refresh manual).
+- Stats por slot de Memento (REST al expandir cada slot).
+
+**Implicación para el DESIGNER:** las vistas que dependen de WS necesitan **indicador de conexión WS** en alguna esquina discreta del cockpit — si la conexión cae, el trader debe saberlo para no confiar en data stale. Un icono pequeño "conectado / reconectando / desconectado" es suficiente.
+
+### 16.2 Endpoints REST disponibles
+
+Resumen de qué API se consume para cada pestaña. El DESIGNER no necesita memorizarlos, pero sí saber que todos estos datos existen y se pueden mostrar.
+
+| Pestaña | Datos consumidos (pull) |
+|---|---|
+| **Configuración** | Config activo + lista de Configs guardados · slots configurados · fixtures disponibles · canonicals por ticker · API keys actuales · estado de cada motor para arranque secuencial |
+| **Dashboard** | Estado de cada motor + memoria + último heartbeat · stats por tabla DB · tamaño total DB · último reporte Validator · histórico Validator paginado · lista de backups S3 |
+| **Cockpit** | Última señal por slot · config de slots activos · banner API en vivo |
+| **Memento** | Métricas por slot (WR, spread, uplift por confirm, thresholds) · catálogo de patrones con stats globales |
+
+### 16.3 Códigos de error conocidos — diccionario para badges
+
+Cuando un piloto no es verde, el componente badge muestra un código técnico + descripción corta. La lista de códigos posibles hoy:
+
+| Código | Gravedad | Significado humano | Dónde puede aparecer |
+|---|---|---|---|
+| `ENG-001` | Rojo | Motor crasheó, no puede operar | Piloto Master + piloto del motor caído |
+| `ENG-050` | Amarillo | Parity check del Scoring detectó drift | Piloto Scoring Engine (Dashboard) |
+| `ENG-060` | Amarillo | Slot degraded tras 3 fallos consecutivos de fetch | Piloto de card de slot (Dashboard + Cockpit) |
+| `REG-011` | Amarillo | Fixture sin campo obligatorio | Modal de carga de fixture (Paso 3 Config) |
+| `REG-012` | Amarillo | Fixture incompatible con ticker | Modal de carga de fixture (Paso 3 Config) |
+| `REG-013` | Amarillo | Benchmark inválido | Modal de carga de fixture (Paso 3 Config) |
+| `REG-020` | Rojo | Canonical hash no coincide (fixture corrupta) | Validator Check B + card de slot afectado |
+| `FIX-xxx` | Amarillo | Errores genéricos de carga de fixture (archivo malformado, JSON inválido, etc.) | Modal de carga de fixture (Paso 3 Config) |
+
+**Implicación para el DESIGNER:**
+- Badge de código debe soportar strings de hasta **~20 caracteres** (`ENG-060 · Slot degraded` o similar).
+- Convención: prefijo del código en fuente monospace, descripción en sans-serif. Color del badge según gravedad (amarillo/rojo).
+- Todos los códigos son expandibles — al hover/click muestran el mensaje completo en tooltip o drawer.
+
+### 16.4 Estados autónomos del sistema (sin intervención del usuario)
+
+Hay 3 situaciones en las que el sistema **cambia de estado solo**, sin que el trader haga nada. El diseño debe contemplar transiciones suaves en estos casos:
+
+1. **Scoring Engine healthcheck** (§5 Sección 1): piloto del Scoring puede oscilar verde ↔ amarillo ENG-050 cada ~2 min según mini parity test.
+2. **Slot degraded** (§5 Sección 2): tras 3 fallos consecutivos de fetch, un slot pasa a DEGRADED (amarillo ENG-060). Si recupera, vuelve a verde solo.
+3. **Watchdog agresivo** (§5 Sección 3): si está activado, puede disparar rotación sola al cruzar el límite de tamaño DB. La barra de tamaño baja en vivo.
+
+Todas estas transiciones deberían usar **fade entre colores** (~300-500ms), no saltos duros. El usuario no está mirando el Dashboard en todo momento — cuando vuelva debe ver el nuevo estado sin que "parpadee" delante suyo.
+
+### 16.5 Nota sobre credenciales sensibles (ONLINE BACKUP y API keys)
+
+En v1 del frontend, los campos de secret key / access key / API key se envían al backend cuando el usuario los guarda. El backend los persiste **encriptados en disco** (no en texto plano) con una master key local.
+
+Implicaciones para el DESIGNER:
+- Los campos deben tener toggle "mostrar/ocultar" como ya está en el spec.
+- Cuando el usuario vuelve a abrir la pestaña, el valor **no se muestra aunque presione "mostrar"** — queda enmascarado con `••••••••` y un hint "credencial guardada — editá para reemplazar". Esto es por seguridad (el backend no devuelve secretos ya persistidos, solo los acepta al guardar).
+- Si el usuario presiona un campo "mostrar" sobre un valor que **acaba de tipear** (antes de guardar), ve el valor en claro normalmente. La ocultación aplica solo post-persistencia.
+
+### 16.6 Convenciones temporales
+
+- **Zona horaria:** todos los timestamps visibles al usuario son **ET (Eastern Time)**, no UTC ni local. El trader opera en horario de mercado US. Convención: mostrar `14:30 ET` o `2026-04-23 14:30 ET`.
+- **Reset del contador diario de API** (Cockpit banner): a las **16:00 ET** (cierre de mercado), no a medianoche UTC.
+- **Warmup / revalidación / scan:** duraciones típicas son **segundos a decenas de segundos** — progress bars y spinners, no operaciones largas.
+- **Backup S3 / VACUUM / Restore:** operaciones de **minutos** — progress bar grande + mensaje claro de que bloquea otras operaciones durante el run.
+
+---
+
+## 17 · Changelog del briefing
+
+**v2.1.0 — 2026-04-23**
+- Agregado §16 anexo técnico completo (push vs pull, endpoints, códigos de error, estados autónomos, convenciones temporales).
+- §4 Paso 3 · agregado estado "revalidando" tras cambios en el registry de slots.
+- §5 Sección 1 · nota sobre healthcheck continuo del Scoring Engine (piloto puede cambiar solo cada 2 min).
+- §5 Sección 3 · barra de tamaño total DB + nota sobre watchdog agresivo opt-in + badge VACUUM recomendado.
+- §5 Sección 4 · histórico de reportes Validator (drawer navegable) + trigger badge en el último reporte.
+- §7.6 · clarificación del toggle Modo AUTO + nota sobre decisión técnica abierta (visual vs real).
+
+**v2.0.0 — 2026-04-20**
+- Briefing principal cerrado: estilo (icomat + Runpod estructural), 4 pestañas completas, Cockpit v2 con panel derecho de 3 zonas + botón COPIAR.
+
+---
+
+**Fin de `SCANNER_V5_FRONTEND_FOR_DESIGNER.md` v2.1.0.**
+
+**Nota final para el lector:** las decisiones estéticas del briefing principal (§1–§15) están cerradas. El anexo técnico §16 es contexto informativo sobre el backend — no cambia decisiones de diseño ya tomadas, solo las dota de fundamento operativo. Si aparece una duda estética nueva durante la ejecución del diseño, DESIGNER la consulta con Álvaro en el ciclo de feedback.
