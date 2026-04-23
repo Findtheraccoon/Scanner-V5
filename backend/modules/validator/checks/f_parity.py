@@ -57,7 +57,7 @@ _DEFAULT_FIXTURE = _BACKEND_ROOT / "fixtures/qqq_canonical_v1.json"
 
 DEFAULT_TOLERANCE = 0.01
 DEFAULT_LIMIT = 30
-DEFAULT_MIN_MATCH_RATE = 0.75  # baseline confirmado 189/245 = 77.14% (data-source mismatch)
+DEFAULT_MIN_MATCH_RATE = 0.95  # baseline post-fix aggregator 241/245 = 98.37%
 
 ENG_050 = "ENG-050"
 
