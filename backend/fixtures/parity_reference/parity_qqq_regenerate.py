@@ -43,7 +43,7 @@ from engines.scoring import analyze  # noqa: E402
 from engines.scoring.aggregator import aggregate_to_1h, aggregate_to_15m  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(REPO_ROOT, "data", "parity_qqq_candles.db")
+DB_PATH = os.path.join(HERE, "fixtures", "parity_qqq_candles.db")
 SAMPLE_PATH = os.path.join(HERE, "fixtures", "parity_qqq_sample.json")
 FIXTURE_PATH = os.path.join(BACKEND_ROOT, "fixtures", "qqq_canonical_v1.json")
 

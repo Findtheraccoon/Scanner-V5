@@ -113,6 +113,8 @@ addopts = [
     "-ra",
     "--strict-markers",
     "--strict-config",
+    "-m",
+    "not slow",  # tests slow se corren explícito con `pytest -m slow`
 ]
 markers = [
     "integration: marca tests que requieren servicios externos mockeados",
