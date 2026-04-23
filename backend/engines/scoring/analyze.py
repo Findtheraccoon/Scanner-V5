@@ -50,7 +50,11 @@ from engines.scoring.errors import (
     build_signal_output,
 )
 from engines.scoring.ind_builder import build_ind_bundle
-from engines.scoring.indicators import bollinger_bands, sma, volume_ratio_at
+from engines.scoring.indicators import (
+    bollinger_bands,
+    sma,
+    vol_ratio_intraday,
+)
 from engines.scoring.risks import detect_bb_fakeouts_15m, detect_volume_risks_15m
 from engines.scoring.triggers import (
     detect_candle_15m_triggers,
@@ -214,14 +218,15 @@ def analyze(
         bb_1h = _last_bb_tuple(bb_1h_series)
 
         # volume_ratio de la última vela 15M — gate binario del ORB.
-        # Semántica divergente con Observatory (mean sobre ventana fija
-        # vs. median intraday). Se ajusta cuando se port vol_ratio real
-        # del Observatory.
-        vol_ratio = volume_ratio_at(
-            candles_15m,
-            len(candles_15m) - 1,
-            _VOLUME_RATIO_WINDOW,
-        )
+        # Port Observatory `vol_ratio()` con today_only=True: mediana de
+        # las velas completas del día (no mean sobre ventana fija) →
+        # anula el outlier de 9:30 y compara same-day. Con mean sobre
+        # 20 velas cross-day, los primeros 15M del día daban valores
+        # ínfimos (0.04-0.31) que bloqueaban incorrectamente el ORB.
+        vol_ratio = vol_ratio_intraday(candles_15m, sim_date)
+        # `volume_ratio_at` mean-over-window se mantiene exportado por
+        # si algún consumer externo lo necesita; ya no se usa para el
+        # gate del ORB.
 
         # Triggers (5 detectores, cubren los 16 patrones).
         triggers: list[dict] = []
