@@ -17,6 +17,7 @@ limpio sin loguear error. Cualquier otra excepción se loguea con
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 
 from loguru import logger
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -28,6 +29,12 @@ from engines.database import emit_engine_heartbeat
 DEFAULT_HEARTBEAT_INTERVAL_S: float = 120.0
 DEFAULT_AUTO_SCHEDULER_INTERVAL_S: float = 60.0
 
+# Callable sync opcional que corre un healthcheck y devuelve
+# `{status, error_code, message, duration_ms}`. Usado por el heartbeat
+# del scoring engine (spec §3.4 — mini parity cada 2 min). Si es
+# `None`, el heartbeat se reporta siempre green sin verificar nada.
+HealthcheckFn = Callable[[], dict]
+
 
 async def heartbeat_worker(
     session_factory: async_sessionmaker,
@@ -35,38 +42,75 @@ async def heartbeat_worker(
     *,
     engine_name: str = "scoring",
     interval_s: float = DEFAULT_HEARTBEAT_INTERVAL_S,
+    healthcheck_fn: HealthcheckFn | None = None,
 ) -> None:
     """Emite heartbeats periódicamente hasta que lo cancelen.
 
-    Loop infinito: persiste en DB + broadcast `engine.status`. Si la DB
-    falla, loguea y reintenta en el próximo tick. Si el broadcast falla
-    (broadcaster crash, improbable), loguea.
+    Loop infinito: corre healthcheck (si se pasó) → persiste en DB +
+    broadcast `engine.status`. Si la DB falla, loguea y reintenta en
+    el próximo tick. Si el broadcast falla, loguea.
 
     Args:
         session_factory: async factory de sesiones (DB).
         broadcaster: broadcaster para emitir engine.status.
         engine_name: qué motor reporta (default "scoring").
         interval_s: segundos entre heartbeats (default 120 = 2 min).
+        healthcheck_fn: callable sync opcional que corre el mini
+            parity del motor (ver `engines/scoring/healthcheck.py`).
+            Retorna `{status, error_code, message, duration_ms}`. Si
+            lanza, el status del heartbeat pasa a `red` con `ENG-001`.
+            Si es `None`, el heartbeat es siempre green sin verificar.
     """
     logger.info(
-        f"Heartbeat worker started — engine={engine_name} interval={interval_s}s"
+        f"Heartbeat worker started — engine={engine_name} "
+        f"interval={interval_s}s "
+        f"healthcheck={'on' if healthcheck_fn else 'off'}",
     )
     try:
         while True:
+            status = "green"
+            error_code: str | None = None
+            message: str | None = None
+
+            if healthcheck_fn is not None:
+                try:
+                    result = await asyncio.to_thread(healthcheck_fn)
+                    status = result.get("status", "green")
+                    error_code = result.get("error_code")
+                    message = result.get("message")
+                    if status != "green":
+                        logger.warning(
+                            f"Healthcheck {engine_name}: status={status} "
+                            f"code={error_code} msg={message}",
+                        )
+                except Exception as e:
+                    status = "red"
+                    error_code = "ENG-001"
+                    message = f"healthcheck lanzó: {e.__class__.__name__}: {e}"
+                    logger.exception(f"Healthcheck {engine_name} crashed")
+
             try:
                 await emit_engine_heartbeat(
-                    session_factory, engine=engine_name, status="green",
-                )
-            except Exception:
-                logger.exception(f"Heartbeat DB write failed for engine={engine_name}")
-            try:
-                await broadcaster.broadcast(
-                    EVENT_ENGINE_STATUS,
-                    {"engine": engine_name, "status": "green"},
+                    session_factory,
+                    engine=engine_name,
+                    status=status,
+                    error_code=error_code,
                 )
             except Exception:
                 logger.exception(
-                    f"Heartbeat broadcast failed for engine={engine_name}"
+                    f"Heartbeat DB write failed for engine={engine_name}",
+                )
+
+            payload: dict = {"engine": engine_name, "status": status}
+            if error_code:
+                payload["error_code"] = error_code
+            if message:
+                payload["message"] = message
+            try:
+                await broadcaster.broadcast(EVENT_ENGINE_STATUS, payload)
+            except Exception:
+                logger.exception(
+                    f"Heartbeat broadcast failed for engine={engine_name}",
                 )
             await asyncio.sleep(interval_s)
     except asyncio.CancelledError:

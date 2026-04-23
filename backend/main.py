@@ -48,6 +48,7 @@ from engines.data import (
 from engines.data.scan_loop import auto_scan_loop
 from engines.registry_runtime import RegistryRuntime
 from engines.scoring import ENGINE_VERSION
+from engines.scoring.healthcheck import run_healthcheck as run_scoring_healthcheck
 from modules.db import (
     default_url,
     make_engine,
@@ -286,6 +287,7 @@ def main() -> int:
         auto_init_db=True,
         enable_heartbeat=True,
         heartbeat_interval_s=settings.heartbeat_interval_s,
+        heartbeat_healthcheck_fn=run_scoring_healthcheck,
         enable_auto_scheduler=use_stub_scheduler,
         auto_scheduler_interval_s=settings.auto_scheduler_interval_s,
         extra_workers=extra_workers,
