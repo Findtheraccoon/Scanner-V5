@@ -62,14 +62,15 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 | 1 (Data Engine) | `backend/engines/data/` — KeyPool, TwelveDataClient, `DataEngine` orquestrador (warmup DB-first, fetch_for_scan retry), `auto_scan_loop` real con DEGRADED ENG-060 | ✅ |
 | 2 (Validator) | `backend/modules/validator/` — batería D/A/B/C/E/F/G + runner + REST + TXT log + hot-reload revalidation | ✅ |
 | 3 (Slot Registry) | `backend/modules/slot_registry/` + `backend/engines/registry_runtime.py` — runtime in-memory con hot-reload REST (disable + enable con warmup + persistencia JSON) | ✅ |
-| 4 (Scoring Engine) | `backend/engines/scoring/` — Fases 1-5 + parity **245/245 (100%)** | ✅ |
+| 4 (Scoring Engine) | `backend/engines/scoring/` — Fases 1-5 + parity **245/245 (100%)** + healthcheck continuo | ✅ |
 | 5 (Persistencia + API + WS) | `backend/modules/db/` + `backend/api/` + `backend/modules/signal_pipeline/` — SQLAlchemy async, Alembic híbrido, REST auth Bearer, WS con 6 eventos, pipeline scan→persist→broadcast con flag `persist`, backup/restore S3, transparent reads op+archive | ✅ |
-| 6 (Database Engine) | `backend/engines/database/` — heartbeat + rotación retention + move-to-archive + retención agresiva (§9.4) | ✅ |
+| 6 (Database Engine) | `backend/engines/database/` — heartbeat + rotación retention + move-to-archive + retención agresiva (§9.4) + watchdog auto opt-in | ✅ |
 | 7 (Archive + S3) | `data/archive/scanner_archive.db` + `modules/db/backup.py` + validator_reports histórico | ✅ |
-| D (Entrypoint) | `backend/main.py` + `backend/settings.py` + `backend/api/workers.py` — Pydantic Settings, lifecycle, worker factories, Validator wiring, archive wiring, shutdown rotation | ✅ |
+| Config | `backend/modules/config/` — Fernet encriptado standalone (crypto + loader + models). Wiring a endpoints pendiente | ✅ standalone |
+| D (Entrypoint) | `backend/main.py` + `backend/settings.py` + `backend/api/workers.py` — Pydantic Settings, lifecycle, worker factories, Validator wiring, archive wiring, shutdown rotation, healthcheck wired al heartbeat | ✅ |
 | Fixtures | `backend/modules/fixtures/` — loader | ✅ base |
 
-**Tests totales:** 1043 passing en `backend/tests/`. `ruff check .` limpio.
+**Tests totales:** 1068 passing + 1 slow (parity regression guard) en `backend/tests/`. `ruff check .` limpio.
 
 ### Scoring Engine — detalle por fase
 
@@ -210,6 +211,7 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 | Archivo | Rol |
 |---|---|
 | `engines/database/rotation.py` | `rotate_expired` (legacy), `rotate_with_archive` (move), `check_and_rotate_aggressive` (§9.4), `compute_stats`. Políticas `DEFAULT_RETENTION_POLICIES` + `AGGRESSIVE_RETENTION_POLICIES` |
+| `engines/database/watchdog.py` | `aggressive_rotation_watchdog` loop async opt-in (`SCANNER_AGGRESSIVE_ROTATION_ENABLED=false` por default) — chequea tamaño DB cada `interval_s` y dispara rotación agresiva |
 | `modules/db/backup.py` | `S3Config` Pydantic, `backup_to_s3`, `restore_from_s3`, `list_backups` — multi-provider via `endpoint_url` |
 | `api/routes/database.py` | REST `/rotate`, `/rotate/aggressive`, `/stats`, `/backup`, `/restore`, `/backups` |
 | `api/deps.py:get_archive_session` | Yield `AsyncSession | None` según `app.state.archive_session_factory` |
@@ -217,36 +219,75 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 | `modules/db/helpers.py` — `write_validator_report`, `read_validator_reports_{latest,history}`, `read_validator_report_by_id` | Persistencia + transparent reads |
 | `api/routes/validator.py` — `/reports*` | Endpoints histórico |
 
+### Módulos nuevos del Scoring healthcheck (spec §3.4)
+
+| Archivo | Rol |
+|---|---|
+| `engines/scoring/healthcheck.py` | Mini parity test determinístico con dataset sintético + fixture canonical + `sim_datetime` fijo. Chequea invariantes operativos (no-crash, shape, signal vocab, score numérico, error=False). ~10ms por corrida |
+| `api/workers.py:heartbeat_worker` | Extendido con `healthcheck_fn` opcional (corre via `asyncio.to_thread` antes de emitir el heartbeat). Sin el param, el worker reporta siempre green |
+| `tests/engines/scoring/test_parity_regression.py` | Regression guard `@pytest.mark.slow @pytest.mark.parity` — falla si parity < 100%. ~2min. Se excluye del `pytest -q` default |
+
+### Módulos nuevos del Config encriptado (standalone, pendiente wiring)
+
+| Archivo | Rol |
+|---|---|
+| `modules/config/crypto.py` | `get_master_key()` env→file→auto-gen + `encrypt_str`/`decrypt_str` con Fernet. `MasterKeyError` custom |
+| `modules/config/models.py` | `UserConfig` Pydantic frozen + `TDKeyConfig` + `S3Config` (copias encriptadas del body). Secretos en plain fields en runtime |
+| `modules/config/loader.py` | `save_config` encripta los 3 secretos (`twelvedata_keys`, `s3_config`, `api_bearer_token`) como `<name>_enc` + atomic write. `load_config` desencripta y reconstruye el modelo |
+| `modules/config/__init__.py` | API pública del módulo |
+
 ### Pendiente
 
-- **Frontend:** React + TS + Vite + Tailwind + shadcn + Zustand + TanStack Query (aún no iniciado). Bloque grande — desbloquea el producto entero; backend ya expone todo lo necesario (REST + WS + stats + backup/restore).
-- ~~**Fase 5.4 cierre**~~ → **Cerrado 2026-04-23 al 100%.** Post subida del `qqq_1min.json` original del Observatory, se identificaron 2 bugs reales del motor (ver gotchas #16 y #17): aggregator no resetaba al cambio de día + ORB gate usaba mean-cross-day en vez de median-intraday. Ambos arreglados → **245/245 match**. `DEFAULT_MIN_MATCH_RATE` subido a 0.99.
-- **Config encriptado `modules/config/`** para distribución Windows. Bloqueante para:
-  - Encriptar credenciales S3 del body de `/database/backup` (deuda técnica AR.2).
-  - Encriptar API keys de Twelve Data actualmente en env var.
-- **Watchdog automático para rotación agresiva:** AR.5 expone el endpoint manual. Un worker que chequee cada X minutos + dispare automáticamente queda para futuro (después del frontend, cuando el Dashboard muestre la barra).
+- **Frontend:** React + TS + Vite + Tailwind + shadcn + Zustand + TanStack Query (aún no iniciado). Bloque grande — desbloquea el producto entero; backend ya expone todo lo necesario (REST + WS + stats + backup/restore + config encriptado listo para consumir).
+- ~~**Fase 5.4 cierre**~~ → **Cerrado 2026-04-23 al 100%.** Post subida del `qqq_1min.json` original del Observatory, se identificaron 2 bugs reales del motor (ver gotchas #16 y #17): aggregator no resetaba al cambio de día + ORB gate usaba mean-cross-day en vez de median-intraday. Ambos arreglados → **245/245 match**. `DEFAULT_MIN_MATCH_RATE` subido a 0.99. Regression guard en `test_parity_regression.py` (slow, ~2min).
+- ~~**Healthcheck continuo spec §3.4**~~ → **Cerrado 2026-04-23.** `engines/scoring/healthcheck.py` wired al `heartbeat_worker` con `healthcheck_fn` opcional. Cada 2 min valida operativamente el motor (no-crash, shape, signal vocab) y reporta green/yellow+ENG-050/red+ENG-001 al Dashboard.
+- ~~**Watchdog automático AR.5**~~ → **Cerrado 2026-04-23.** `engines/database/watchdog.py:aggressive_rotation_watchdog` opt-in via `SCANNER_AGGRESSIVE_ROTATION_ENABLED=true`. Chequea tamaño DB cada `SCANNER_AGGRESSIVE_ROTATION_INTERVAL_S` (default 3600s) y dispara rotación agresiva. Default off por ser destructivo.
+- ~~**`modules/config/` encriptado**~~ → **Cerrado 2026-04-23 en modo standalone.** Fernet-based con master key desde env `SCANNER_MASTER_KEY` o file `data/master.key` (auto-gen). `UserConfig` Pydantic con 3 campos secretos encriptados inline al persistir. **Wiring a endpoints pendiente** — los endpoints `POST /database/backup` siguen aceptando credenciales en body por compat. Integración cuando el frontend consuma el Config (decisión UX: cómo editar + cuándo recargar).
+- **Distribución Windows:** `.exe` via Inno Setup. Depende de frontend + decisión sobre bundling del `master.key`.
 
 ### Para el siguiente chat
 
-**Estado al 2026-04-23:** backend **completo al spec §3 + §9.4 + Fase 5.4 cerrada al 100%**. Ultima tanda pushada:
+**Estado al 2026-04-23:** backend **completo a spec §3 + §4 + §9.4**. 1068 tests + 1 slow passing, parity 245/245, ruff limpio. Última tanda pushada (PR #24 abierto, pendiente merge):
 
-- AR.5 — retención agresiva (§9.4). `POST /database/rotate/aggressive` + stats extendido.
-- Fase 5.4 cerrada con parity **245/245 (100%)** tras 2 fixes reales del motor productivo (aggregator reset_day + ORB vol_ratio intraday). Ver gotchas #16 y #17.
-- JSONs de velas Observatory commiteados en `docs/specs/Observatory/Current/` como dataset de verificación (qqq_1min 30MB, qqq_daily, spy_daily). `observatory_v5_2.db` se usó para el diagnóstico inicial y después se removió.
+- Regression guard `test_parity_regression.py` slow + fix path runner.
+- F — Healthcheck continuo spec §3.4 (`engines/scoring/healthcheck.py` wired al heartbeat).
+- C — Watchdog AR.5 auto (`engines/database/watchdog.py` opt-in).
+- D — README.md refresh al estado real + tabla endpoints REST.
+- B — `modules/config/` encriptado Fernet (standalone, wiring pendiente).
 
 **Branch de trabajo:** `claude/review-project-setup-4DnEm`.
 
-**Próximo bloque grande:** Frontend React + TS. Backend ya expone:
-- REST `/api/v1/slots/{id}` PATCH (disable + enable con warmup).
-- REST `/api/v1/validator/{run,connectivity,report/latest,reports/*,reports/{id}}`.
-- REST `/api/v1/signals/{latest,history,{id}}` — transparent op+archive.
-- REST `/api/v1/database/{rotate,rotate/aggressive,stats,backup,restore,backups}`.
-- REST `/api/v1/scan/manual`.
-- REST `/api/v1/engine/health`.
-- WS `/ws?token=...` con 6 eventos.
+**PR abierto:** #24 con los 5 hitos arriba. Pendiente merge al despertar Álvaro (update-branch + merge).
 
-**Otros pendientes chicos antes del frontend** (decisión abierta, preguntar a Álvaro):
-- `modules/config/` encriptado (bloqueante para distribución Windows + deuda S3 creds).
+**Próximo bloque: Frontend React + TS.**
+
+Superficie backend disponible para el frontend:
+
+| Método | Path | Notas |
+|---|---|---|
+| GET | `/api/v1/engine/health` | Piloto del scoring engine con healthcheck status |
+| GET | `/api/v1/signals/{latest,history,{id}}` | Histórico transparent op+archive |
+| POST | `/api/v1/scan/manual` | Scan on-demand |
+| GET/PATCH | `/api/v1/slots`, `/api/v1/slots/{id}` | List + enable/disable + hot-reload warmup |
+| POST | `/api/v1/validator/{run,connectivity}` | Batería completa + solo conectividad |
+| GET | `/api/v1/validator/reports{,/latest,/{id}}` | Histórico de reportes |
+| POST | `/api/v1/database/rotate{,/aggressive}` | Rotación manual + agresiva §9.4 |
+| GET | `/api/v1/database/stats` | Contadores + tamaño op + umbrales |
+| POST | `/api/v1/database/{backup,restore,backups}` | S3-compat, multi-provider |
+| WS | `/ws?token=...` | 6 eventos push |
+
+**Stack frontend recomendado** (spec): React 18 + TypeScript + Vite + Tailwind + shadcn/ui + Zustand + TanStack Query + React Flow (Paso 3 nodo-conexión) + Lightweight Charts (Cockpit) + Vitest + `pnpm`.
+
+**Pestañas (ver `docs/operational/FRONTEND_FOR_DESIGNER.md` v2.0.0):**
+1. **Configuración** — 4 pasos apilados (Config + ONLINE BACKUP S3 / API Keys / Fixtures + Slot Registry canvas Runpod / Arranque motores con progress bar del Validator).
+2. **Dashboard** — Piloto Master + 4 secciones (Motores/Slots/Base de datos/Pruebas validación).
+3. **Memento** — Consulta de stats por slot + catálogo de patrones.
+4. **Cockpit** — Watchlist + detalle técnico + botón COPIAR con `chat_format` del payload WS.
+
+**Decisiones abiertas que pedir a Álvaro antes de empezar frontend:**
+- ¿Vite + pnpm como recomienda el spec, o preferís otro stack?
+- ¿Empezamos por Configuración (más complejo — canvas Runpod, upload fixtures) o por Dashboard (más simple, refleja estado backend)?
+- ¿Auto-LAST al arrancar (spec §5.2): backend ya tiene el `startup factory`, falta el flag en el Config del usuario.
 
 **Comando de arranque end-to-end verificado:**
 ```bash
@@ -256,7 +297,13 @@ SCANNER_REGISTRY_PATH="slot_registry.json" \
 python backend/main.py
 ```
 
-Al arrancar, el Validator corre la batería completa, emite progress via WS, persiste el reporte en DB (trigger=startup) + `app.state` + TXT en `LOG/`. El Database Engine inicializa op + archive automáticamente. Si `SCANNER_ROTATE_ON_SHUTDOWN=true`, dispara `rotate_with_archive` al cerrar.
+Al arrancar: Validator corre batería completa → emite progress via WS → persiste reporte en DB + TXT en `LOG/`. Database Engine inicializa op + archive. Heartbeat del scoring engine corre healthcheck cada `heartbeat_interval_s` (default 120s) y emite `engine.status` con green/yellow/red. Si `SCANNER_AGGRESSIVE_ROTATION_ENABLED=true`, watchdog chequea tamaño DB cada `aggressive_rotation_interval_s` (default 1h).
+
+**Archivos de datos en el repo:**
+- `backend/fixtures/parity_reference/fixtures/parity_qqq_candles.db` (10.6MB commiteado).
+- `backend/fixtures/parity_reference/fixtures/parity_qqq_sample.json` (390KB).
+- `backend/fixtures/qqq_canonical_v1.json` + `.sha256` + `.metrics.json`.
+- `docs/specs/Observatory/Current/qqq_1min.json` (30MB) + `qqq_daily.json` + `spy_daily.json` — dataset Observatory de verificación.
 
 ### Divergencias conocidas con Observatory — estado post-Fase 5.2/5.4
 

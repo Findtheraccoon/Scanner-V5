@@ -1,44 +1,75 @@
 # Config Module
 
-**Tipo:** módulo de carga/guardado de configuración del usuario.
-**Estado:** pendiente de implementación.
+**Tipo:** módulo de carga/guardado de configuración del usuario con encripción inline.
+**Estado:** implementado en modo standalone (cerrado 2026-04-23). Wiring a endpoints pendiente.
 
 ## Rol
 
-Manejo del archivo `config_*.json` del usuario. Serializa y deserializa todo el estado configurable del scanner.
+Maneja el archivo `config_*.json` del usuario. Serializa y deserializa el estado configurable del scanner, con encripción Fernet inline para los 3 campos sensibles: API keys de Twelve Data, credenciales S3, API bearer token del propio scanner.
+
+## Arquitectura
+
+```
+modules/config/
+├── __init__.py    # API pública
+├── crypto.py      # Fernet (AES-128-CBC + HMAC) + resolución de master key
+├── models.py      # UserConfig, TDKeyConfig, S3Config (Pydantic frozen)
+└── loader.py      # save_config / load_config con atomic write + decrypt en load
+```
+
+## API pública
+
+```python
+from modules.config import (
+    UserConfig, TDKeyConfig, S3Config,  # modelos
+    load_config, save_config,            # persistencia
+    get_master_key,                      # clave simétrica
+    MasterKeyError,                      # errores
+)
+```
+
+## Master key
+
+Orden de resolución (ver `get_master_key()`):
+
+1. Env var `SCANNER_MASTER_KEY` (base64url, 32 bytes).
+2. Archivo en disco `data/master.key` (auto-gen 0600 si no existe).
+3. Si `auto_generate=False` y los 2 anteriores fallan → `MasterKeyError`.
 
 ## Qué contiene el Config
 
-- API keys del provider (5 slots, encriptadas).
-- Credenciales S3 (encriptadas).
-- API bearer token del propio scanner (encriptado, ver ADR-0001).
-- Fixtures activas por slot (serializadas dentro del Config — desvío #7).
-- Path del último Config cargado (`last_config_path.txt` separado).
-- Preferencias de UI.
-- Estado del auto-arranque.
+Schema en `models.UserConfig`:
+
+- `schema_version: str` — semver del modelo (default "1.0.0").
+- `name: str` — identificador del Config.
+- **Secretos (encriptados):**
+  - `twelvedata_keys: list[TDKeyConfig]` — hasta 5 keys con `credits_per_minute`/`credits_per_day`.
+  - `s3_config: S3Config | None` — credenciales del backup bucket.
+  - `api_bearer_token: str | None` — token del scanner (ADR-0001).
+- **No-secretos:**
+  - `registry_path: str` — path al `slot_registry.json`.
+  - `preferences: dict` — UI, atajos, etc.
+  - `auto_last_enabled: bool` — arranque automático desde LAST.
 
 ## Operaciones
 
-- **Cargar / Guardar / Guardar como / LAST** (botones del Paso 1 de Configuración).
-- **Auto-LAST al arrancar:** si existe LAST + está completo, el backend arranca motores hasta "operativo" saltando Paso 4.
-- **Wipe de secretos en RAM** al shutdown.
+- `load_config(path, master_key=None)` — lee JSON, desencripta `*_enc`, retorna `UserConfig`.
+- `save_config(cfg, path, master_key=None)` — encripta los 3 secretos como `<name>_enc`, escribe JSON con atomic write (tempfile + `os.replace`).
 
-## Peso estimado
+## Invariantes (testeados)
 
-- Fixture sola: ~1.5 KB por slot.
-- 6 slots con fixtures: ~7-9 KB.
-- Secrets encriptados: ~1.1 KB.
-- Preferencias y metadata: ~800 bytes.
-- **Total:** ~9-11 KB sin métricas, ~16-20 KB si el usuario serializa fixtures con sibling `.metrics.json`.
+1. Secretos **NO aparecen en cleartext** en el JSON persistido — solo campos `*_enc`.
+2. Round-trip `save` → `load` preserva todos los campos bit-a-bit.
+3. Key errada al `load` → `MasterKeyError` (no corrupción silenciosa).
+4. Atomic write: si `os.replace` falla, el file original queda intacto y no hay tempfiles residuales.
 
-## Invariantes
+## Pendiente: wiring a endpoints
 
-1. Secretos (API keys provider, S3, bearer token) siempre encriptados inline.
-2. El Config NO guarda la DB ni las velas — solo configuración.
-3. Al abrir un Config inválido, el backend no arranca y devuelve error claro al frontend.
+El Config es standalone. Los endpoints actuales (`POST /database/backup`, etc.) siguen aceptando credenciales en body. La integración se hará cuando el frontend consuma el Config — decisión pendiente: cómo editar desde UI, cuándo recargar, si aplicar cambios en caliente o requerir restart.
 
 ## Referencias
 
 - `docs/operational/FEATURE_DECISIONS.md` §3.5 (Fixtures + Config).
 - `docs/operational/FEATURE_DECISIONS.md` §4.4 (Persistencia privada).
 - `docs/operational/FEATURE_DECISIONS.md` §4.8 (Configuración — archivo JSON).
+- `docs/adr/0001-auth-api-bearer-token.md` (bearer token autogenerado).
