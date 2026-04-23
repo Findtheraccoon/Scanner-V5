@@ -207,6 +207,31 @@ def _build_validator(
     )
 
 
+def _build_aggressive_watchdog_factory(app, settings: Settings):
+    """Factory del watchdog automático de rotación agresiva (§9.4).
+
+    Solo se agrega cuando `SCANNER_AGGRESSIVE_ROTATION_ENABLED=true` y
+    hay archive configurado. El default es off (opt-in) porque la
+    rotación agresiva es destructiva.
+    """
+    from pathlib import Path as _Path
+
+    from engines.database import aggressive_rotation_watchdog
+
+    db_path = _Path(settings.db_path)
+
+    async def factory():
+        await aggressive_rotation_watchdog(
+            app.state.session_factory,
+            app.state.archive_session_factory,
+            db_path,
+            size_limit_mb=settings.db_size_limit_mb,
+            interval_s=settings.aggressive_rotation_interval_s,
+        )
+
+    return factory
+
+
 def _build_validator_startup_factory(app):
     """Factory para el lifespan: corre la batería al arrancar, guarda
     el reporte en `app.state.last_validator_report` y escribe el TXT
@@ -294,6 +319,14 @@ def main() -> int:
         rotate_on_shutdown=settings.rotate_on_shutdown,
         db_size_limit_mb=settings.db_size_limit_mb,
     )
+
+    if (
+        settings.aggressive_rotation_enabled
+        and archive_db_url is not None
+    ):
+        extra_workers.append(
+            _build_aggressive_watchdog_factory(app, settings),
+        )
 
     if use_real_scan_loop:
         factory = build_scan_loop_factory_for_app(
