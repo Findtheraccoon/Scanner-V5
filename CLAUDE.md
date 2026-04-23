@@ -62,7 +62,7 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 | 1 (Data Engine) | `backend/engines/data/` — KeyPool, TwelveDataClient, `DataEngine` orquestrador (warmup DB-first, fetch_for_scan retry), `auto_scan_loop` real con DEGRADED ENG-060 | ✅ |
 | 2 (Validator) | `backend/modules/validator/` — batería D/A/B/C/E/F/G + runner + REST + TXT log + hot-reload revalidation | ✅ |
 | 3 (Slot Registry) | `backend/modules/slot_registry/` + `backend/engines/registry_runtime.py` — runtime in-memory con hot-reload REST (disable + enable con warmup + persistencia JSON) | ✅ |
-| 4 (Scoring Engine) | `backend/engines/scoring/` — Fases 1-5 + parity harness (189/245 baseline) | ✅ |
+| 4 (Scoring Engine) | `backend/engines/scoring/` — Fases 1-5 + parity **245/245 (100%)** | ✅ |
 | 5 (Persistencia + API + WS) | `backend/modules/db/` + `backend/api/` + `backend/modules/signal_pipeline/` — SQLAlchemy async, Alembic híbrido, REST auth Bearer, WS con 6 eventos, pipeline scan→persist→broadcast con flag `persist`, backup/restore S3, transparent reads op+archive | ✅ |
 | 6 (Database Engine) | `backend/engines/database/` — heartbeat + rotación retention + move-to-archive + retención agresiva (§9.4) | ✅ |
 | 7 (Archive + S3) | `data/archive/scanner_archive.db` + `modules/db/backup.py` + validator_reports histórico | ✅ |
@@ -83,7 +83,7 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
   - **5.3a** · `ind_builder.py:build_ind_bundle()` agrupa indicadores consumidos por confirms.
   - **5.3b** · `confirms/categorize.py` (dedup + pesos fixture) + `bands.py` (resolve_band) + `errors.py:build_signal_output()` + wire paso 8-11 en analyze. Score = trigger_sum + confirm_sum (H-02).
   - **5.3c** · Tests de integración con monkeypatch de detectores.
-- **Fase 5.4:** parity harness — `backend/engines/scoring/aggregator.py` (1min→15M/1H) + `backend/fixtures/parity_reference/parity_qqq_regenerate.py` (runner E2E). **Baseline 189/245 matches (77%)**.
+- **Fase 5.4:** parity harness — `backend/engines/scoring/aggregator.py` (1min→15M/1H) + `backend/fixtures/parity_reference/parity_qqq_regenerate.py` (runner E2E). **✅ 245/245 matches (100%)** post fixes #aggregator/reset_day y #ORB/vol_ratio_intraday (ver gotchas #16 y #17).
 
 **Tests scoring:** 643 passing en `backend/tests/engines/scoring/` (sub-total del total global 964).
 
@@ -220,7 +220,7 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 ### Pendiente
 
 - **Frontend:** React + TS + Vite + Tailwind + shadcn + Zustand + TanStack Query (aún no iniciado). Bloque grande — desbloquea el producto entero; backend ya expone todo lo necesario (REST + WS + stats + backup/restore).
-- ~~**Fase 5.4 cierre**~~ → **Cerrado 2026-04-22.** Baseline 189/245 (77.14%) confirmado como techo alcanzable: el sample ya era correcto, los mismatches son data-source (velas portables ≠ velas que Observatory usó). Ver divergencia #6.
+- ~~**Fase 5.4 cierre**~~ → **Cerrado 2026-04-23 al 100%.** Post subida del `qqq_1min.json` original del Observatory, se identificaron 2 bugs reales del motor (ver gotchas #16 y #17): aggregator no resetaba al cambio de día + ORB gate usaba mean-cross-day en vez de median-intraday. Ambos arreglados → **245/245 match**. `DEFAULT_MIN_MATCH_RATE` subido a 0.99.
 - **Config encriptado `modules/config/`** para distribución Windows. Bloqueante para:
   - Encriptar credenciales S3 del body de `/database/backup` (deuda técnica AR.2).
   - Encriptar API keys de Twelve Data actualmente en env var.
@@ -228,12 +228,13 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 
 ### Para el siguiente chat
 
-**Estado al 2026-04-22:** backend **completo al spec §3 + §9.4**. Ultima tanda pushada (AR.5 + docs):
+**Estado al 2026-04-23:** backend **completo al spec §3 + §9.4 + Fase 5.4 cerrada al 100%**. Ultima tanda pushada:
 
-- AR.5 — retención agresiva (§9.4). `POST /database/rotate/aggressive` + stats extendido con `size_mb_operative`.
-- Update completo de este `CLAUDE.md` — estado post PR #18/#19/#20 + nueva sección "Capa 7".
+- AR.5 — retención agresiva (§9.4). `POST /database/rotate/aggressive` + stats extendido.
+- Fase 5.4 cerrada con parity **245/245 (100%)** tras 2 fixes reales del motor productivo (aggregator reset_day + ORB vol_ratio intraday). Ver gotchas #16 y #17.
+- JSONs de velas Observatory commiteados en `docs/specs/Observatory/Current/` como dataset de verificación (qqq_1min 30MB, qqq_daily, spy_daily). `observatory_v5_2.db` se usó para el diagnóstico inicial y después se removió.
 
-**Branch de trabajo:** `claude/review-project-setup-4DnEm`. 2 commits sin PR desde último merge (PR #20 de AR.4).
+**Branch de trabajo:** `claude/review-project-setup-4DnEm`.
 
 **Próximo bloque grande:** Frontend React + TS. Backend ya expone:
 - REST `/api/v1/slots/{id}` PATCH (disable + enable con warmup).
@@ -245,7 +246,6 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 - WS `/ws?token=...` con 6 eventos.
 
 **Otros pendientes chicos antes del frontend** (decisión abierta, preguntar a Álvaro):
-- Cierre paridad Fase 5.4 (requiere `observatory_v5_2.db` original).
 - `modules/config/` encriptado (bloqueante para distribución Windows + deuda S3 creds).
 
 **Comando de arranque end-to-end verificado:**
@@ -265,7 +265,9 @@ Al arrancar, el Validator corre la batería completa, emite progress via WS, per
 3. **ATR Wilder vs Observatory mean:** pendiente. No afecta confirms críticos (Gap usa `atr_pct` que da similar magnitude). Documentada en `indicators/atr.py`.
 4. ~~Pivot fakeouts~~ → **Resuelto Fase 5.2e** (`find_pivots` + `key_levels`).
 5. **Convención 1H aggregation:** ~~ambigua~~ → **Resuelta con el replay Observatory** portado en `docs/specs/Observatory/Current/Replay/candle_builder.py` L117-127: 1H open-stamped con `include_current=True`. Mi aggregator coincide.
-6. **Data source mismatch (confirmado, cerrado):** el `parity_qqq_candles.db` portable tiene closes ligeramente distintos a las velas que Observatory usó al generar los 245 signals. Verificado **2026-04-22** regenerando el sample desde `observatory_v5_2.db` (68MB, pulled): cero diffs semánticos entre sample regenerado y sample actual → el sample ya era correcto. El match rate **189/245 (77.14%)** es el **techo alcanzable** con las velas portables. Observatory no preserva velas históricas (su DB solo tiene outputs), así que reproducir el 100% requiere el dataset de velas fuente original — fuera de alcance. `backend/fixtures/parity_reference/regenerate_from_observatory.py` queda como herramienta auditable. `DEFAULT_MIN_MATCH_RATE` del Check F subido a 0.75 (headroom explícito sobre el 77.14% real).
+6. ~~**Data source mismatch**~~ → **Resuelto 2026-04-23 con parity 100%.** La hipótesis inicial ("velas portables ≠ velas Observatory") se refutó al pullear el `qqq_1min.json` del Observatory (30MB): las 1min matchean bit-a-bit (0 diffs en 96562 velas compartidas). Los mismatches eran 2 bugs reales del motor scanner que el dataset portable había estado enmascarando:
+   - **Bug aggregator:** no aplicaba `reset_day()` al cambiar de fecha. Ver gotcha #16. Fix: bucket key `(date, hour)` + descartar bucket en construcción al cambio de día. Parity 77% → 98.37%.
+   - **Bug ORB vol_ratio:** gate usaba `volume_ratio_at` mean-cross-day en lugar de `vol_ratio_intraday` median-same-day. Ver gotcha #17. Fix: wire `vol_ratio_intraday` (ya porteado en Fase 5.2a pero nunca conectado al ORB). Parity 98.37% → **100%**.
 
 ---
 
@@ -330,7 +332,7 @@ El runner `parity_qqq_regenerate.py` implementa esta convención en su `slice_fo
 ### 9. Aggregation 15M vs 1H asimétrica
 
 - **15M:** bucket open-stamped `[T, T+14]`. La última vela al momento T es **parcial** (close = 1min de T). El sample `price_at_signal` matchea ese close.
-- **1H:** bucket open-stamped `HH:00`. La convención exacta para el cálculo de MA20/MA40 al momento T sigue siendo ambigua — experimentalmente, incluir la parcial da 189/245 matches y excluirla da 160/245. El replay Observatory aclarará la convención real.
+- **1H:** bucket open-stamped **con dt = primera 1min del día** (`09:30` en mercado US, no `09:00` round). Se resetea al cambio de día para evitar contaminar con data del día anterior (ver gotcha #16). Convención verificada bit-a-bit contra el `CandleBuilder` de Observatory post parity 100%.
 
 ### 10. Git: squash-merges se ven como "commits nuevos" en main (resuelto)
 
@@ -392,6 +394,32 @@ task.add_done_callback(tasks.discard)
 ```
 
 Se usa para el warmup post-enable y para la revalidation del Validator en `api/routes/slots.py`.
+
+### 16. Aggregator 1min→1H/15M: resetear bucket al cambio de día
+
+El `CandleBuilder` de Observatory (`docs/specs/Observatory/Current/Replay/candle_builder.py` líneas 94-99) **descarta el bucket en construcción al cambio de fecha** — la vela 1H del último período del día anterior (típicamente `15:xx` en mercado US) nunca persiste en `candles_1h`. Es decisión explícita: sin 1min a `16:00` no hay cambio de bucket → building_1h queda abierta → llega 1min del día nuevo → `reset_day()` la descarta.
+
+**Bug original en mi aggregator:** agrupaba por `HH:00` round cross-day. Las 1H del día actual acumulaban data pre-market o residuos del día anterior según cómo llegaban las 1min. MA20/40 divergían ~0.5 puntos vs Observatory → mismatch en trends y alignment.
+
+**Fix:** bucket key = `(date, hour)` para 1H, `(date, hour, minute//15)` para 15M. Al cambio de fecha, la key cambia automáticamente; además descartamos explícitamente el bucket previo (no lo pusheamos a `result`). El `dt` de la vela agregada = dt de la **primera** 1min del bucket (no `HH:00` round) — primera vela del día es `09:30:00`, no `09:00:00`.
+
+**Impacto histórico:** parity Fase 5.4 subió 77.14% → 98.37% solo con este fix.
+
+### 17. ORB volume gate: usar `vol_ratio_intraday` (median same-day), no `volume_ratio_at` (mean cross-day)
+
+El ORB breakout/breakdown tiene un gate binario `vol_ratio >= 1.0`. Observatory `indicators.py:vol_ratio(today_only=True)` computa la **mediana** de volúmenes de las velas completas del **mismo día**. Razones:
+
+1. Anula el outlier del 9:30 (volumen apertura 3-5x del resto).
+2. Same-day comparison — no mezcla perfiles de volumen de sesiones previas.
+3. `price_at_signal` típicamente está al principio de sesión (9:30, 9:45, 10:00) — comparar contra data cross-day da ratios 0.04-0.31 que bloquean el ORB incorrectamente.
+
+**Bug original en mi `analyze.py`:** usaba `volume_ratio_at(mean, 20)` — media sobre las últimas 20 velas 15M, cross-day. Al inicio del día la ventana era ~17 velas del día anterior + ~3 del actual → bloqueaba el ORB sistemáticamente.
+
+**Fix:** `vol_ratio_intraday(candles_15m, sim_date)` ya estaba porteado desde Fase 5.2a pero nunca se había wired. Reemplazar el cálculo del `vol_ratio` en `analyze.py` resolvió los 4 mismatches restantes post-fix aggregator.
+
+**Impacto histórico:** parity Fase 5.4 subió 98.37% → 100% solo con este fix.
+
+**Lección general:** tanto #16 como #17 existían en el motor productivo. El parity exhaustivo fue el mecanismo que los expuso. Mantener Check F activo detecta regresiones futuras.
 
 ---
 
