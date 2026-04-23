@@ -15,9 +15,15 @@ que las usa para mantener la DB saludable.
 
 from engines.database.heartbeat import emit_engine_heartbeat
 from engines.database.rotation import DEFAULT_RETENTION_POLICIES, rotate_expired
+from engines.database.watchdog import (
+    DEFAULT_WATCHDOG_INTERVAL_S,
+    aggressive_rotation_watchdog,
+)
 
 __all__ = [
     "DEFAULT_RETENTION_POLICIES",
+    "DEFAULT_WATCHDOG_INTERVAL_S",
+    "aggressive_rotation_watchdog",
     "emit_engine_heartbeat",
     "rotate_expired",
 ]

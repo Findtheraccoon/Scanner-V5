@@ -25,6 +25,8 @@ spec §5.4), las credenciales encriptadas vendrán del Config via
 | `SCANNER_ARCHIVE_DB_PATH`        | `"data/archive/scanner_archive.db"` | Ruta al archive (spec §3.7) |
 | `SCANNER_ROTATE_ON_SHUTDOWN`     | `false`               | Dispara rotación en shutdown |
 | `SCANNER_DB_SIZE_LIMIT_MB`       | `5000`                | Umbral para rotación agresiva (§9.4) |
+| `SCANNER_AGGRESSIVE_ROTATION_ENABLED` | `false`          | Watchdog auto (default off, opt-in) |
+| `SCANNER_AGGRESSIVE_ROTATION_INTERVAL_S` | `3600`        | Segundos entre chequeos del watchdog |
 """
 
 from __future__ import annotations
@@ -77,6 +79,8 @@ class Settings(BaseSettings):
 
     # Retención agresiva (§9.4, spec pendiente decisión — 5 GB tentativo)
     db_size_limit_mb: int = Field(default=5000, gt=0)
+    aggressive_rotation_enabled: bool = Field(default=False)
+    aggressive_rotation_interval_s: float = Field(default=3600.0, gt=0)
 
     @field_validator("log_level")
     @classmethod

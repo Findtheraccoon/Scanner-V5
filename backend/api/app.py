@@ -21,7 +21,7 @@ opt-in (`enable_heartbeat=False` por default para tests unitarios).
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -48,6 +48,7 @@ def create_app(
     auto_init_db: bool = True,
     enable_heartbeat: bool = False,
     heartbeat_interval_s: float = DEFAULT_HEARTBEAT_INTERVAL_S,
+    heartbeat_healthcheck_fn: Callable[[], dict] | None = None,
     enable_auto_scheduler: bool = False,
     auto_scheduler_interval_s: float = DEFAULT_AUTO_SCHEDULER_INTERVAL_S,
     extra_workers: list | None = None,
@@ -122,6 +123,7 @@ def create_app(
                         session_factory,
                         broadcaster,
                         interval_s=heartbeat_interval_s,
+                        healthcheck_fn=heartbeat_healthcheck_fn,
                     ),
                     name="heartbeat_worker",
                 ),
