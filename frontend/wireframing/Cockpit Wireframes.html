@@ -1,0 +1,1026 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<title>Scanner v5 · Cockpit · Wireframes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=Kalam:wght@300;400;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1b1b1b;
+    --ink-2:#2a2a2a;
+    --line:#1b1b1b;
+    --muted:#6b6b6b;
+    --paper:#f4f1ea;
+    --paper-2:#ece8de;
+    --accent:#9cc80a; /* lime */
+    --warn:#c8910a;
+    --err:#c22b2b;
+    --ok:#4a8a26;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:'Inter',system-ui,sans-serif;}
+  body{min-height:100vh;}
+  /* Sketch paper texture */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.35;
+    background-image:
+      radial-gradient(#00000010 1px, transparent 1px),
+      radial-gradient(#00000008 1px, transparent 1px);
+    background-size: 22px 22px, 13px 13px;
+    background-position: 0 0, 11px 7px;
+    mix-blend-mode:multiply;
+  }
+  .wrap{position:relative;z-index:1;padding:28px 36px 120px;max-width:1760px;margin:0 auto;}
+
+  /* ===== HEADER ===== */
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:18px;border-bottom:1.5px solid var(--ink);padding-bottom:14px;}
+  .title{font-family:'Kalam',cursive;font-weight:700;font-size:30px;line-height:1;letter-spacing:.5px;}
+  .title small{font-family:'Inter',sans-serif;font-weight:400;font-size:13px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-left:10px;}
+  .meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);display:flex;gap:18px;}
+  .meta b{color:var(--ink);font-weight:500;}
+
+  /* ===== TWEAKS BAR ===== */
+  .tweaks{
+    position:fixed;right:22px;top:22px;z-index:20;
+    background:var(--paper);border:1.5px solid var(--ink);
+    padding:12px 14px;min-width:240px;
+    box-shadow:3px 4px 0 var(--ink);
+    font-size:12px;
+    transform:rotate(-.4deg);
+  }
+  .tweaks h4{margin:0 0 8px;font-family:'Kalam',cursive;font-size:16px;font-weight:700;letter-spacing:.5px;}
+  .tweaks .row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+  .tweaks .row:last-child{margin-bottom:0}
+  .tweaks label{display:block;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;width:100%}
+  .pill{
+    font-family:'Inter',sans-serif;font-size:11px;border:1.2px solid var(--ink);
+    background:transparent;padding:4px 9px;cursor:pointer;color:var(--ink);
+    font-weight:500;letter-spacing:.04em;
+  }
+  .pill.on{background:var(--ink);color:var(--paper);}
+  .pill.accent.on{background:var(--accent);color:var(--ink);border-color:var(--ink);}
+  .tweaks .hint{font-family:'Caveat',cursive;font-size:13px;color:var(--muted);margin-top:8px;}
+
+  /* ===== ANNOTATIONS ===== */
+  .ann{
+    position:absolute;font-family:'Caveat',cursive;font-size:15px;color:var(--ink);
+    line-height:1.1;pointer-events:none;z-index:5;max-width:180px;
+  }
+  .ann .num{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:20px;height:20px;border:1.5px solid var(--ink);border-radius:50%;
+    font-family:'Kalam',cursive;font-size:12px;font-weight:700;margin-right:4px;background:var(--paper);
+    transform:rotate(-3deg);
+  }
+  .ann svg{position:absolute;overflow:visible;pointer-events:none;}
+
+  /* ===== VARIATION FRAME ===== */
+  .variation{display:none;position:relative;}
+  .variation.show{display:block;}
+  .vhead{
+    display:flex;align-items:baseline;gap:14px;margin:8px 0 16px;
+  }
+  .vhead .tag{
+    font-family:'Kalam',cursive;font-weight:700;font-size:22px;
+    background:var(--ink);color:var(--paper);padding:2px 10px;transform:rotate(-1deg);
+    display:inline-block;
+  }
+  .vhead .cap{font-family:'Caveat',cursive;font-size:18px;color:var(--muted);}
+
+  /* ===== COCKPIT FRAME (shared) ===== */
+  .cockpit{
+    border:2px solid var(--ink);
+    background:var(--paper);
+    position:relative;
+    box-shadow:5px 6px 0 rgba(0,0,0,.08);
+  }
+  .cockpit .chrome{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:6px 12px;border-bottom:1.5px solid var(--ink);
+    font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;
+  }
+  .cockpit .chrome .tabs{display:flex;gap:14px;}
+  .cockpit .chrome .tabs span{padding:2px 4px}
+  .cockpit .chrome .tabs .sel{color:var(--ink);border-bottom:2px solid var(--ink);font-weight:600;}
+  .ws{display:flex;align-items:center;gap:6px;}
+  .ws .dot{width:7px;height:7px;border:1px solid var(--ink);border-radius:50%;background:var(--ok);}
+
+  /* API BANNER */
+  .api-top{
+    display:grid;grid-template-columns: 2fr 1fr;gap:18px;
+    padding:12px 14px;border-bottom:1.5px solid var(--ink);background:var(--paper-2);
+  }
+  .api-keys{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;}
+  .api-key{border:1.2px dashed var(--ink);padding:8px 10px;min-height:74px;display:flex;flex-direction:column;justify-content:space-between;}
+  .api-key .al{display:flex;justify-content:space-between;align-items:baseline;font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.05em;text-transform:lowercase;}
+  .api-key .al b{color:var(--ink);font-weight:600;}
+  .api-key .al .used{font-weight:600;color:var(--ink);font-size:12px;letter-spacing:0;}
+  .api-key .al .used span{color:var(--muted);font-weight:400;}
+  .api-key .bar{height:7px;border:1px solid var(--ink);margin-top:6px;position:relative;background:var(--paper);}
+  .api-key .bar i{display:block;height:100%;background:var(--ink);}
+  .api-key .meta{display:flex;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);margin-top:4px;letter-spacing:.04em;}
+  .api-key .meta .daily{color:var(--ink);font-weight:500;}
+  .api-daily{border:1.5px solid var(--ink);padding:10px 12px;display:flex;flex-direction:column;justify-content:space-between;}
+  .api-daily .lbl{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);}
+  .api-daily .num{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:600;margin:4px 0 6px;}
+  .api-daily .num small{font-size:13px;color:var(--muted);font-weight:400;}
+  .api-daily .bar{height:12px;border:1.2px solid var(--ink);position:relative;background:var(--paper);}
+  .api-daily .bar i{display:block;height:100%;background:var(--ink);}
+  .api-daily .reset{font-family:'Caveat',cursive;font-size:13px;color:var(--muted);margin-top:6px;}
+
+  /* Banner actions group (SCAN + AUTO + COPIAR) */
+  .banner-actions{display:flex;align-items:center;gap:12px;}
+  .banner-actions .divider{width:1px;height:28px;background:var(--ink);opacity:.2;}
+  .banner-actions .btn{padding:8px 14px;}
+  .banner-actions .toggle{font-family:'JetBrains Mono',monospace;font-size:10.5px;letter-spacing:.05em;}
+  .score-wrap{display:flex;flex-direction:column;align-items:flex-start;}
+  .score-wrap .acierto{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.05em;margin-top:2px;}
+  .score-wrap .acierto b{color:var(--ink);font-weight:600;}
+
+  /* GLOBAL CONTROLS STRIP */
+  .ctrl-strip{
+    display:flex;align-items:center;gap:14px;justify-content:space-between;
+    padding:8px 14px;border-bottom:1.5px solid var(--ink);
+    font-family:'JetBrains Mono',monospace;font-size:11px;
+  }
+  .ctrl-strip .grp{display:flex;align-items:center;gap:10px;}
+  .btn{
+    border:1.2px solid var(--ink);background:transparent;padding:5px 12px;
+    font-family:'Inter',sans-serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;cursor:pointer;
+  }
+  .btn.primary{background:var(--accent);border-color:var(--ink);}
+  .btn.ghost{border-style:dashed;}
+  .toggle{display:inline-flex;align-items:center;gap:8px;}
+  .toggle .sw{width:32px;height:16px;border:1.2px solid var(--ink);position:relative;background:var(--paper);}
+  .toggle .sw i{position:absolute;top:1px;left:1px;width:12px;height:12px;background:var(--ink);transition:.2s;}
+  .toggle.on .sw{background:var(--accent);}
+  .toggle.on .sw i{left:17px;}
+
+  /* MAIN LAYOUT (varies per variation) */
+  .main{display:grid;gap:0;}
+  .va .main{grid-template-columns:300px 1fr;}
+  .vb .main{grid-template-columns:72px 300px 1fr 340px;}
+
+  /* WATCHLIST */
+  .watch{border-right:1.5px solid var(--ink);padding:10px;display:flex;flex-direction:column;gap:10px;}
+  .watch h3{
+    font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.18em;
+    text-transform:uppercase;color:var(--muted);margin:4px 2px 4px;font-weight:500;
+  }
+  .card{
+    border:1.5px solid var(--ink);background:var(--paper);padding:10px;position:relative;cursor:pointer;
+  }
+  .card.sel{background:var(--paper-2);box-shadow:inset 3px 0 0 var(--ink);}
+  .card .row1{display:flex;align-items:baseline;justify-content:space-between;}
+  .card .tk{font-family:'Kalam',cursive;font-weight:700;font-size:22px;letter-spacing:.02em;}
+  .card .dir{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.1em;border:1px solid var(--ink);padding:1px 6px;}
+  .card .row2{display:flex;align-items:center;justify-content:space-between;margin-top:6px;}
+  .card .sc{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:600;}
+  .card .bd{
+    font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.15em;
+    border:1px solid var(--ink);padding:2px 6px;font-weight:600;
+  }
+  .card .ts{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--muted);margin-top:4px;}
+  .card .pilot{position:absolute;top:8px;right:10px;width:8px;height:8px;border:1px solid var(--ink);border-radius:50%;background:var(--ok);}
+
+  /* variant A watchlist cards are more compact, single line for ticker+dir */
+  .va .card{padding:8px 10px;}
+
+  /* Banda styles */
+  .bd.revisar{background:transparent;color:var(--muted);border-style:dashed;}
+  .bd.b{background:var(--paper-2);}
+  .bd.a{background:var(--ink);color:var(--paper);}
+  .bd.aplus{background:var(--ink);color:var(--paper);border-color:var(--ink);position:relative;}
+  .bd.aplus::after{content:"";position:absolute;inset:-3px;border:1px dashed var(--ink);pointer-events:none;}
+  .bd.s{background:var(--accent);border-color:var(--ink);}
+  .bd.splus{
+    background:var(--ink);color:var(--paper);
+    box-shadow: 0 0 0 2px var(--paper), 0 0 0 3.5px var(--ink);
+    position:relative;
+  }
+
+  /* PANEL (right) */
+  .panel{padding:0;display:flex;flex-direction:column;}
+  .banner{
+    border-bottom:1.5px solid var(--ink);padding:14px 18px;display:flex;align-items:center;gap:22px;justify-content:space-between;
+    background:var(--paper-2);
+  }
+  .banner .id{display:flex;align-items:center;gap:16px;}
+  .banner .tk{font-family:'Kalam',cursive;font-size:44px;font-weight:700;line-height:1;}
+  .banner .bd.big{font-size:13px;padding:4px 10px;letter-spacing:.2em;}
+  .banner .dir{font-family:'JetBrains Mono',monospace;font-size:13px;border:1.2px solid var(--ink);padding:2px 8px;letter-spacing:.15em;}
+  .banner .score{font-family:'JetBrains Mono',monospace;font-size:36px;font-weight:600;}
+  .banner .score small{display:block;font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);font-weight:500;}
+  .copy{
+    font-family:'Inter',sans-serif;font-size:13px;letter-spacing:.22em;text-transform:uppercase;font-weight:600;
+    border:2px solid var(--ink);background:var(--paper);padding:10px 18px;cursor:pointer;
+    box-shadow:3px 3px 0 var(--ink);
+  }
+  .copy:hover{background:var(--accent);}
+
+  /* RESUMEN */
+  .resumen{
+    padding:14px 18px;border-bottom:1.5px solid var(--ink);
+    display:grid;grid-template-columns: 1fr 1fr;gap:6px 28px;
+    font-family:'JetBrains Mono',monospace;font-size:12.5px;line-height:1.6;
+  }
+  .resumen .k{color:var(--muted);letter-spacing:.05em;}
+  .resumen .v{font-weight:600;}
+  .resumen .line{display:flex;justify-content:space-between;border-bottom:1px dashed #0002;padding:2px 0;}
+  .flags{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;}
+  .flag{font-family:'JetBrains Mono',monospace;font-size:10.5px;border:1.2px solid var(--ink);padding:2px 8px;letter-spacing:.08em;}
+
+  /* DETALLE header */
+  .det-head{
+    display:flex;align-items:center;justify-content:space-between;padding:8px 18px;
+    border-bottom:1.5px solid var(--ink);background:var(--paper);
+    font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted);
+  }
+  .det-head .exp{border:1px solid var(--ink);padding:3px 10px;font-weight:600;color:var(--ink);cursor:pointer;}
+
+  /* DETALLE — variant A: dense table */
+  .va .detail{padding:14px 18px;display:grid;grid-template-columns:140px 1fr;gap:0 12px;font-family:'JetBrains Mono',monospace;font-size:11.5px;}
+  .va .detail .blk{display:contents;}
+  .va .detail .bh{
+    grid-column:1/2;padding:8px 0 6px;
+    font-size:10px;letter-spacing:.2em;text-transform:uppercase;font-weight:600;
+    border-bottom:1.5px solid var(--ink);
+  }
+  .va .detail .bc{
+    grid-column:2/3;padding:8px 0 6px;border-bottom:1.5px solid var(--ink);
+  }
+  .va .detail .bc .line{display:flex;justify-content:space-between;gap:24px;padding:1px 0;}
+  .va .detail .bc .line span:first-child{color:var(--muted);}
+  .va .detail .bc ul{margin:0;padding-left:14px;}
+
+  /* DETALLE — variant B: card-grid */
+  .vb .detail{padding:14px 18px;display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+  .vb .detail .blk{border:1.2px solid var(--ink);padding:10px 12px;background:var(--paper);}
+  .vb .detail .bh{
+    font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.22em;text-transform:uppercase;font-weight:600;color:var(--muted);
+    padding-bottom:6px;margin-bottom:6px;border-bottom:1px dashed var(--ink);
+  }
+  .vb .detail .bc{font-family:'JetBrains Mono',monospace;font-size:11.5px;line-height:1.55;}
+  .vb .detail .bc .line{display:flex;justify-content:space-between;}
+  .vb .detail .bc .line span:first-child{color:var(--muted);}
+  .vb .detail .wide{grid-column:span 2;}
+  .vb .detail .full{grid-column:1/-1;}
+
+  /* CHART placeholder */
+  .chart{
+    border-top:1.5px solid var(--ink);
+    margin:0;padding:14px 18px;background:var(--paper);
+  }
+  .chart .box{
+    height:220px;border:1.5px dashed var(--ink);position:relative;background:
+      repeating-linear-gradient(0deg, transparent 0 39px, #00000010 39px 40px),
+      repeating-linear-gradient(90deg, transparent 0 59px, #00000010 59px 60px);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .chart .box .cap{font-family:'Caveat',cursive;font-size:18px;color:var(--muted);}
+  .chart .box .ohlc{position:absolute;top:10px;left:10px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.08em;}
+  .chart .box .tv{position:absolute;top:8px;right:10px;font-family:'Inter',sans-serif;font-size:10px;letter-spacing:.14em;text-transform:uppercase;border:1px solid var(--ink);padding:2px 8px;background:var(--paper);}
+
+  /* candle svg inline */
+  .candle{position:absolute;top:20%;left:0;right:0;bottom:20%;}
+
+  /* ===== Variant B sidebar API (vertical) ===== */
+  .vb .api-side{
+    border-right:1.5px solid var(--ink);padding:10px 8px;display:flex;flex-direction:column;gap:10px;align-items:center;
+    background:var(--paper-2);
+  }
+  .vb .api-side h3{
+    writing-mode:vertical-rl;transform:rotate(180deg);
+    font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.25em;text-transform:uppercase;color:var(--muted);margin:4px 0;
+  }
+  .vb .api-side .kv{display:flex;flex-direction:column;align-items:center;gap:2px;}
+  .vb .api-side .kv .lbl{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.1em;}
+  .vb .api-side .vbar{width:14px;height:58px;border:1.2px solid var(--ink);position:relative;background:var(--paper);}
+  .vb .api-side .vbar i{position:absolute;left:0;right:0;bottom:0;background:var(--ink);}
+  .vb .api-side .dailybig{margin-top:6px;padding-top:8px;border-top:1px dashed var(--ink);width:100%;display:flex;flex-direction:column;align-items:center;gap:4px;}
+  .vb .api-side .dailybig .num{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;}
+  .vb .api-side .dailybig .bar{width:40px;height:8px;border:1.2px solid var(--ink);position:relative;background:var(--paper);}
+  .vb .api-side .dailybig .bar i{display:block;height:100%;background:var(--ink);}
+
+  /* ===== Variant B right column (chart parallel) ===== */
+  .vb .rightcol{border-left:1.5px solid var(--ink);display:flex;flex-direction:column;}
+  .vb .rightcol .chart{border-top:none;flex:1;}
+  .vb .rightcol .chart .box{height:100%;min-height:320px;}
+  .vb .rightcol .mini{
+    padding:10px 12px;border-top:1.5px solid var(--ink);font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--muted);letter-spacing:.06em;
+  }
+
+  /* ===== S+ state treatment (three flavors visible on the selected card + banner) ===== */
+  .splus-treatment{display:none}
+  body[data-state="splus"] .splus-treatment{display:block}
+
+  /* State: warmup */
+  body[data-state="warmup"] .selcard .pilot{background:var(--warn);}
+  body[data-state="warmup"] .selcard::after{
+    content:"warming up 62%";position:absolute;bottom:6px;left:10px;
+    font-family:'JetBrains Mono',monospace;font-size:9.5px;letter-spacing:.05em;color:var(--warn);
+  }
+  body[data-state="warmup"] .banner{opacity:.6;}
+  body[data-state="warmup"] .banner .score{text-decoration:line-through wavy var(--muted);}
+
+  /* State: degraded */
+  body[data-state="degraded"] .selcard .pilot{background:var(--warn);}
+  body[data-state="degraded"] .selcard::before{
+    content:"ENG-060 · slot degraded";position:absolute;top:4px;left:10px;
+    font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.05em;color:var(--warn);background:var(--paper);padding:0 4px;
+  }
+
+  /* State: error fatal */
+  body[data-state="error"] .banner{background:repeating-linear-gradient(45deg,var(--paper-2) 0 8px, #e5b0b0 8px 10px);}
+  body[data-state="error"] .banner::before{
+    content:"ENG-001 · Data Engine caído — scan detenido";
+    font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.08em;color:var(--err);
+    position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--paper);padding:2px 10px;border:1.2px solid var(--err);
+  }
+  body[data-state="error"] .banner{position:relative;}
+
+  /* State: S+ on selected card — pulse + glow + thick border */
+  body[data-state="splus"] .selcard{
+    border-width:2.5px;
+    animation: pulseBorder 1.8s ease-in-out infinite;
+  }
+  body[data-state="splus"] .selcard .bd.s, body[data-state="splus"] .selcard .bd{
+    background:var(--ink);color:var(--paper);animation: pulseText 1.8s ease-in-out infinite;
+  }
+  body[data-state="splus"] .banner .bd.big{
+    background:var(--ink);color:var(--paper);animation:pulseText 1.8s ease-in-out infinite;
+    box-shadow:0 0 0 0 rgba(156,200,10,.9);
+  }
+  @keyframes pulseBorder{
+    0%,100%{box-shadow: 0 0 0 0 rgba(0,0,0,.35), inset 3px 0 0 var(--ink);}
+    50%{box-shadow: 0 0 0 4px rgba(0,0,0,.06), inset 3px 0 0 var(--accent);}
+  }
+  @keyframes pulseText{
+    0%,100%{letter-spacing:.2em;}
+    50%{letter-spacing:.26em;}
+  }
+
+  /* State footer toast */
+  .state-toast{
+    display:none;margin:0 18px 10px;padding:8px 12px;border:1.2px dashed var(--ink);
+    font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.05em;background:var(--paper-2);
+  }
+  body[data-state="warmup"] .state-toast.warmup,
+  body[data-state="degraded"] .state-toast.degraded,
+  body[data-state="error"] .state-toast.error,
+  body[data-state="splus"] .state-toast.splus{display:block;}
+
+  /* small handwritten caption utility */
+  .cap{font-family:'Caveat',cursive;font-size:16px;color:var(--muted);}
+
+  /* hidden helper when annotations off */
+  body[data-ann="off"] .ann{display:none;}
+
+  /* Print-friendly */
+  @media print {
+    body::before{display:none;}
+    .tweaks{display:none;}
+  }
+
+  /* hide other variation's annotations */
+  .variation:not(.show) .ann{display:none;}
+</style>
+</head>
+<body data-state="normal" data-ann="on">
+
+<div class="wrap">
+
+  <div class="top">
+    <div>
+      <div class="title">scanner v5 — cockpit <small>wireframe · mid-fi</small></div>
+      <div class="cap" style="margin-top:4px">dos direcciones, mismas decisiones funcionales · estética por resolver en hi-fi</div>
+    </div>
+    <div class="meta">
+      <span><b>sesión</b> 14:32 ET</span>
+      <span><b>slot sel.</b> 1 · QQQ</span>
+      <span><b>scanner</b> v5.2.0</span>
+    </div>
+  </div>
+
+  <!-- ===================== TWEAKS PANEL ===================== -->
+  <div class="tweaks">
+    <h4>tweaks</h4>
+    <label>variación</label>
+    <div class="row" data-group="var">
+      <button class="pill on" data-var="a">A · densa</button>
+      <button class="pill" data-var="b">B · holgada</button>
+    </div>
+    <label>estado del slot</label>
+    <div class="row" data-group="state">
+      <button class="pill on" data-state="normal">normal</button>
+      <button class="pill" data-state="warmup">warmup</button>
+      <button class="pill" data-state="degraded">degraded</button>
+      <button class="pill" data-state="splus">S+ emitida</button>
+      <button class="pill" data-state="error">error fatal</button>
+    </div>
+    <label>anotaciones</label>
+    <div class="row" data-group="ann">
+      <button class="pill on" data-ann="on">on</button>
+      <button class="pill" data-ann="off">off</button>
+    </div>
+    <div class="hint">pasá el cursor por los <b>①②③</b> para leer notas</div>
+  </div>
+
+  <!-- ========================================================== -->
+  <!-- ================== VARIATION A ========================== -->
+  <!-- ========================================================== -->
+  <section class="variation va show" data-var="a">
+    <div class="vhead">
+      <span class="tag">A</span>
+      <span class="cap">densa · banner API arriba · chart debajo del detalle · detalle en tabla</span>
+    </div>
+
+    <div class="cockpit">
+      <!-- chrome -->
+      <div class="chrome">
+        <div class="tabs"><span>configuración</span><span>dashboard</span><span class="sel">cockpit</span><span>memento</span></div>
+        <div class="ws"><span>ws <i style="font-style:normal">·</i> conectado</span><span class="dot"></span></div>
+      </div>
+
+      <!-- API banner on top -->
+      <div class="api-top">
+        <div class="api-keys">
+          <div class="api-key">
+            <div class="al"><b>key principal</b><span class="used">6<span>/8</span></span></div>
+            <div class="bar"><i style="width:75%"></i></div>
+            <div class="meta"><span>hace 3s</span><span class="daily">412/800 día</span></div>
+          </div>
+          <div class="api-key">
+            <div class="al"><b>backup</b><span class="used">2<span>/8</span></span></div>
+            <div class="bar"><i style="width:25%"></i></div>
+            <div class="meta"><span>hace 47s</span><span class="daily">186/800 día</span></div>
+          </div>
+          <div class="api-key">
+            <div class="al"><b>reserva a</b><span class="used">0<span>/8</span></span></div>
+            <div class="bar"><i style="width:0%"></i></div>
+            <div class="meta"><span>—</span><span class="daily">0/800 día</span></div>
+          </div>
+          <div class="api-key" style="opacity:.4">
+            <div class="al"><b>— vacío —</b><span class="used">—</span></div>
+            <div class="bar"></div>
+            <div class="meta"><span>sin configurar</span><span></span></div>
+          </div>
+          <div class="api-key" style="opacity:.4">
+            <div class="al"><b>— vacío —</b><span class="used">—</span></div>
+            <div class="bar"></div>
+            <div class="meta"><span>sin configurar</span><span></span></div>
+          </div>
+        </div>
+        <div class="api-daily">
+          <div>
+            <div class="lbl">créditos diarios · consumido / disponible</div>
+            <div class="num">598<small> / 2400</small></div>
+          </div>
+          <div class="bar"><i style="width:24%"></i></div>
+          <div class="reset">800 × key activa · reset @ 16:00 ET</div>
+        </div>
+      </div>
+
+      <!-- main -->
+      <div class="main">
+
+        <!-- watchlist -->
+        <aside class="watch">
+          <h3>watchlist · 6 slots</h3>
+
+          <div class="card selcard sel">
+            <span class="pilot"></span>
+            <div class="row1"><div class="tk">QQQ</div><div class="dir">CALL</div></div>
+            <div class="row2"><div class="sc">12.0</div><div class="bd aplus">A+</div></div>
+            <div class="ts">14:30 ET · vela cerrada</div>
+          </div>
+
+          <div class="card">
+            <span class="pilot" style="background:var(--ok)"></span>
+            <div class="row1"><div class="tk">SPY</div><div class="dir">CALL</div></div>
+            <div class="row2"><div class="sc">6.5</div><div class="bd a">A</div></div>
+            <div class="ts">14:30 ET</div>
+          </div>
+
+          <div class="card">
+            <span class="pilot" style="background:var(--ok)"></span>
+            <div class="row1"><div class="tk">IWM</div><div class="dir">PUT</div></div>
+            <div class="row2"><div class="sc">3.5</div><div class="bd b">B</div></div>
+            <div class="ts">14:30 ET</div>
+          </div>
+
+          <div class="card">
+            <span class="pilot" style="background:var(--ok)"></span>
+            <div class="row1"><div class="tk">AAPL</div><div class="dir">—</div></div>
+            <div class="row2"><div class="sc">1.2</div><div class="bd revisar">REVISAR</div></div>
+            <div class="ts">14:30 ET</div>
+          </div>
+
+          <div class="card">
+            <span class="pilot" style="background:var(--ok)"></span>
+            <div class="row1"><div class="tk">NVDA</div><div class="dir">CALL</div></div>
+            <div class="row2"><div class="sc">16.0</div><div class="bd s">S</div></div>
+            <div class="ts">14:30 ET</div>
+          </div>
+
+          <div class="card">
+            <span class="pilot" style="background:var(--ok)"></span>
+            <div class="row1"><div class="tk">TSLA</div><div class="dir">PUT</div></div>
+            <div class="row2"><div class="sc">4.0</div><div class="bd b">B</div></div>
+            <div class="ts">14:30 ET</div>
+          </div>
+        </aside>
+
+        <!-- panel -->
+        <div class="panel">
+          <!-- state toasts -->
+          <div class="state-toast warmup">⟳ slot QQQ warming up — descargando velas históricas · 62% · las señales de este slot están pausadas</div>
+          <div class="state-toast degraded">⚠ ENG-060 · 3 fallos consecutivos de fetch — ver log en dashboard</div>
+          <div class="state-toast splus">★ señal S+ emitida en QQQ @ 14:30 ET — spread B→S+ histórico = 38pp</div>
+          <div class="state-toast error">✕ Data Engine caído · las cards no se están actualizando · operación recomendada: revisar Dashboard → Motores</div>
+
+          <!-- banner -->
+          <div class="banner">
+            <div class="id">
+              <div class="tk">QQQ</div>
+              <div class="bd big aplus">A+</div>
+              <div class="dir">CALL</div>
+              <div class="score-wrap">
+                <div class="score">12.0<small>score</small></div>
+                <div class="acierto">acierto hist. <b>68%</b> @ A+</div>
+              </div>
+            </div>
+            <div class="banner-actions">
+              <button class="btn primary">scan ahora</button>
+              <div class="toggle on"><span class="sw"><i></i></span><span>auto · on</span></div>
+              <span class="divider"></span>
+              <button class="copy">↳ copiar</button>
+            </div>
+          </div>
+
+          <!-- resumen -->
+          <div class="resumen">
+            <div class="line"><span class="k">precio</span><span class="v">$485.32  (+0.82%)</span></div>
+            <div class="line"><span class="k">ATR 15M</span><span class="v">0.74% · $3.59</span></div>
+            <div class="line"><span class="k">alineación</span><span class="v">3/3 bull · 15M·1H·D</span></div>
+            <div class="line"><span class="k">dMA200</span><span class="v">+3.2%</span></div>
+            <div class="line"><span class="k">vela</span><span class="v">14:30 ET · calc +4s</span></div>
+            <div class="line"><span class="k">bench (SPY)</span><span class="v">+0.41% · div +0.41pp</span></div>
+            <div class="flags">
+              <span class="flag">⚡ squeeze 1H</span>
+              <span class="flag">↑ ORB breakout</span>
+              <span class="flag">⚠ catalizador</span>
+              <span class="flag">↗ fza rel extrema</span>
+            </div>
+          </div>
+
+          <!-- detalle header -->
+          <div class="det-head">
+            <span>detalle técnico · mismo orden que el texto que se copia</span>
+            <span class="exp">contraer ▲</span>
+          </div>
+
+          <!-- detalle (dense table) -->
+          <div class="detail">
+            <div class="blk">
+              <div class="bh">precio</div>
+              <div class="bc">
+                <div class="line"><span>último</span><span>$485.32</span></div>
+                <div class="line"><span>chg día</span><span>+0.82%</span></div>
+                <div class="line"><span>ATR 15M</span><span>0.74%  ($3.59)</span></div>
+                <div class="line"><span>dMA200</span><span>+3.2%  ($470.12)</span></div>
+              </div>
+            </div>
+            <div class="blk">
+              <div class="bh">contexto</div>
+              <div class="bc">
+                <div class="line"><span>alineación</span><span>3/3 CALL · 15M·1H·D bull</span></div>
+                <div class="line"><span>MAs diarias</span><span>20=$483 · 40=$478 · 200=$470</span></div>
+                <div class="line"><span>BB 1H</span><span>$482.1 / $484.5 / $486.9</span></div>
+              </div>
+            </div>
+            <div class="blk">
+              <div class="bh">volumen</div>
+              <div class="bc">
+                <div class="line"><span>15M</span><span>1.8× mediana</span></div>
+                <div class="line"><span>1H</span><span>1.4× mediana</span></div>
+                <div class="line"><span>vela curso</span><span>2.1× proy · fracción 0.66</span></div>
+                <div class="line"><span>secuencia</span><span>↑ creciente</span></div>
+              </div>
+            </div>
+            <div class="blk">
+              <div class="bh">fuerza relativa</div>
+              <div class="bc">
+                <div class="line"><span>vs SPY</span><span>+0.87%</span></div>
+                <div class="line"><span>DivSPY</span><span>QQQ +0.82% / SPY +0.41%</span></div>
+              </div>
+            </div>
+            <div class="blk">
+              <div class="bh">niveles</div>
+              <div class="bc">
+                <div class="line"><span>R</span><span>$487.2 (PD) · $489.5 (R1)</span></div>
+                <div class="line"><span>S</span><span>$483.8 (S1) · $481.1 (PD)</span></div>
+              </div>
+            </div>
+            <div class="blk">
+              <div class="bh">eventos</div>
+              <div class="bc">
+                <div class="line"><span>squeeze</span><span>BB 1H p12 → expansión</span></div>
+                <div class="line"><span>ORB</span><span>breakout · rango $484.1-$485.8</span></div>
+                <div class="line"><span>catalizador</span><span>chg &gt; 1.5× ATR</span></div>
+              </div>
+            </div>
+            <div class="blk">
+              <div class="bh">patrones (3)</div>
+              <div class="bc">
+                <ul style="font-family:'JetBrains Mono',monospace;font-size:11px;margin:0;padding-left:14px">
+                  <li>[15M] doji BB inf · bull · trigger · w:2</li>
+                  <li>[15M] ORB breakout · bull · trigger · w:2</li>
+                  <li>[1H]  BBinf_1H · bull · confirm · w:3</li>
+                </ul>
+              </div>
+            </div>
+            <div class="blk">
+              <div class="bh">scoring</div>
+              <div class="bc">
+                <div class="line"><span>estructura</span><span>✓</span></div>
+                <div class="line"><span>triggers</span><span>2 señales · suma 4.0</span></div>
+                <div class="line"><span>confirms</span><span>1 señal · suma 3.0 (tras dedup)</span></div>
+                <div class="line"><span>bloqueo / conflicto</span><span>— / —</span></div>
+              </div>
+            </div>
+            <div class="blk">
+              <div class="bh">resultado</div>
+              <div class="bc">
+                <div class="line"><span>score</span><span><b>12.0</b></span></div>
+                <div class="line"><span>dirección</span><span><b>CALL</b></span></div>
+                <div class="line"><span>confianza</span><span><b>A+</b></span></div>
+                <div class="line"><span>señal</span><span><b>SETUP</b></span></div>
+              </div>
+            </div>
+            <div class="blk">
+              <div class="bh">meta</div>
+              <div class="bc" style="color:var(--muted)">
+                <div class="line"><span>engine</span><span>5.2.0</span></div>
+                <div class="line"><span>fixture</span><span>qqq_v5_2_0 v5.2.0</span></div>
+                <div class="line"><span>slot</span><span>1</span></div>
+                <div class="line"><span>vela</span><span>2026-04-23 14:30 ET</span></div>
+                <div class="line"><span>cálculo</span><span>14:30:04 ET</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- chart below detail -->
+          <div class="chart">
+            <div class="box">
+              <div class="ohlc">QQQ · 15M · o 484.80 · h 485.60 · l 484.32 · c 485.32</div>
+              <div class="tv">abrir en tradingview ↗</div>
+              <svg class="candle" viewBox="0 0 600 120" preserveAspectRatio="none">
+                <g stroke="#1b1b1b" stroke-width="1.2" fill="#1b1b1b">
+                  <line x1="20" y1="40" x2="20" y2="90"/><rect x="15" y="55" width="10" height="25"/>
+                  <line x1="45" y1="35" x2="45" y2="85"/><rect x="40" y="45" width="10" height="22" fill="#f4f1ea"/>
+                  <line x1="70" y1="30" x2="70" y2="80"/><rect x="65" y="42" width="10" height="30"/>
+                  <line x1="95" y1="25" x2="95" y2="72"/><rect x="90" y="38" width="10" height="20" fill="#f4f1ea"/>
+                  <line x1="120" y1="32" x2="120" y2="78"/><rect x="115" y="42" width="10" height="28"/>
+                  <line x1="145" y1="28" x2="145" y2="70"/><rect x="140" y="34" width="10" height="24"/>
+                  <line x1="170" y1="22" x2="170" y2="66"/><rect x="165" y="30" width="10" height="26" fill="#f4f1ea"/>
+                  <line x1="195" y1="18" x2="195" y2="60"/><rect x="190" y="28" width="10" height="20"/>
+                  <line x1="220" y1="20" x2="220" y2="58"/><rect x="215" y="26" width="10" height="22"/>
+                  <line x1="245" y1="15" x2="245" y2="55"/><rect x="240" y="22" width="10" height="24" fill="#f4f1ea"/>
+                  <line x1="270" y1="18" x2="270" y2="52"/><rect x="265" y="24" width="10" height="22"/>
+                  <line x1="295" y1="22" x2="295" y2="50"/><rect x="290" y="28" width="10" height="16"/>
+                  <line x1="320" y1="16" x2="320" y2="48"/><rect x="315" y="22" width="10" height="20"/>
+                  <line x1="345" y1="12" x2="345" y2="42"/><rect x="340" y="18" width="10" height="18"/>
+                  <line x1="370" y1="14" x2="370" y2="38"/><rect x="365" y="20" width="10" height="14"/>
+                  <line x1="395" y1="10" x2="395" y2="34"/><rect x="390" y="16" width="10" height="12"/>
+                  <line x1="420" y1="14" x2="420" y2="36"/><rect x="415" y="20" width="10" height="10" fill="#f4f1ea"/>
+                  <line x1="445" y1="8" x2="445" y2="32"/><rect x="440" y="12" width="10" height="16"/>
+                  <line x1="470" y1="10" x2="470" y2="28"/><rect x="465" y="14" width="10" height="10"/>
+                  <line x1="495" y1="6" x2="495" y2="24"/><rect x="490" y="10" width="10" height="8"/>
+                  <line x1="520" y1="8" x2="520" y2="22"/><rect x="515" y="12" width="10" height="8"/>
+                  <line x1="545" y1="4" x2="545" y2="20"/><rect x="540" y="8" width="10" height="10"/>
+                </g>
+                <path d="M 20 70 C 80 60, 140 55, 200 40 S 380 20, 560 10" fill="none" stroke="#9cc80a" stroke-width="1.2" stroke-dasharray="4 3"/>
+              </svg>
+              <div class="cap" style="position:absolute;bottom:6px;right:10px;">lightweight-charts local · overlays MA/BB/vol</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Annotations Variant A -->
+    <div class="ann" style="top:136px;left:-10px;width:160px;">
+      <span class="num">1</span>banner API arriba · 5 barras + diaria siempre a la vista
+    </div>
+    <div class="ann" style="top:300px;right:-10px;width:180px;text-align:right;">
+      <span class="num">2</span>banner sticky con <b>COPIAR</b> como acción primaria
+    </div>
+    <div class="ann" style="top:610px;left:290px;width:170px;">
+      <span class="num">3</span>detalle en tabla densa — mismo orden que el texto copiado
+    </div>
+    <div class="ann" style="bottom:260px;right:40px;width:180px;text-align:right;">
+      <span class="num">4</span>chart fluye debajo · ocupa todo el ancho del panel
+    </div>
+  </section>
+
+  <!-- ========================================================== -->
+  <!-- ================== VARIATION B ========================== -->
+  <!-- ========================================================== -->
+  <section class="variation vb" data-var="b">
+    <div class="vhead">
+      <span class="tag">B</span>
+      <span class="cap">holgada · API lateral · chart paralelo · detalle en card-grid</span>
+    </div>
+
+    <div class="cockpit">
+      <div class="chrome">
+        <div class="tabs"><span>configuración</span><span>dashboard</span><span class="sel">cockpit</span><span>memento</span></div>
+        <div class="ws"><span>ws · conectado</span><span class="dot"></span></div>
+      </div>
+
+      <div class="main">
+        <!-- API sidebar -->
+        <aside class="api-side">
+          <h3>api · créditos/min</h3>
+          <div class="kv"><div class="lbl">key1</div><div class="vbar"><i style="height:75%"></i></div><div class="lbl" style="color:var(--ink)">6/8</div></div>
+          <div class="kv"><div class="lbl">bak</div><div class="vbar"><i style="height:25%"></i></div><div class="lbl" style="color:var(--ink)">2/8</div></div>
+          <div class="kv"><div class="lbl">res-a</div><div class="vbar"><i style="height:0%"></i></div><div class="lbl" style="color:var(--ink)">0/8</div></div>
+          <div class="kv"><div class="lbl" style="opacity:.4">—</div><div class="vbar" style="opacity:.4"></div><div class="lbl" style="opacity:.4">—</div></div>
+          <div class="kv"><div class="lbl" style="opacity:.4">—</div><div class="vbar" style="opacity:.4"></div><div class="lbl" style="opacity:.4">—</div></div>
+          <div class="dailybig">
+            <div class="lbl" style="font-family:'JetBrains Mono',monospace;font-size:8.5px;letter-spacing:.15em;color:var(--muted)">DIARIO</div>
+            <div class="num">412<span style="color:var(--muted);font-size:9px">/2400</span></div>
+            <div class="bar"><i style="width:17%"></i></div>
+            <div class="lbl" style="font-family:'Caveat',cursive;font-size:11px;color:var(--muted)">reset 16:00 ET</div>
+          </div>
+        </aside>
+
+        <!-- watchlist -->
+        <aside class="watch">
+          <h3>watchlist · 6 slots</h3>
+          <div class="card selcard sel">
+            <span class="pilot"></span>
+            <div class="row1"><div class="tk">QQQ</div><div class="dir">CALL</div></div>
+            <div class="row2"><div class="sc">12.0</div><div class="bd aplus">A+</div></div>
+            <div class="ts">14:30 ET · nueva señal</div>
+          </div>
+          <div class="card">
+            <span class="pilot" style="background:var(--ok)"></span>
+            <div class="row1"><div class="tk">NVDA</div><div class="dir">CALL</div></div>
+            <div class="row2"><div class="sc">16.0</div><div class="bd s">S</div></div>
+            <div class="ts">14:30 ET</div>
+          </div>
+          <div class="card">
+            <span class="pilot" style="background:var(--ok)"></span>
+            <div class="row1"><div class="tk">SPY</div><div class="dir">CALL</div></div>
+            <div class="row2"><div class="sc">6.5</div><div class="bd a">A</div></div>
+            <div class="ts">14:30 ET</div>
+          </div>
+          <div class="card">
+            <span class="pilot" style="background:var(--ok)"></span>
+            <div class="row1"><div class="tk">IWM</div><div class="dir">PUT</div></div>
+            <div class="row2"><div class="sc">3.5</div><div class="bd b">B</div></div>
+            <div class="ts">14:30 ET</div>
+          </div>
+          <div class="card">
+            <span class="pilot" style="background:var(--ok)"></span>
+            <div class="row1"><div class="tk">TSLA</div><div class="dir">PUT</div></div>
+            <div class="row2"><div class="sc">4.0</div><div class="bd b">B</div></div>
+            <div class="ts">14:30 ET</div>
+          </div>
+          <div class="card">
+            <span class="pilot" style="background:var(--ok)"></span>
+            <div class="row1"><div class="tk">AAPL</div><div class="dir">—</div></div>
+            <div class="row2"><div class="sc">1.2</div><div class="bd revisar">REVISAR</div></div>
+            <div class="ts">14:30 ET</div>
+          </div>
+        </aside>
+
+        <!-- panel -->
+        <div class="panel">
+          <div class="state-toast warmup">⟳ slot QQQ warming up — 62%</div>
+          <div class="state-toast degraded">⚠ ENG-060 · slot degraded</div>
+          <div class="state-toast splus">★ S+ emitida — primera de la sesión</div>
+          <div class="state-toast error">✕ ENG-001 · Data Engine caído</div>
+
+          <div class="banner">
+            <div class="id">
+              <div class="tk">QQQ</div>
+              <div class="bd big aplus">A+</div>
+              <div class="dir">CALL</div>
+              <div class="score-wrap">
+                <div class="score">12.0<small>score</small></div>
+                <div class="acierto">acierto hist. <b>68%</b> @ A+</div>
+              </div>
+            </div>
+            <div class="banner-actions">
+              <button class="btn primary">scan ahora</button>
+              <div class="toggle on"><span class="sw"><i></i></span><span>auto · on</span></div>
+              <span class="divider"></span>
+              <button class="copy">↳ copiar</button>
+            </div>
+          </div>
+
+          <div class="resumen">
+            <div class="line"><span class="k">precio</span><span class="v">$485.32  (+0.82%)</span></div>
+            <div class="line"><span class="k">ATR 15M</span><span class="v">0.74% · $3.59</span></div>
+            <div class="line"><span class="k">alineación</span><span class="v">3/3 bull</span></div>
+            <div class="line"><span class="k">dMA200</span><span class="v">+3.2%</span></div>
+            <div class="line"><span class="k">vela</span><span class="v">14:30 ET · +4s</span></div>
+            <div class="line"><span class="k">bench</span><span class="v">SPY +0.41%</span></div>
+            <div class="flags">
+              <span class="flag">⚡ squeeze 1H</span>
+              <span class="flag">↑ ORB breakout</span>
+              <span class="flag">⚠ catalizador</span>
+            </div>
+          </div>
+
+          <div class="det-head">
+            <span>detalle técnico · card-grid</span>
+            <span class="exp">contraer ▲</span>
+          </div>
+
+          <div class="detail">
+            <div class="blk">
+              <div class="bh">precio</div>
+              <div class="bc">
+                <div class="line"><span>último</span><span>$485.32</span></div>
+                <div class="line"><span>chg día</span><span>+0.82%</span></div>
+                <div class="line"><span>ATR 15M</span><span>0.74%</span></div>
+                <div class="line"><span>dMA200</span><span>+3.2%</span></div>
+              </div>
+            </div>
+            <div class="blk wide">
+              <div class="bh">contexto</div>
+              <div class="bc">
+                <div class="line"><span>alineación</span><span>3/3 CALL · 15M·1H·D bull</span></div>
+                <div class="line"><span>MAs diarias</span><span>20=483 · 40=478 · 200=470</span></div>
+                <div class="line"><span>BB 1H</span><span>482.1 / 484.5 / 486.9</span></div>
+              </div>
+            </div>
+            <div class="blk">
+              <div class="bh">volumen</div>
+              <div class="bc">
+                <div class="line"><span>15M</span><span>1.8×</span></div>
+                <div class="line"><span>1H</span><span>1.4×</span></div>
+                <div class="line"><span>curso</span><span>2.1× · 0.66</span></div>
+                <div class="line"><span>secuencia</span><span>↑</span></div>
+              </div>
+            </div>
+            <div class="blk">
+              <div class="bh">fza rel</div>
+              <div class="bc">
+                <div class="line"><span>vs SPY</span><span>+0.87%</span></div>
+                <div class="line"><span>div</span><span>+0.41pp</span></div>
+              </div>
+            </div>
+            <div class="blk">
+              <div class="bh">niveles</div>
+              <div class="bc">
+                <div class="line"><span>R</span><span>487.2 · 489.5</span></div>
+                <div class="line"><span>S</span><span>483.8 · 481.1</span></div>
+              </div>
+            </div>
+            <div class="blk full">
+              <div class="bh">eventos · patrones (3)</div>
+              <div class="bc" style="display:grid;grid-template-columns:1fr 1fr;gap:0 32px">
+                <div>
+                  <div class="line"><span>squeeze BB 1H</span><span>p12 → expansión</span></div>
+                  <div class="line"><span>ORB breakout</span><span>$484.1 – $485.8</span></div>
+                  <div class="line"><span>catalizador</span><span>chg &gt; 1.5× ATR</span></div>
+                </div>
+                <div>
+                  <div class="line"><span>[15M] doji BB inf</span><span>bull · trig · w:2</span></div>
+                  <div class="line"><span>[15M] ORB breakout</span><span>bull · trig · w:2</span></div>
+                  <div class="line"><span>[1H]  BBinf_1H</span><span>bull · conf · w:3</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="blk wide">
+              <div class="bh">scoring</div>
+              <div class="bc" style="display:grid;grid-template-columns:1fr 1fr;gap:0 24px">
+                <div>
+                  <div class="line"><span>estructura</span><span>✓</span></div>
+                  <div class="line"><span>triggers</span><span>2 · suma 4.0</span></div>
+                </div>
+                <div>
+                  <div class="line"><span>confirms</span><span>1 · suma 3.0</span></div>
+                  <div class="line"><span>bloq / conf</span><span>— / —</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="blk" style="background:var(--ink);color:var(--paper);">
+              <div class="bh" style="color:var(--paper);border-color:var(--paper)">resultado</div>
+              <div class="bc">
+                <div class="line"><span style="color:#ffffff99">score</span><span><b>12.0</b></span></div>
+                <div class="line"><span style="color:#ffffff99">dirección</span><span><b>CALL</b></span></div>
+                <div class="line"><span style="color:#ffffff99">confianza</span><span><b>A+</b></span></div>
+                <div class="line"><span style="color:#ffffff99">señal</span><span><b>SETUP</b></span></div>
+              </div>
+            </div>
+            <div class="blk full" style="background:transparent;border-style:dashed">
+              <div class="bh">meta</div>
+              <div class="bc" style="display:flex;gap:24px;color:var(--muted);flex-wrap:wrap">
+                <span>engine 5.2.0</span><span>fixture qqq_v5_2_0 v5.2.0</span><span>slot 1</span><span>vela 14:30 ET</span><span>cálc 14:30:04 ET</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- chart as parallel column -->
+        <div class="rightcol">
+          <div class="chart">
+            <div class="box">
+              <div class="ohlc">QQQ · 15M · o 484.80 · h 485.60 · l 484.32 · c 485.32</div>
+              <div class="tv">abrir en tradingview ↗</div>
+              <svg class="candle" viewBox="0 0 600 120" preserveAspectRatio="none">
+                <g stroke="#1b1b1b" stroke-width="1.2" fill="#1b1b1b">
+                  <line x1="20" y1="40" x2="20" y2="90"/><rect x="15" y="55" width="10" height="25"/>
+                  <line x1="55" y1="35" x2="55" y2="85"/><rect x="50" y="45" width="10" height="22" fill="#f4f1ea"/>
+                  <line x1="90" y1="30" x2="90" y2="80"/><rect x="85" y="42" width="10" height="30"/>
+                  <line x1="125" y1="25" x2="125" y2="72"/><rect x="120" y="38" width="10" height="20" fill="#f4f1ea"/>
+                  <line x1="160" y1="32" x2="160" y2="78"/><rect x="155" y="42" width="10" height="28"/>
+                  <line x1="195" y1="28" x2="195" y2="70"/><rect x="190" y="34" width="10" height="24"/>
+                  <line x1="230" y1="22" x2="230" y2="66"/><rect x="225" y="30" width="10" height="26" fill="#f4f1ea"/>
+                  <line x1="265" y1="18" x2="265" y2="60"/><rect x="260" y="28" width="10" height="20"/>
+                  <line x1="300" y1="20" x2="300" y2="58"/><rect x="295" y="26" width="10" height="22"/>
+                  <line x1="335" y1="15" x2="335" y2="55"/><rect x="330" y="22" width="10" height="24" fill="#f4f1ea"/>
+                  <line x1="370" y1="18" x2="370" y2="52"/><rect x="365" y="24" width="10" height="22"/>
+                  <line x1="405" y1="12" x2="405" y2="48"/><rect x="400" y="18" width="10" height="20"/>
+                  <line x1="440" y1="10" x2="440" y2="42"/><rect x="435" y="16" width="10" height="14"/>
+                  <line x1="475" y1="14" x2="475" y2="38"/><rect x="470" y="20" width="10" height="12"/>
+                  <line x1="510" y1="8" x2="510" y2="32"/><rect x="505" y="14" width="10" height="10"/>
+                  <line x1="545" y1="4" x2="545" y2="24"/><rect x="540" y="8" width="10" height="10"/>
+                </g>
+                <path d="M 20 80 C 80 60, 160 55, 260 40 S 460 12, 560 8" fill="none" stroke="#9cc80a" stroke-width="1.2" stroke-dasharray="4 3"/>
+              </svg>
+              <div class="cap" style="position:absolute;bottom:6px;right:10px;">lightweight-charts local</div>
+            </div>
+          </div>
+          <div class="mini">
+            <div style="display:flex;justify-content:space-between"><span>MA 20 · 40 · 200</span><span>BB 1H</span><span>vol 1.8×</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ann" style="top:130px;left:-10px;width:130px;">
+      <span class="num">1</span>API en columna lateral — libera el top del cockpit
+    </div>
+    <div class="ann" style="top:200px;right:-10px;width:180px;text-align:right;">
+      <span class="num">2</span>chart paralelo · visible simultáneo con el detalle
+    </div>
+    <div class="ann" style="top:620px;left:410px;width:170px;">
+      <span class="num">3</span>detalle en card-grid · más respiración, "resultado" invertido destaca
+    </div>
+  </section>
+
+</div>
+
+<script>
+  // Tweaks wiring
+  function bindGroup(group, attr, apply){
+    document.querySelectorAll(`[data-group="${group}"] .pill`).forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.querySelectorAll(`[data-group="${group}"] .pill`).forEach(b=>b.classList.remove('on'));
+        btn.classList.add('on');
+        const val = btn.getAttribute(`data-${attr}`);
+        apply(val);
+        try{ localStorage.setItem('scv5_'+attr, val); }catch{}
+      });
+    });
+  }
+
+  bindGroup('var','var',(v)=>{
+    document.querySelectorAll('.variation').forEach(s=>s.classList.toggle('show', s.dataset.var===v));
+  });
+  bindGroup('state','state',(v)=>{ document.body.dataset.state = v; });
+  bindGroup('ann','ann',(v)=>{ document.body.dataset.ann = v; });
+
+  // restore
+  (function restore(){
+    const map=[['var','var'],['state','state'],['ann','ann']];
+    map.forEach(([g,a])=>{
+      const v = localStorage.getItem('scv5_'+a);
+      if(!v) return;
+      const btn = document.querySelector(`[data-group="${g}"] .pill[data-${a}="${v}"]`);
+      if(btn) btn.click();
+    });
+  })();
+
+  // copy feedback
+  document.querySelectorAll('.copy').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const orig=b.textContent;
+      b.textContent='✓ copiado';
+      b.style.background='#9cc80a';
+      setTimeout(()=>{b.textContent=orig;b.style.background='';},1400);
+    });
+  });
+</script>
+
+</body>
+</html>
