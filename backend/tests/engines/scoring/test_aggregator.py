@@ -84,17 +84,17 @@ class TestAggregate15M:
 
 class TestAggregate15MBuckets:
     def test_bucket_boundaries_00_15_30_45(self) -> None:
-        """Buckets alineados a :00, :15, :30, :45."""
+        """Buckets agrupan por `minute // 15`. El `dt` = primera 1min del bucket."""
         candles = [
-            _c("2025-01-02 10:14:00", 100, 100, 100, 100),  # bucket 10:00
-            _c("2025-01-02 10:15:00", 200, 200, 200, 200),  # bucket 10:15
-            _c("2025-01-02 10:30:00", 300, 300, 300, 300),  # bucket 10:30
-            _c("2025-01-02 10:45:00", 400, 400, 400, 400),  # bucket 10:45
-            _c("2025-01-02 10:59:00", 500, 500, 500, 500),  # bucket 10:45
+            _c("2025-01-02 10:14:00", 100, 100, 100, 100),  # bucket 00 → dt=10:14
+            _c("2025-01-02 10:15:00", 200, 200, 200, 200),  # bucket 15 → dt=10:15
+            _c("2025-01-02 10:30:00", 300, 300, 300, 300),  # bucket 30 → dt=10:30
+            _c("2025-01-02 10:45:00", 400, 400, 400, 400),  # bucket 45 → dt=10:45
+            _c("2025-01-02 10:59:00", 500, 500, 500, 500),  # bucket 45
         ]
         result = aggregate_to_15m(candles)
-        assert [r["dt"][11:16] for r in result] == ["10:00", "10:15", "10:30", "10:45"]
-        # El último bucket (10:45) incluye 10:45 y 10:59
+        assert [r["dt"][11:16] for r in result] == ["10:14", "10:15", "10:30", "10:45"]
+        # El último bucket (45) incluye 10:45 y 10:59
         assert result[3]["c"] == 500
 
 
@@ -123,14 +123,14 @@ class TestAggregate1H:
         assert b["l"] == 99
 
     def test_partial_first_bucket_market_open(self) -> None:
-        """Mercado abre 09:30 — bucket 09:00 solo tiene 09:30-09:59."""
+        """Mercado abre 09:30 — el `dt` del bucket es la primera 1min (09:30)."""
         candles = [
             _c(f"2025-01-02 09:{30 + i}:00", 100, 100, 100, 100)
             for i in range(30)  # 09:30 - 09:59
         ]
         result = aggregate_to_1h(candles)
         assert len(result) == 1
-        assert result[0]["dt"] == "2025-01-02 09:00:00"  # bucket 09:00 (parcial)
+        assert result[0]["dt"] == "2025-01-02 09:30:00"  # dt = primera 1min
         assert result[0]["v"] == 30 * 100  # solo 30 minutos
 
     def test_until_dt_cuts_partial_bucket(self) -> None:
