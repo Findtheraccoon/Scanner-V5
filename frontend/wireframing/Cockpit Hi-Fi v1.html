@@ -275,6 +275,154 @@
     background: var(--ok);
     box-shadow: 0 0 8px var(--ok-dim);
   }
+
+  /* =========================================================
+     API BANNER — 5 keys (glass) + daily global
+     ========================================================= */
+  .api-banner {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 16px;
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
+  }
+  .api-keys {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .api-key {
+    background: var(--bg-card-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: relative;
+    min-height: 86px;
+  }
+  .api-key.active {
+    border-color: var(--accent-glass-border);
+    background: linear-gradient(
+      180deg,
+      var(--accent-glass-fill) 0%,
+      var(--bg-card-2) 60%
+    );
+  }
+  .api-key.empty { opacity: 0.45; }
+  .api-key .head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .api-key .name {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .api-key.active .name { color: var(--accent); }
+  .api-key .used {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .api-key .used small {
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--text-faint);
+    margin-left: 2px;
+  }
+  .api-key .bar {
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.06);
+    position: relative;
+    overflow: hidden;
+  }
+  .api-key .bar > i {
+    position: absolute;
+    inset: 0;
+    width: var(--pct, 0%);
+    background: var(--text-dim);
+    border-radius: 2px;
+  }
+  .api-key.active .bar > i { background: var(--accent); box-shadow: 0 0 6px var(--accent-dim); }
+  .api-key .foot {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+  }
+  .api-key .foot .daily {
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .api-daily {
+    background: var(--bg-card-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    justify-content: space-between;
+  }
+  .api-daily .lbl {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .api-daily .num {
+    font-family: var(--font-mono);
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+  .api-daily .num small {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-faint);
+    margin-left: 4px;
+  }
+  .api-daily .bar {
+    height: 8px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.06);
+    position: relative;
+    overflow: hidden;
+  }
+  .api-daily .bar > i {
+    position: absolute;
+    inset: 0;
+    width: var(--pct, 0%);
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent-dim);
+    border-radius: 3px;
+  }
+  .api-daily .reset {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
 </style>
 
 </head>
@@ -319,6 +467,98 @@
         <div class="ws" aria-label="WebSocket status">
           <span>ws · <b>conectado</b></span>
           <span class="dot" aria-hidden="true"></span>
+        </div>
+      </div>
+
+      <!-- =========================================================
+           API BANNER — 5 keys + daily global
+           ========================================================= -->
+      <div class="api-banner">
+        <div class="api-keys">
+
+          <!-- key 1: activa (más uso) -->
+          <div class="api-key active">
+            <div class="head">
+              <span class="name">key principal</span>
+              <span class="used">6<small>/8</small></span>
+            </div>
+            <div class="bar" role="progressbar" aria-valuenow="75" aria-valuemin="0" aria-valuemax="100">
+              <i style="--pct: 75%"></i>
+            </div>
+            <div class="foot">
+              <span>hace 3s</span>
+              <span class="daily">412 / 800</span>
+            </div>
+          </div>
+
+          <!-- key 2: backup -->
+          <div class="api-key">
+            <div class="head">
+              <span class="name">backup</span>
+              <span class="used">2<small>/8</small></span>
+            </div>
+            <div class="bar" role="progressbar" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">
+              <i style="--pct: 25%"></i>
+            </div>
+            <div class="foot">
+              <span>hace 47s</span>
+              <span class="daily">186 / 800</span>
+            </div>
+          </div>
+
+          <!-- key 3: reserva A -->
+          <div class="api-key">
+            <div class="head">
+              <span class="name">reserva a</span>
+              <span class="used">0<small>/8</small></span>
+            </div>
+            <div class="bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+              <i style="--pct: 0%"></i>
+            </div>
+            <div class="foot">
+              <span>—</span>
+              <span class="daily">0 / 800</span>
+            </div>
+          </div>
+
+          <!-- key 4: vacía -->
+          <div class="api-key empty">
+            <div class="head">
+              <span class="name">— vacío —</span>
+              <span class="used">—</span>
+            </div>
+            <div class="bar"><i style="--pct: 0%"></i></div>
+            <div class="foot">
+              <span>sin configurar</span>
+              <span class="daily"></span>
+            </div>
+          </div>
+
+          <!-- key 5: vacía -->
+          <div class="api-key empty">
+            <div class="head">
+              <span class="name">— vacío —</span>
+              <span class="used">—</span>
+            </div>
+            <div class="bar"><i style="--pct: 0%"></i></div>
+            <div class="foot">
+              <span>sin configurar</span>
+              <span class="daily"></span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Daily pool global -->
+        <div class="api-daily">
+          <div>
+            <div class="lbl">créditos diarios</div>
+            <div class="num">598<small>/ 2400</small></div>
+          </div>
+          <div class="bar" role="progressbar" aria-valuenow="24" aria-valuemin="0" aria-valuemax="100">
+            <i style="--pct: 24%"></i>
+          </div>
+          <div class="reset">800 × key · reset 16:00 ET</div>
         </div>
       </div>
 
