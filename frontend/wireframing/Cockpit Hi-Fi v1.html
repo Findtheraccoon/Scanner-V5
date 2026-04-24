@@ -596,6 +596,72 @@
     color: var(--text-faint);
     margin-top: 6px;
   }
+
+  /* =========================================================
+     PANEL (columna derecha) — contenedor flex vertical
+     ========================================================= */
+  .panel {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  /* =========================================================
+     STATE TOASTS — aparecen según body[data-state]
+     ========================================================= */
+  .state-toast {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    margin: 14px 18px 0;
+    padding: 10px 14px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    line-height: 1.4;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r);
+    background: var(--bg-card-2);
+    color: var(--text-dim);
+  }
+  .state-toast .ic {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: var(--r-sm);
+    flex-shrink: 0;
+    font-size: 11px;
+    font-family: var(--font-ui);
+    line-height: 1;
+  }
+  .state-toast b {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .state-toast.warmup  { border-color: var(--warn-dim); background: linear-gradient(90deg, var(--warn-dim), transparent 60%); color: var(--text-dim); }
+  .state-toast.warmup  .ic { background: var(--warn-dim); color: var(--warn); }
+
+  .state-toast.degraded { border-color: var(--warn-dim); background: linear-gradient(90deg, var(--warn-dim), transparent 60%); color: var(--text-dim); }
+  .state-toast.degraded .ic { background: var(--warn-dim); color: var(--warn); }
+
+  .state-toast.splus { border-color: var(--accent-glass-border); background: linear-gradient(90deg, var(--accent-glass-fill), transparent 60%); color: var(--text); }
+  .state-toast.splus .ic { background: var(--accent-glass-hover); color: var(--accent); }
+
+  .state-toast.error { border-color: var(--err-dim); background: linear-gradient(90deg, var(--err-dim), transparent 60%); color: var(--text-dim); }
+  .state-toast.error .ic { background: var(--err-dim); color: var(--err); }
+
+  /* visibilidad condicional */
+  body[data-state="warmup"]   .state-toast.warmup,
+  body[data-state="degraded"] .state-toast.degraded,
+  body[data-state="splus"]    .state-toast.splus,
+  body[data-state="error"]    .state-toast.error { display: flex; }
+
+  /* animación del spinner en warmup */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .state-toast.warmup .ic { animation: spin 1.6s linear infinite; }
 </style>
 
 </head>
@@ -832,9 +898,32 @@
 
         </aside>
 
-        <!-- Panel: se agrega en los micro-bloques siguientes -->
+        <!-- =========================================================
+             PANEL — state toasts + banner + resumen + detalle + chart
+             ========================================================= -->
+        <div class="panel">
 
-      </div>
+          <!-- state toasts (se muestran según body[data-state]) -->
+          <div class="state-toast warmup" role="status">
+            <span class="ic" aria-hidden="true">↻</span>
+            <span>slot <b>QQQ</b> warming up — descargando velas históricas · <b>62%</b> · las señales de este slot están pausadas</span>
+          </div>
+          <div class="state-toast degraded" role="status">
+            <span class="ic" aria-hidden="true">⚠</span>
+            <span><b>ENG-060</b> · 3 fallos consecutivos de fetch en <b>QQQ</b> — ver log en dashboard</span>
+          </div>
+          <div class="state-toast splus" role="status">
+            <span class="ic" aria-hidden="true">★</span>
+            <span>señal <b>S+</b> emitida en <b>QQQ</b> @ 14:30 ET — spread B→S+ histórico = <b>38pp</b></span>
+          </div>
+          <div class="state-toast error" role="status">
+            <span class="ic" aria-hidden="true">✕</span>
+            <span><b>ENG-001</b> · Data Engine caído · las cards no se actualizan — revisar Dashboard → Motores</span>
+          </div>
+
+          <!-- Banner + resumen + detalle + chart: se agregan en los siguientes micro-bloques -->
+
+        </div>
 
     </div>
   </div>
