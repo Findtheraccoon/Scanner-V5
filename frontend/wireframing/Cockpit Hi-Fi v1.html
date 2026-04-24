@@ -820,6 +820,80 @@
     background: var(--accent);
     box-shadow: 0 0 6px var(--accent-dim);
   }
+
+  /* =========================================================
+     RESUMEN — 6 kvs (grid 2-col) + flags
+     ========================================================= */
+  .resumen {
+    padding: 14px 20px 12px;
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 32px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.55;
+  }
+  .resumen .line {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 4px 0;
+    border-bottom: 1px dashed rgba(255,255,255,0.05);
+  }
+  .resumen .line:nth-last-child(-n+3):not(.flags-row) { border-bottom: none; }
+  .resumen .k {
+    color: var(--text-muted);
+    letter-spacing: 0.06em;
+  }
+  .resumen .v {
+    color: var(--text);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    text-align: right;
+  }
+  .resumen .v .up { color: var(--accent); }
+  .resumen .v .dim { color: var(--text-faint); font-weight: 400; }
+
+  .resumen .flags-row {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .flag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    background: var(--bg-card-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+  }
+  .flag .fi {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    background: var(--accent-glass-fill);
+    color: var(--accent);
+    font-size: 10px;
+    line-height: 1;
+  }
+  .flag.warn { color: var(--warn); border-color: var(--warn-dim); }
+  .flag.warn .fi { background: var(--warn-dim); color: var(--warn); }
 </style>
 
 </head>
@@ -1111,7 +1185,44 @@
             </div>
           </div>
 
-          <!-- Resumen + detalle + chart: siguientes micro-bloques -->
+          <!-- =========================================================
+               RESUMEN — 6 kvs + flags row
+               ========================================================= -->
+          <div class="resumen">
+            <div class="line">
+              <span class="k">precio</span>
+              <span class="v">$485.32 <span class="up">(+0.82%)</span></span>
+            </div>
+            <div class="line">
+              <span class="k">ATR 15M</span>
+              <span class="v">0.74% <span class="dim">· $3.59</span></span>
+            </div>
+            <div class="line">
+              <span class="k">alineación</span>
+              <span class="v">3/3 bull <span class="dim">· 15M·1H·D</span></span>
+            </div>
+            <div class="line">
+              <span class="k">dMA200</span>
+              <span class="v"><span class="up">+3.2%</span></span>
+            </div>
+            <div class="line">
+              <span class="k">vela</span>
+              <span class="v">14:30 ET <span class="dim">· calc +4s</span></span>
+            </div>
+            <div class="line">
+              <span class="k">bench (SPY)</span>
+              <span class="v"><span class="up">+0.41%</span> <span class="dim">· div +0.41pp</span></span>
+            </div>
+
+            <div class="flags-row">
+              <span class="flag"><span class="fi" aria-hidden="true">⚡</span>squeeze 1H</span>
+              <span class="flag"><span class="fi" aria-hidden="true">↑</span>ORB breakout</span>
+              <span class="flag warn"><span class="fi" aria-hidden="true">⚠</span>catalizador</span>
+              <span class="flag"><span class="fi" aria-hidden="true">↗</span>fza rel extrema</span>
+            </div>
+          </div>
+
+          <!-- Detalle + chart: siguientes micro-bloques -->
 
         </div>
 
