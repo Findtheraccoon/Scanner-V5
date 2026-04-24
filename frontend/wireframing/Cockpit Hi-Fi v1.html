@@ -894,6 +894,49 @@
   }
   .flag.warn { color: var(--warn); border-color: var(--warn-dim); }
   .flag.warn .fi { background: var(--warn-dim); color: var(--warn); }
+
+  /* =========================================================
+     DET-HEAD — título del detalle + botón contraer
+     ========================================================= */
+  .det-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
+  }
+  .det-head .title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .det-head .title b { color: var(--text-dim); font-weight: 500; }
+  .det-head .collapse {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-sm);
+    padding: 5px 10px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: color var(--t-fast), border-color var(--t-fast);
+  }
+  .det-head .collapse:hover { color: var(--text); border-color: var(--text-muted); }
+  .det-head .collapse .cv {
+    font-size: 9px;
+    line-height: 1;
+    color: var(--text-muted);
+  }
 </style>
 
 </head>
@@ -1222,7 +1265,18 @@
             </div>
           </div>
 
-          <!-- Detalle + chart: siguientes micro-bloques -->
+          <!-- =========================================================
+               DET-HEAD — título + contraer
+               ========================================================= -->
+          <div class="det-head">
+            <span class="title"><b>detalle técnico</b> · mismo orden que el texto que se copia</span>
+            <button class="collapse" type="button" aria-expanded="true">
+              contraer
+              <span class="cv" aria-hidden="true">▲</span>
+            </button>
+          </div>
+
+          <!-- Detalle (tabla) + chart: siguientes micro-bloques -->
 
         </div>
 
