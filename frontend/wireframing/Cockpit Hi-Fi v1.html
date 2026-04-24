@@ -423,6 +423,179 @@
     text-transform: uppercase;
     color: var(--text-faint);
   }
+
+  /* =========================================================
+     MAIN LAYOUT — watchlist (300px) + panel (1fr)
+     ========================================================= */
+  .main {
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+
+  /* =========================================================
+     WATCHLIST — 6 slots
+     ========================================================= */
+  .watch {
+    border-right: 1px solid var(--border);
+    padding: 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .watch h3 {
+    margin: 2px 4px 6px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .slot-card {
+    position: relative;
+    background: var(--bg-card-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 10px 12px 10px 12px;
+    cursor: pointer;
+    transition: border-color var(--t-fast), background var(--t-fast);
+  }
+  .slot-card:hover {
+    border-color: var(--border-strong);
+    background: var(--bg-card-sel);
+  }
+  .slot-card.sel {
+    background: var(--bg-card-sel);
+    border-color: var(--accent-glass-border);
+    box-shadow: inset 2px 0 0 0 var(--accent);
+  }
+
+  /* pilot dot arriba-derecha */
+  .slot-card .pilot {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 6px var(--ok-dim);
+  }
+  .slot-card[data-pilot="warn"] .pilot { background: var(--warn); box-shadow: 0 0 6px var(--warn-dim); }
+  .slot-card[data-pilot="err"]  .pilot { background: var(--err);  box-shadow: 0 0 6px var(--err-dim); }
+
+  .slot-card .row1 {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .slot-card .tk {
+    font-family: var(--font-ui);
+    font-weight: 700;
+    font-size: 20px;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    line-height: 1;
+  }
+  .slot-card .dir {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-sm);
+    padding: 2px 6px;
+  }
+  .slot-card .dir[data-dir="CALL"] { color: var(--accent); border-color: var(--accent-glass-border); }
+  .slot-card .dir[data-dir="PUT"]  { color: var(--text); border-color: var(--border-strong); }
+  .slot-card .dir[data-dir="—"]    { color: var(--text-muted); border-style: dashed; }
+
+  .slot-card .row2 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 10px;
+  }
+  .slot-card .sc {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1;
+    letter-spacing: 0.01em;
+  }
+
+  /* =========================================================
+     BANDAS — REVISAR / B / A / A+ / S / S+
+     ========================================================= */
+  .band {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-sm);
+    padding: 3px 8px;
+    line-height: 1;
+    color: var(--text-dim);
+    background: transparent;
+  }
+  .band.revisar {
+    color: var(--text-muted);
+    border-style: dashed;
+    border-color: var(--border-dashed);
+  }
+  .band.b {
+    color: var(--text-dim);
+    background: rgba(255,255,255,0.04);
+    border-color: var(--border-strong);
+  }
+  .band.a {
+    color: var(--accent);
+    background: var(--accent-glass-fill);
+    border-color: var(--accent-glass-border);
+  }
+  .band.aplus {
+    color: var(--accent);
+    background: var(--accent-glass-hover);
+    border-color: var(--accent-glass-border);
+    position: relative;
+  }
+  .band.aplus::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border: 1px dashed var(--accent-glass-border);
+    border-radius: calc(var(--r-sm) + 2px);
+    pointer-events: none;
+  }
+  .band.s {
+    color: var(--bg);
+    background: var(--accent);
+    border-color: var(--accent);
+    font-weight: 700;
+  }
+  .band.splus {
+    color: var(--bg);
+    background: var(--accent);
+    border-color: var(--accent);
+    font-weight: 700;
+    box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 3px var(--accent);
+  }
+
+  .slot-card .ts {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    margin-top: 6px;
+  }
 </style>
 
 </head>
@@ -562,7 +735,106 @@
         </div>
       </div>
 
-      <!-- Resto del cockpit: se agrega en los micro-bloques siguientes -->
+      <!-- =========================================================
+           MAIN — watchlist (300px) + panel (1fr)
+           ========================================================= -->
+      <div class="main">
+
+        <!-- =========================================================
+             WATCHLIST — 6 slots
+             ========================================================= -->
+        <aside class="watch" aria-label="Watchlist · 6 slots">
+          <h3>watchlist · 6 slots</h3>
+
+          <!-- Slot 1 · QQQ · seleccionada · A+ -->
+          <article class="slot-card sel selcard" data-pilot="ok">
+            <span class="pilot" aria-hidden="true"></span>
+            <div class="row1">
+              <span class="tk">QQQ</span>
+              <span class="dir" data-dir="CALL">CALL</span>
+            </div>
+            <div class="row2">
+              <span class="sc">12.0</span>
+              <span class="band aplus">A+</span>
+            </div>
+            <div class="ts">14:30 ET · vela cerrada</div>
+          </article>
+
+          <!-- Slot 2 · SPY · A -->
+          <article class="slot-card" data-pilot="ok">
+            <span class="pilot" aria-hidden="true"></span>
+            <div class="row1">
+              <span class="tk">SPY</span>
+              <span class="dir" data-dir="CALL">CALL</span>
+            </div>
+            <div class="row2">
+              <span class="sc">6.5</span>
+              <span class="band a">A</span>
+            </div>
+            <div class="ts">14:30 ET</div>
+          </article>
+
+          <!-- Slot 3 · IWM · B -->
+          <article class="slot-card" data-pilot="ok">
+            <span class="pilot" aria-hidden="true"></span>
+            <div class="row1">
+              <span class="tk">IWM</span>
+              <span class="dir" data-dir="PUT">PUT</span>
+            </div>
+            <div class="row2">
+              <span class="sc">3.5</span>
+              <span class="band b">B</span>
+            </div>
+            <div class="ts">14:30 ET</div>
+          </article>
+
+          <!-- Slot 4 · AAPL · REVISAR -->
+          <article class="slot-card" data-pilot="ok">
+            <span class="pilot" aria-hidden="true"></span>
+            <div class="row1">
+              <span class="tk">AAPL</span>
+              <span class="dir" data-dir="—">—</span>
+            </div>
+            <div class="row2">
+              <span class="sc">1.2</span>
+              <span class="band revisar">revisar</span>
+            </div>
+            <div class="ts">14:30 ET</div>
+          </article>
+
+          <!-- Slot 5 · NVDA · S -->
+          <article class="slot-card" data-pilot="ok">
+            <span class="pilot" aria-hidden="true"></span>
+            <div class="row1">
+              <span class="tk">NVDA</span>
+              <span class="dir" data-dir="CALL">CALL</span>
+            </div>
+            <div class="row2">
+              <span class="sc">16.0</span>
+              <span class="band s">S</span>
+            </div>
+            <div class="ts">14:30 ET</div>
+          </article>
+
+          <!-- Slot 6 · TSLA · B -->
+          <article class="slot-card" data-pilot="ok">
+            <span class="pilot" aria-hidden="true"></span>
+            <div class="row1">
+              <span class="tk">TSLA</span>
+              <span class="dir" data-dir="PUT">PUT</span>
+            </div>
+            <div class="row2">
+              <span class="sc">4.0</span>
+              <span class="band b">B</span>
+            </div>
+            <div class="ts">14:30 ET</div>
+          </article>
+
+        </aside>
+
+        <!-- Panel: se agrega en los micro-bloques siguientes -->
+
+      </div>
 
     </div>
   </div>
