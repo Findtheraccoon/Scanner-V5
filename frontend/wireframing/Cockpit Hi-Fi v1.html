@@ -14,7 +14,93 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
 <style>
-  /* Tokens + base: se agregan en el micro-bloque 2 */
+  /* =========================================================
+     TOKENS — Scanner v5 · Cockpit hi-fi v1
+     ADN: icomat (cromática + tipografía + aire) + runpod (cards/iconos/estados)
+     ========================================================= */
+  :root {
+    /* Base cromática (casi-negro plano) */
+    --bg:            #050505;
+    --bg-card:       #0a0a0a;
+    --bg-card-2:     #0f0f0f;   /* card elevado / highlight sutil */
+    --bg-card-sel:   #111111;   /* card seleccionado en watchlist */
+
+    /* Borders hairline (icomat minimal) */
+    --border:         rgba(255,255,255,0.08);
+    --border-strong:  rgba(255,255,255,0.14);
+    --border-dashed:  rgba(255,255,255,0.18);
+
+    /* Texto en tiers */
+    --text:         #ffffff;
+    --text-dim:     rgba(255,255,255,0.62);
+    --text-muted:   rgba(255,255,255,0.38);
+    --text-faint:   rgba(255,255,255,0.22);
+
+    /* Acento lima glass */
+    --accent:               #9cc80a;
+    --accent-bright:        #b8e61a;           /* hover / focus */
+    --accent-glass-fill:    rgba(156,200,10,0.10);
+    --accent-glass-hover:   rgba(156,200,10,0.18);
+    --accent-glass-border:  rgba(156,200,10,0.45);
+    --accent-dim:           rgba(156,200,10,0.22);
+
+    /* Semantic (runpod-ish) */
+    --ok:     #4ade80;
+    --ok-dim: rgba(74,222,128,0.18);
+    --warn:   #eab308;
+    --warn-dim: rgba(234,179,8,0.18);
+    --err:    #ef4444;
+    --err-dim:  rgba(239,68,68,0.18);
+
+    /* Candles */
+    --candle-up:    #9cc80a;
+    --candle-down:  #ffffff;
+
+    /* Radii */
+    --r:      6px;
+    --r-sm:   4px;
+    --r-pill: 999px;
+
+    /* Transitions */
+    --t-fast:   .12s ease;
+    --t-base:   .2s ease;
+    --t-slow:   .35s ease;
+
+    /* Tipografía stacks */
+    --font-ui:   'Söhne','Inter',system-ui,-apple-system,sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  /* =========================================================
+     RESET + base
+     ========================================================= */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  html { background: var(--bg); }
+  body {
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-weight: 400;
+    font-size: 13px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  button {
+    font-family: inherit;
+    color: inherit;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  ::selection { background: var(--accent-glass-border); color: var(--bg); }
 </style>
 </head>
 <body>
