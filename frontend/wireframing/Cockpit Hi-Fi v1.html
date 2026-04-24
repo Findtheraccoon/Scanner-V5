@@ -1766,9 +1766,80 @@
           </div>
 
         </div>
+        <!-- /.panel -->
+
+      </div>
+      <!-- /.main -->
 
     </div>
+    <!-- /.cockpit -->
   </div>
+  <!-- /.wrap -->
+
+  <!-- =========================================================
+       JS — toggle pills (data-state) + localStorage + copy feedback
+       ========================================================= -->
+  <script>
+    (function(){
+      var body = document.body;
+
+      // Toggle de pills: solo data-group="state" por ahora
+      function bindGroup(group, attr, apply) {
+        var pills = document.querySelectorAll('[data-group="'+group+'"] .pill');
+        pills.forEach(function(btn){
+          btn.addEventListener('click', function(){
+            pills.forEach(function(b){ b.classList.remove('on'); });
+            btn.classList.add('on');
+            var val = btn.getAttribute('data-'+attr);
+            apply(val);
+            try { localStorage.setItem('scv5hi_'+attr, val); } catch(e) {}
+          });
+        });
+      }
+      bindGroup('state', 'state', function(v){ body.dataset.state = v; });
+
+      // Restore último estado
+      try {
+        var last = localStorage.getItem('scv5hi_state');
+        if (last) {
+          var match = document.querySelector('[data-group="state"] .pill[data-state="'+last+'"]');
+          if (match) match.click();
+        }
+      } catch(e) {}
+
+      // Feedback COPIAR
+      document.querySelectorAll('.btn').forEach(function(b){
+        if (!/copiar/i.test(b.textContent)) return;
+        b.addEventListener('click', function(){
+          var orig = b.innerHTML;
+          b.innerHTML = '<span class="ic" aria-hidden="true">✓</span>copiado';
+          b.style.background = 'var(--accent)';
+          b.style.color = 'var(--bg)';
+          b.style.borderColor = 'var(--accent)';
+          setTimeout(function(){
+            b.innerHTML = orig;
+            b.style.background = '';
+            b.style.color = '';
+            b.style.borderColor = '';
+          }, 1400);
+        });
+      });
+
+      // Toggle AUTO · ON/OFF
+      document.querySelectorAll('.toggle-auto').forEach(function(t){
+        t.addEventListener('click', function(){
+          var on = t.classList.toggle('on');
+          t.setAttribute('aria-pressed', on ? 'true' : 'false');
+          t.childNodes.forEach(function(){});  // no-op guard
+          var txt = on ? 'auto · on' : 'auto · off';
+          var led = t.querySelector('.led');
+          t.textContent = '';
+          if (led) t.appendChild(led);
+          t.appendChild(document.createTextNode(txt));
+        });
+      });
+    })();
+  </script>
 
 </body>
 </html>
