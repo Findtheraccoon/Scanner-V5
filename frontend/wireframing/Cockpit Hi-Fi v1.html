@@ -1096,6 +1096,124 @@
     right: 0;
     bottom: 18%;
   }
+
+  /* =========================================================
+     ESTADOS — overrides según body[data-state]
+     ========================================================= */
+
+  /* --- WARMUP: slot seleccionado pausado, señales en pausa --- */
+  body[data-state="warmup"] .selcard .pilot {
+    background: var(--warn);
+    box-shadow: 0 0 6px var(--warn-dim);
+  }
+  body[data-state="warmup"] .selcard::after {
+    content: "warming up · 62%";
+    position: absolute;
+    bottom: 6px;
+    left: 12px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--warn);
+  }
+  body[data-state="warmup"] .selcard .ts { opacity: 0.4; }
+  body[data-state="warmup"] .banner { opacity: 0.55; }
+  body[data-state="warmup"] .banner .score { text-decoration: line-through; text-decoration-color: var(--text-muted); }
+
+  /* --- DEGRADED: slot con ENG-060 --- */
+  body[data-state="degraded"] .selcard {
+    border-color: var(--warn-dim);
+    box-shadow: inset 2px 0 0 0 var(--warn);
+  }
+  body[data-state="degraded"] .selcard .pilot {
+    background: var(--warn);
+    box-shadow: 0 0 6px var(--warn-dim);
+  }
+  body[data-state="degraded"] .selcard::before {
+    content: "ENG-060";
+    position: absolute;
+    top: -7px;
+    left: 10px;
+    padding: 1px 6px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    color: var(--warn);
+    background: var(--bg-card);
+    border: 1px solid var(--warn-dim);
+    border-radius: 3px;
+  }
+
+  /* --- S+ EMITIDA: pulse 4s en selcard + band + banner --- */
+  @keyframes pulseSelCard {
+    0%, 100% {
+      box-shadow: inset 2px 0 0 0 var(--accent),
+                  0 0 0 0 rgba(156,200,10,0.0);
+      border-color: var(--accent-glass-border);
+    }
+    50% {
+      box-shadow: inset 2px 0 0 0 var(--accent-bright),
+                  0 0 0 6px rgba(156,200,10,0.08);
+      border-color: var(--accent);
+    }
+  }
+  @keyframes pulseBand {
+    0%, 100% { box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 3px var(--accent); }
+    50%      { box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 3px var(--accent),
+                           0 0 16px var(--accent-glass-border); }
+  }
+  @keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(156,200,10,0.0); }
+    50%      { box-shadow: 0 0 36px rgba(156,200,10,0.18); }
+  }
+  body[data-state="splus"] .selcard {
+    animation: pulseSelCard 4s ease-in-out infinite;
+  }
+  body[data-state="splus"] .selcard .band {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+    animation: pulseBand 4s ease-in-out infinite;
+  }
+  body[data-state="splus"] .banner {
+    animation: pulseGlow 4s ease-in-out infinite;
+  }
+  body[data-state="splus"] .banner .band.big {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+    animation: pulseBand 4s ease-in-out infinite;
+  }
+  /* en S+ la banda del selcard deja de tener la outline dashed de A+ */
+  body[data-state="splus"] .selcard .band.aplus::after { display: none; }
+
+  /* --- ERROR FATAL: ENG-001 banda roja sobre el banner --- */
+  body[data-state="error"] .banner {
+    position: relative;
+    background:
+      repeating-linear-gradient(135deg,
+        var(--bg-card) 0 14px,
+        rgba(239,68,68,0.06) 14px 15px);
+    border-bottom-color: var(--err-dim);
+  }
+  body[data-state="error"] .banner::before {
+    content: "ENG-001 · Data Engine caído · scan detenido";
+    position: absolute;
+    top: -11px;
+    left: 20px;
+    padding: 2px 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--err);
+    background: var(--bg-card);
+    border: 1px solid var(--err-dim);
+    border-radius: 3px;
+  }
+  body[data-state="error"] .banner .score { color: var(--text-muted); }
+  body[data-state="error"] .banner .acierto b { color: var(--text-muted); }
 </style>
 
 </head>
