@@ -101,9 +101,111 @@
   }
 
   ::selection { background: var(--accent-glass-border); color: var(--bg); }
-</style>
+
+  /* =========================================================
+     TWEAKS PANEL (fixed top-right · switcher de estados)
+     Solo en el preview standalone — no va al producto final
+     ========================================================= */
+  .tweaks {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 50;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 14px 16px;
+    min-width: 260px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow:
+      0 10px 30px rgba(0,0,0,0.6),
+      0 0 0 1px rgba(255,255,255,0.02) inset;
+  }
+  .tweaks .head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .tweaks .head h4 {
+    margin: 0;
+    font-family: var(--font-ui);
+    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+  .tweaks .head .v {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+  }
+  .tweaks .lbl {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .tweaks .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .pill {
+    font-family: var(--font-ui);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+  }
+  .pill:hover {
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+  .pill.on {
+    color: var(--accent);
+    background: var(--accent-glass-fill);
+    border-color: var(--accent-glass-border);
+  }
+  .pill.on:hover {
+    background: var(--accent-glass-hover);
+  }
+
 </head>
-<body>
-  <!-- Estructura: se agrega en los micro-bloques siguientes -->
+<body data-state="normal">
+
+  <!-- =========================================================
+       TWEAKS PANEL — switcher de estados del slot (preview only)
+       ========================================================= -->
+  <aside class="tweaks" aria-label="Tweaks del preview">
+    <div class="head">
+      <h4>estado del slot</h4>
+      <span class="v">v1 · preview</span>
+    </div>
+    <span class="lbl">data-state</span>
+    <div class="row" data-group="state">
+      <button class="pill on" data-state="normal">normal</button>
+      <button class="pill"    data-state="warmup">warmup</button>
+      <button class="pill"    data-state="degraded">degraded</button>
+      <button class="pill"    data-state="splus">S+ emitida</button>
+      <button class="pill"    data-state="error">error fatal</button>
+    </div>
+  </aside>
+
+  <!-- Cockpit: se agrega en los micro-bloques siguientes -->
+
 </body>
 </html>
