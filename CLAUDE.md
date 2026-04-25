@@ -238,7 +238,10 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 
 ### Pendiente
 
-- **Frontend:** React + TS + Vite + Tailwind + shadcn + Zustand + TanStack Query (aún no iniciado). Bloque grande — desbloquea el producto entero; backend ya expone todo lo necesario (REST + WS + stats + backup/restore + config encriptado listo para consumir).
+- **Frontend:** React + TS + Vite + Tailwind + shadcn + Zustand + TanStack Query (aún no scaffoldeado, pero arrancó la fase de wireframing hi-fi standalone). Bloque grande — desbloquea el producto entero; backend ya expone todo lo necesario (REST + WS + stats + backup/restore + config encriptado listo para consumir).
+  - **Cockpit Hi-Fi v1** ✅ (2026-04-25) — `frontend/wireframing/Cockpit Hi-Fi v1.html`, preview standalone con los 5 tokens aplicados sobre la distribución variante A. PR #31 esperando review visual antes del scaffolding React.
+  - Configuración / Dashboard / Memento — pendientes de hi-fi.
+  - Scaffolding Vite + stack — pendiente, post-aprobación de los hi-fi.
 - ~~**Fase 5.4 cierre**~~ → **Cerrado 2026-04-23 al 100%.** Post subida del `qqq_1min.json` original del Observatory, se identificaron 2 bugs reales del motor (ver gotchas #16 y #17): aggregator no resetaba al cambio de día + ORB gate usaba mean-cross-day en vez de median-intraday. Ambos arreglados → **245/245 match**. `DEFAULT_MIN_MATCH_RATE` subido a 0.99. Regression guard en `test_parity_regression.py` (slow, ~2min).
 - ~~**Healthcheck continuo spec §3.4**~~ → **Cerrado 2026-04-23.** `engines/scoring/healthcheck.py` wired al `heartbeat_worker` con `healthcheck_fn` opcional. Cada 2 min valida operativamente el motor (no-crash, shape, signal vocab) y reporta green/yellow+ENG-050/red+ENG-001 al Dashboard.
 - ~~**Watchdog automático AR.5**~~ → **Cerrado 2026-04-23.** `engines/database/watchdog.py:aggressive_rotation_watchdog` opt-in via `SCANNER_AGGRESSIVE_ROTATION_ENABLED=true`. Chequea tamaño DB cada `SCANNER_AGGRESSIVE_ROTATION_INTERVAL_S` (default 3600s) y dispara rotación agresiva. Default off por ser destructivo.
@@ -252,19 +255,28 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 
 ### Para el siguiente chat
 
-**Estado al 2026-04-23:** backend **completo a spec §3 + §4 + §9.4**. 1068 tests + 1 slow passing, parity 245/245, ruff limpio. Última tanda pushada (PR #24 abierto, pendiente merge):
+**Estado al 2026-04-25:** backend **completo a spec §3 + §4 + §9.4** (sin cambios desde 2026-04-23). 1068 tests + 1 slow passing, parity 245/245, ruff limpio. **Frontend arrancó por wireframing hi-fi.**
 
-- Regression guard `test_parity_regression.py` slow + fix path runner.
-- F — Healthcheck continuo spec §3.4 (`engines/scoring/healthcheck.py` wired al heartbeat).
-- C — Watchdog AR.5 auto (`engines/database/watchdog.py` opt-in).
-- D — README.md refresh al estado real + tabla endpoints REST.
-- B — `modules/config/` encriptado Fernet (standalone, wiring pendiente).
+Última sesión (2026-04-25) — **Cockpit Hi-Fi v1**:
+
+- Creado `frontend/wireframing/Cockpit Hi-Fi v1.html` — preview standalone (sin build, ~1840 líneas, 18 commits dividido en micro-bloques).
+- 5 design tokens aplicados: acento `#9cc80a` glass + Söhne→Inter + candles up=lima/down=blanco + pulse 4s + base `#050505`/`#0a0a0a`.
+- 5 estados alternables vía pills (normal / warmup / degraded / splus / error) con persist en localStorage.
+- ADN visual: icomat (cromática + tipografía + densidad aireada + hairlines) + runpod (cards/iconos/estados/progress bars con acento lima en vez de violeta).
+- Corner radius 6px (balanceado), botones estilo A (icomat pill glass).
+- Adaptado al backend real: removido "acierto hist." (post-release), state-toasts fieles (warmup sin %, splus sin spread), API keys numeradas 1..5, meta `engine v5.0.0-dev` + `fixture qqq_canonical_v1`.
+- Deuda técnica registrada (sección "Pendiente"): `POST /api/v1/scan/auto/{pause,resume}` para cablear el toggle AUTO del banner.
 
 **Branch de trabajo:** `claude/review-project-setup-4DnEm`.
 
-**PR abierto:** #24 con los 5 hitos arriba. Pendiente merge al despertar Álvaro (update-branch + merge).
+**PR abierto:** [#31](https://github.com/Findtheraccoon/Scanner-V5/pull/31) — Cockpit Hi-Fi v1 preview standalone. Esperando review visual de Álvaro antes de scaffoldear Vite + React.
 
-**Próximo bloque: Frontend React + TS.**
+**Decisiones abiertas para el próximo chat:**
+1. **¿Aprobás el Cockpit Hi-Fi v1?** Si sí → scaffoldear Vite + React + Tailwind + shadcn (mover el HTML a componentes JSX).
+2. **¿Próxima pestaña a hi-fi?** Configuración (más compleja: 4 pasos apilados, canvas Runpod del Slot Registry, upload fixtures) o Dashboard (más simple: refleja estado backend con piloto master + 4 secciones).
+3. **Plugin de frontend-design no disponible** en el sandbox — Álvaro confirmó que terminamos sin él.
+
+**Próximo bloque: Cockpit en producción (post-aprobación) o siguiente pestaña en hi-fi.**
 
 Superficie backend disponible para el frontend:
 
