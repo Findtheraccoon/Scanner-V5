@@ -16,6 +16,13 @@ pnpm install
 
 A continuación se agregan las dependencias específicas del stack (Tailwind, shadcn/ui, Zustand, TanStack Query, React Flow, Lightweight Charts).
 
+### Wireframing y previews hi-fi
+
+`frontend/wireframing/` contiene los HTML standalone (sin build) que se usan para validar dirección visual antes de scaffoldear:
+
+- `Cockpit Wireframes.html` — sketch paper-style mid-fi con 2 variantes (A densa / B holgada) y 5 estados. Solo referencia de **distribución**, no canónico estéticamente.
+- `Cockpit Hi-Fi v1.html` — primer hi-fi del Cockpit (variante A) con los 5 design tokens aplicados (acento lima glass `#9cc80a`, Söhne→Inter, candles up=lima/down=blanco, pulse 4s, base `#050505`/`#0a0a0a`). 5 estados alternables (normal / warmup / degraded / splus / error) con persistencia en localStorage. PR #31.
+
 ## 4 pestañas del producto
 
 1. **Configuración** — setup inicial + ajustes (4 pasos verticales).

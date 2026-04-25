@@ -70,7 +70,8 @@ Scanner-v5/
 │   ├── fixtures/                   # Canonical QQQ + parity reference
 │   ├── tests/                      # 1055 tests + 1 slow (parity 100%)
 │   └── pyproject.toml
-├── frontend/                       # (pendiente) React + TypeScript + Vite
+├── frontend/                       # (en wireframing hi-fi · scaffolding React pendiente)
+│   └── wireframing/                # HTML standalone (sketch + Cockpit Hi-Fi v1)
 ├── docs/
 │   ├── adr/                        # 7 ADRs aprobados
 │   ├── operational/                # Docs operativos vivos
