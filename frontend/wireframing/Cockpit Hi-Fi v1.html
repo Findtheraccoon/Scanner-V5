@@ -1,0 +1,1834 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Scanner v5 · Cockpit · Hi-Fi v1</title>
+
+<!--
+  Tipografía display/UI: Söhne (pendiente .woff2 en repo).
+  Fallback activo: Inter (Google Fonts). Mono: JetBrains Mono (Google Fonts).
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  /* =========================================================
+     TOKENS — Scanner v5 · Cockpit hi-fi v1
+     ADN: icomat (cromática + tipografía + aire) + runpod (cards/iconos/estados)
+     ========================================================= */
+  :root {
+    /* Base cromática (casi-negro plano) */
+    --bg:            #050505;
+    --bg-card:       #0a0a0a;
+    --bg-card-2:     #0f0f0f;   /* card elevado / highlight sutil */
+    --bg-card-sel:   #111111;   /* card seleccionado en watchlist */
+
+    /* Borders hairline (icomat minimal) */
+    --border:         rgba(255,255,255,0.08);
+    --border-strong:  rgba(255,255,255,0.14);
+    --border-dashed:  rgba(255,255,255,0.18);
+
+    /* Texto en tiers */
+    --text:         #ffffff;
+    --text-dim:     rgba(255,255,255,0.62);
+    --text-muted:   rgba(255,255,255,0.38);
+    --text-faint:   rgba(255,255,255,0.22);
+
+    /* Acento lima glass */
+    --accent:               #9cc80a;
+    --accent-bright:        #b8e61a;           /* hover / focus */
+    --accent-glass-fill:    rgba(156,200,10,0.10);
+    --accent-glass-hover:   rgba(156,200,10,0.18);
+    --accent-glass-border:  rgba(156,200,10,0.45);
+    --accent-dim:           rgba(156,200,10,0.22);
+
+    /* Semantic (runpod-ish) */
+    --ok:     #4ade80;
+    --ok-dim: rgba(74,222,128,0.18);
+    --warn:   #eab308;
+    --warn-dim: rgba(234,179,8,0.18);
+    --err:    #ef4444;
+    --err-dim:  rgba(239,68,68,0.18);
+
+    /* Candles */
+    --candle-up:    #9cc80a;
+    --candle-down:  #ffffff;
+
+    /* Radii */
+    --r:      6px;
+    --r-sm:   4px;
+    --r-pill: 999px;
+
+    /* Transitions */
+    --t-fast:   .12s ease;
+    --t-base:   .2s ease;
+    --t-slow:   .35s ease;
+
+    /* Tipografía stacks */
+    --font-ui:   'Söhne','Inter',system-ui,-apple-system,sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  /* =========================================================
+     RESET + base
+     ========================================================= */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  html { background: var(--bg); }
+  body {
+    min-height: 100vh;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-weight: 400;
+    font-size: 13px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+  }
+
+  button {
+    font-family: inherit;
+    color: inherit;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+  }
+
+  ::selection { background: var(--accent-glass-border); color: var(--bg); }
+
+  /* =========================================================
+     TWEAKS PANEL (fixed top-right · switcher de estados)
+     Solo en el preview standalone — no va al producto final
+     ========================================================= */
+  .tweaks {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 50;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 14px 16px;
+    min-width: 260px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow:
+      0 10px 30px rgba(0,0,0,0.6),
+      0 0 0 1px rgba(255,255,255,0.02) inset;
+  }
+  .tweaks .head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .tweaks .head h4 {
+    margin: 0;
+    font-family: var(--font-ui);
+    font-weight: 600;
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+  .tweaks .head .v {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+  }
+  .tweaks .lbl {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .tweaks .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .pill {
+    font-family: var(--font-ui);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    padding: 6px 10px;
+    cursor: pointer;
+    transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+  }
+  .pill:hover {
+    color: var(--text);
+    border-color: var(--border-strong);
+  }
+  .pill.on {
+    color: var(--accent);
+    background: var(--accent-glass-fill);
+    border-color: var(--accent-glass-border);
+  }
+  .pill.on:hover {
+    background: var(--accent-glass-hover);
+  }
+
+  /* =========================================================
+     COCKPIT container — wrapper max-width + card
+     ========================================================= */
+  .wrap {
+    max-width: 1760px;
+    margin: 0 auto;
+    padding: 28px 28px 80px;
+  }
+  .cockpit {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    overflow: hidden;
+  }
+
+  /* =========================================================
+     CHROME — tabs + WS status
+     ========================================================= */
+  .chrome {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 10px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .chrome .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  .chrome .brand .logo {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 1px solid var(--text-muted);
+    position: relative;
+  }
+  .chrome .brand .logo::after {
+    content: "";
+    position: absolute;
+    inset: 3px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+  .chrome .tabs {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    flex: 1;
+    justify-content: center;
+  }
+  .chrome .tab {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 6px 2px;
+    border-bottom: 1px solid transparent;
+    cursor: pointer;
+    transition: color var(--t-fast), border-color var(--t-fast);
+  }
+  .chrome .tab:hover { color: var(--text-dim); }
+  .chrome .tab.sel {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }
+  .chrome .ws {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .chrome .ws b { color: var(--text-dim); font-weight: 500; }
+  .chrome .ws .dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 8px var(--ok-dim);
+  }
+
+  /* =========================================================
+     API BANNER — 5 keys (glass) + daily global
+     ========================================================= */
+  .api-banner {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+    gap: 16px;
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
+  }
+  .api-keys {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .api-key {
+    background: var(--bg-card-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    position: relative;
+    min-height: 86px;
+  }
+  .api-key.active {
+    border-color: var(--accent-glass-border);
+    background: linear-gradient(
+      180deg,
+      var(--accent-glass-fill) 0%,
+      var(--bg-card-2) 60%
+    );
+  }
+  .api-key.empty { opacity: 0.45; }
+  .api-key .head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .api-key .name {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .api-key.active .name { color: var(--accent); }
+  .api-key .used {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+  }
+  .api-key .used small {
+    font-size: 10px;
+    font-weight: 400;
+    color: var(--text-faint);
+    margin-left: 2px;
+  }
+  .api-key .bar {
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.06);
+    position: relative;
+    overflow: hidden;
+  }
+  .api-key .bar > i {
+    position: absolute;
+    inset: 0;
+    width: var(--pct, 0%);
+    background: var(--text-dim);
+    border-radius: 2px;
+  }
+  .api-key.active .bar > i { background: var(--accent); box-shadow: 0 0 6px var(--accent-dim); }
+  .api-key .foot {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+  }
+  .api-key .foot .daily {
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .api-daily {
+    background: var(--bg-card-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    justify-content: space-between;
+  }
+  .api-daily .lbl {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .api-daily .num {
+    font-family: var(--font-mono);
+    font-size: 26px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+  .api-daily .num small {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-faint);
+    margin-left: 4px;
+  }
+  .api-daily .bar {
+    height: 8px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.06);
+    position: relative;
+    overflow: hidden;
+  }
+  .api-daily .bar > i {
+    position: absolute;
+    inset: 0;
+    width: var(--pct, 0%);
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent-dim);
+    border-radius: 3px;
+  }
+  .api-daily .reset {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+
+  /* =========================================================
+     MAIN LAYOUT — watchlist (300px) + panel (1fr)
+     ========================================================= */
+  .main {
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+
+  /* =========================================================
+     WATCHLIST — 6 slots
+     ========================================================= */
+  .watch {
+    border-right: 1px solid var(--border);
+    padding: 14px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .watch h3 {
+    margin: 2px 4px 6px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .slot-card {
+    position: relative;
+    background: var(--bg-card-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    padding: 10px 12px 10px 12px;
+    cursor: pointer;
+    transition: border-color var(--t-fast), background var(--t-fast);
+  }
+  .slot-card:hover {
+    border-color: var(--border-strong);
+    background: var(--bg-card-sel);
+  }
+  .slot-card.sel {
+    background: var(--bg-card-sel);
+    border-color: var(--accent-glass-border);
+    box-shadow: inset 2px 0 0 0 var(--accent);
+  }
+
+  /* pilot dot arriba-derecha */
+  .slot-card .pilot {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 6px var(--ok-dim);
+  }
+  .slot-card[data-pilot="warn"] .pilot { background: var(--warn); box-shadow: 0 0 6px var(--warn-dim); }
+  .slot-card[data-pilot="err"]  .pilot { background: var(--err);  box-shadow: 0 0 6px var(--err-dim); }
+
+  .slot-card .row1 {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .slot-card .tk {
+    font-family: var(--font-ui);
+    font-weight: 700;
+    font-size: 20px;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    line-height: 1;
+  }
+  .slot-card .dir {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-sm);
+    padding: 2px 6px;
+  }
+  .slot-card .dir[data-dir="CALL"] { color: var(--accent); border-color: var(--accent-glass-border); }
+  .slot-card .dir[data-dir="PUT"]  { color: var(--text); border-color: var(--border-strong); }
+  .slot-card .dir[data-dir="—"]    { color: var(--text-muted); border-style: dashed; }
+
+  .slot-card .row2 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 10px;
+  }
+  .slot-card .sc {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1;
+    letter-spacing: 0.01em;
+  }
+
+  /* =========================================================
+     BANDAS — REVISAR / B / A / A+ / S / S+
+     ========================================================= */
+  .band {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-sm);
+    padding: 3px 8px;
+    line-height: 1;
+    color: var(--text-dim);
+    background: transparent;
+  }
+  .band.revisar {
+    color: var(--text-muted);
+    border-style: dashed;
+    border-color: var(--border-dashed);
+  }
+  .band.b {
+    color: var(--text-dim);
+    background: rgba(255,255,255,0.04);
+    border-color: var(--border-strong);
+  }
+  .band.a {
+    color: var(--accent);
+    background: var(--accent-glass-fill);
+    border-color: var(--accent-glass-border);
+  }
+  .band.aplus {
+    color: var(--accent);
+    background: var(--accent-glass-hover);
+    border-color: var(--accent-glass-border);
+    position: relative;
+  }
+  .band.aplus::after {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border: 1px dashed var(--accent-glass-border);
+    border-radius: calc(var(--r-sm) + 2px);
+    pointer-events: none;
+  }
+  .band.s {
+    color: var(--bg);
+    background: var(--accent);
+    border-color: var(--accent);
+    font-weight: 700;
+  }
+  .band.splus {
+    color: var(--bg);
+    background: var(--accent);
+    border-color: var(--accent);
+    font-weight: 700;
+    box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 3px var(--accent);
+  }
+
+  .slot-card .ts {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    color: var(--text-faint);
+    margin-top: 6px;
+  }
+
+  /* =========================================================
+     PANEL (columna derecha) — contenedor flex vertical
+     ========================================================= */
+  .panel {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  /* =========================================================
+     STATE TOASTS — aparecen según body[data-state]
+     ========================================================= */
+  .state-toast {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    margin: 14px 18px 0;
+    padding: 10px 14px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    line-height: 1.4;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r);
+    background: var(--bg-card-2);
+    color: var(--text-dim);
+  }
+  .state-toast .ic {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: var(--r-sm);
+    flex-shrink: 0;
+    font-size: 11px;
+    font-family: var(--font-ui);
+    line-height: 1;
+  }
+  .state-toast b {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .state-toast.warmup  { border-color: var(--warn-dim); background: linear-gradient(90deg, var(--warn-dim), transparent 60%); color: var(--text-dim); }
+  .state-toast.warmup  .ic { background: var(--warn-dim); color: var(--warn); }
+
+  .state-toast.degraded { border-color: var(--warn-dim); background: linear-gradient(90deg, var(--warn-dim), transparent 60%); color: var(--text-dim); }
+  .state-toast.degraded .ic { background: var(--warn-dim); color: var(--warn); }
+
+  .state-toast.splus { border-color: var(--accent-glass-border); background: linear-gradient(90deg, var(--accent-glass-fill), transparent 60%); color: var(--text); }
+  .state-toast.splus .ic { background: var(--accent-glass-hover); color: var(--accent); }
+
+  .state-toast.error { border-color: var(--err-dim); background: linear-gradient(90deg, var(--err-dim), transparent 60%); color: var(--text-dim); }
+  .state-toast.error .ic { background: var(--err-dim); color: var(--err); }
+
+  /* visibilidad condicional */
+  body[data-state="warmup"]   .state-toast.warmup,
+  body[data-state="degraded"] .state-toast.degraded,
+  body[data-state="splus"]    .state-toast.splus,
+  body[data-state="error"]    .state-toast.error { display: flex; }
+
+  /* animación del spinner en warmup */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .state-toast.warmup .ic { animation: spin 1.6s linear infinite; }
+
+  /* =========================================================
+     BANNER PRINCIPAL — ticker + banda + dir + score + acciones
+     ========================================================= */
+  .banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
+    flex-wrap: wrap;
+  }
+  .banner .id {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+  .banner .tk {
+    font-family: var(--font-ui);
+    font-weight: 700;
+    font-size: 44px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+  .banner .band.big {
+    font-size: 12px;
+    padding: 5px 11px;
+    letter-spacing: 0.22em;
+  }
+  .banner .dir.big {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid var(--accent-glass-border);
+    background: var(--accent-glass-fill);
+    border-radius: var(--r-sm);
+    padding: 4px 10px;
+  }
+  .banner .score-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-left: 14px;
+    border-left: 1px solid var(--border);
+    margin-left: 4px;
+  }
+  .banner .score {
+    font-family: var(--font-mono);
+    font-size: 34px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    color: var(--text);
+  }
+  .banner .score small {
+    display: block;
+    font-size: 8.5px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+    font-weight: 500;
+    margin-top: 4px;
+  }
+
+  .banner .actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  /* =========================================================
+     .btn — estilo A (icomat pill glass, acento lima)
+     ========================================================= */
+  .btn {
+    font-family: var(--font-ui);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-glass-fill);
+    border: 1px solid var(--accent-glass-border);
+    border-radius: var(--r-sm);
+    padding: 10px 18px;
+    cursor: pointer;
+    transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    line-height: 1;
+  }
+  .btn:hover {
+    background: var(--accent-glass-hover);
+    border-color: var(--accent);
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn .ic {
+    font-family: var(--font-ui);
+    font-weight: 400;
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  /* Toggle AUTO · ON/OFF — pill con dot indicator */
+  .toggle-auto {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-family: var(--font-ui);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    padding: 10px 14px;
+    border-radius: var(--r-sm);
+    border: 1px solid var(--border-strong);
+    color: var(--text-dim);
+    background: transparent;
+    cursor: pointer;
+    transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
+  }
+  .toggle-auto:hover { border-color: var(--text-muted); color: var(--text); }
+  .toggle-auto .led {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-faint);
+    transition: background var(--t-fast), box-shadow var(--t-fast);
+  }
+  .toggle-auto.on {
+    color: var(--accent);
+    border-color: var(--accent-glass-border);
+    background: var(--accent-glass-fill);
+  }
+  .toggle-auto.on:hover { background: var(--accent-glass-hover); }
+  .toggle-auto.on .led {
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent-dim);
+  }
+
+  /* =========================================================
+     RESUMEN — 6 kvs (grid 2-col) + flags
+     ========================================================= */
+  .resumen {
+    padding: 14px 20px 12px;
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 32px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.55;
+  }
+  .resumen .line {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 4px 0;
+    border-bottom: 1px dashed rgba(255,255,255,0.05);
+  }
+  .resumen .line:nth-last-child(-n+3):not(.flags-row) { border-bottom: none; }
+  .resumen .k {
+    color: var(--text-muted);
+    letter-spacing: 0.06em;
+  }
+  .resumen .v {
+    color: var(--text);
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    text-align: right;
+  }
+  .resumen .v .up { color: var(--accent); }
+  .resumen .v .dim { color: var(--text-faint); font-weight: 400; }
+
+  .resumen .flags-row {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+  .flag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    background: var(--bg-card-2);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+  }
+  .flag .fi {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    background: var(--accent-glass-fill);
+    color: var(--accent);
+    font-size: 10px;
+    line-height: 1;
+  }
+  .flag.warn { color: var(--warn); border-color: var(--warn-dim); }
+  .flag.warn .fi { background: var(--warn-dim); color: var(--warn); }
+
+  /* =========================================================
+     DET-HEAD — título del detalle + botón contraer
+     ========================================================= */
+  .det-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-card);
+  }
+  .det-head .title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .det-head .title b { color: var(--text-dim); font-weight: 500; }
+  .det-head .collapse {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    background: transparent;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-sm);
+    padding: 5px 10px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: color var(--t-fast), border-color var(--t-fast);
+  }
+  .det-head .collapse:hover { color: var(--text); border-color: var(--text-muted); }
+  .det-head .collapse .cv {
+    font-size: 9px;
+    line-height: 1;
+    color: var(--text-muted);
+  }
+
+  /* =========================================================
+     DETAIL — tabla densa (col label + col valores) 10 bloques
+     ========================================================= */
+  .detail {
+    padding: 4px 20px 14px;
+    display: grid;
+    grid-template-columns: 150px minmax(0, 1fr);
+    gap: 0 16px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.55;
+  }
+  .detail .blk { display: contents; }
+  .detail .bh {
+    grid-column: 1 / 2;
+    padding: 10px 0 8px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .detail .bc {
+    grid-column: 2 / 3;
+    padding: 10px 0 8px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  .detail .bc .line {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 2px 0;
+  }
+  .detail .bc .k { color: var(--text-muted); }
+  .detail .bc .v { color: var(--text-dim); text-align: right; }
+  .detail .bc .v b { color: var(--text); font-weight: 500; }
+  .detail .bc .v .up { color: var(--accent); }
+  .detail .bc ul.patterns {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .detail .bc ul.patterns li {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    color: var(--text-dim);
+  }
+  .detail .bc ul.patterns .tag {
+    display: inline-flex;
+    min-width: 44px;
+    justify-content: center;
+    padding: 1px 6px;
+    border: 1px solid var(--border-strong);
+    border-radius: 3px;
+    font-size: 9.5px;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+  .detail .bc ul.patterns .w {
+    margin-left: auto;
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  /* bloque "resultado" destacado con glass lima sobre la fila */
+  .detail .blk.hero .bh {
+    color: var(--accent);
+    border-bottom-color: var(--accent-glass-border);
+  }
+  .detail .blk.hero .bc {
+    border-bottom-color: var(--accent-glass-border);
+  }
+  .detail .blk.hero .bc .v b { color: var(--accent); }
+
+  /* último bloque sin border-bottom para cierre limpio */
+  .detail .blk:last-child .bh,
+  .detail .blk:last-child .bc { border-bottom: none; }
+
+  /* =========================================================
+     CHART — placeholder lightweight-charts (SVG inline)
+     up = accent lima  ·  down = blanco
+     ========================================================= */
+  .chart {
+    border-top: 1px solid var(--border);
+    padding: 16px 20px 20px;
+    background: var(--bg-card);
+  }
+  .chart .box {
+    position: relative;
+    height: 240px;
+    border: 1px solid var(--border);
+    border-radius: var(--r);
+    background:
+      repeating-linear-gradient(0deg,  transparent 0 39px, rgba(255,255,255,0.025) 39px 40px),
+      repeating-linear-gradient(90deg, transparent 0 59px, rgba(255,255,255,0.025) 59px 60px),
+      var(--bg-card-2);
+    overflow: hidden;
+  }
+  .chart .ohlc {
+    position: absolute;
+    top: 12px;
+    left: 14px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .chart .ohlc b { color: var(--text-dim); font-weight: 500; }
+  .chart .ohlc .ov { color: var(--text); }
+  .chart .tv {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    background: var(--accent-glass-fill);
+    border: 1px solid var(--accent-glass-border);
+    border-radius: var(--r-sm);
+    padding: 4px 8px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background var(--t-fast);
+  }
+  .chart .tv:hover { background: var(--accent-glass-hover); }
+  .chart .cap {
+    position: absolute;
+    bottom: 8px;
+    right: 12px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
+  .chart .candle {
+    position: absolute;
+    top: 18%;
+    left: 0;
+    right: 0;
+    bottom: 18%;
+  }
+
+  /* =========================================================
+     ESTADOS — overrides según body[data-state]
+     ========================================================= */
+
+  /* --- WARMUP: slot seleccionado pausado, señales en pausa --- */
+  body[data-state="warmup"] .selcard .pilot {
+    background: var(--warn);
+    box-shadow: 0 0 6px var(--warn-dim);
+  }
+  body[data-state="warmup"] .selcard::after {
+    content: "warming up · 62%";
+    position: absolute;
+    bottom: 6px;
+    left: 12px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--warn);
+  }
+  body[data-state="warmup"] .selcard .ts { opacity: 0.4; }
+  body[data-state="warmup"] .banner { opacity: 0.55; }
+  body[data-state="warmup"] .banner .score { text-decoration: line-through; text-decoration-color: var(--text-muted); }
+
+  /* --- DEGRADED: slot con ENG-060 --- */
+  body[data-state="degraded"] .selcard {
+    border-color: var(--warn-dim);
+    box-shadow: inset 2px 0 0 0 var(--warn);
+  }
+  body[data-state="degraded"] .selcard .pilot {
+    background: var(--warn);
+    box-shadow: 0 0 6px var(--warn-dim);
+  }
+  body[data-state="degraded"] .selcard::before {
+    content: "ENG-060";
+    position: absolute;
+    top: -7px;
+    left: 10px;
+    padding: 1px 6px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    color: var(--warn);
+    background: var(--bg-card);
+    border: 1px solid var(--warn-dim);
+    border-radius: 3px;
+  }
+
+  /* --- S+ EMITIDA: pulse 4s en selcard + band + banner --- */
+  @keyframes pulseSelCard {
+    0%, 100% {
+      box-shadow: inset 2px 0 0 0 var(--accent),
+                  0 0 0 0 rgba(156,200,10,0.0);
+      border-color: var(--accent-glass-border);
+    }
+    50% {
+      box-shadow: inset 2px 0 0 0 var(--accent-bright),
+                  0 0 0 6px rgba(156,200,10,0.08);
+      border-color: var(--accent);
+    }
+  }
+  @keyframes pulseBand {
+    0%, 100% { box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 3px var(--accent); }
+    50%      { box-shadow: 0 0 0 2px var(--bg-card), 0 0 0 3px var(--accent),
+                           0 0 16px var(--accent-glass-border); }
+  }
+  @keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(156,200,10,0.0); }
+    50%      { box-shadow: 0 0 36px rgba(156,200,10,0.18); }
+  }
+  body[data-state="splus"] .selcard {
+    animation: pulseSelCard 4s ease-in-out infinite;
+  }
+  body[data-state="splus"] .selcard .band {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+    animation: pulseBand 4s ease-in-out infinite;
+  }
+  body[data-state="splus"] .banner {
+    animation: pulseGlow 4s ease-in-out infinite;
+  }
+  body[data-state="splus"] .banner .band.big {
+    background: var(--accent);
+    color: var(--bg);
+    border-color: var(--accent);
+    animation: pulseBand 4s ease-in-out infinite;
+  }
+  /* en S+ la banda del selcard deja de tener la outline dashed de A+ */
+  body[data-state="splus"] .selcard .band.aplus::after { display: none; }
+
+  /* --- ERROR FATAL: ENG-001 banda roja sobre el banner --- */
+  body[data-state="error"] .banner {
+    position: relative;
+    background:
+      repeating-linear-gradient(135deg,
+        var(--bg-card) 0 14px,
+        rgba(239,68,68,0.06) 14px 15px);
+    border-bottom-color: var(--err-dim);
+  }
+  body[data-state="error"] .banner::before {
+    content: "ENG-001 · Data Engine caído · scan detenido";
+    position: absolute;
+    top: -11px;
+    left: 20px;
+    padding: 2px 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--err);
+    background: var(--bg-card);
+    border: 1px solid var(--err-dim);
+    border-radius: 3px;
+  }
+  body[data-state="error"] .banner .score { color: var(--text-muted); }
+  body[data-state="error"] .banner .acierto b { color: var(--text-muted); }
+</style>
+
+</head>
+<body data-state="normal">
+
+  <!-- =========================================================
+       TWEAKS PANEL — switcher de estados del slot (preview only)
+       ========================================================= -->
+  <aside class="tweaks" aria-label="Tweaks del preview">
+    <div class="head">
+      <h4>estado del slot</h4>
+      <span class="v">v1 · preview</span>
+    </div>
+    <span class="lbl">data-state</span>
+    <div class="row" data-group="state">
+      <button class="pill on" data-state="normal">normal</button>
+      <button class="pill"    data-state="warmup">warmup</button>
+      <button class="pill"    data-state="degraded">degraded</button>
+      <button class="pill"    data-state="splus">S+ emitida</button>
+      <button class="pill"    data-state="error">error fatal</button>
+    </div>
+  </aside>
+
+  <!-- =========================================================
+       COCKPIT
+       ========================================================= -->
+  <div class="wrap">
+    <div class="cockpit">
+
+      <!-- Chrome: brand + tabs + WS status -->
+      <div class="chrome">
+        <div class="brand">
+          <span class="logo" aria-hidden="true"></span>
+          <span>scanner v5</span>
+        </div>
+        <div class="tabs" role="tablist">
+          <span class="tab" role="tab">configuración</span>
+          <span class="tab" role="tab">dashboard</span>
+          <span class="tab sel" role="tab" aria-selected="true">cockpit</span>
+          <span class="tab" role="tab">memento</span>
+        </div>
+        <div class="ws" aria-label="WebSocket status">
+          <span>ws · <b>conectado</b></span>
+          <span class="dot" aria-hidden="true"></span>
+        </div>
+      </div>
+
+      <!-- =========================================================
+           API BANNER — 5 keys + daily global
+           ========================================================= -->
+      <div class="api-banner">
+        <div class="api-keys">
+
+          <!-- key 1: activa (más uso) -->
+          <div class="api-key active">
+            <div class="head">
+              <span class="name">key 1</span>
+              <span class="used">6<small>/8</small></span>
+            </div>
+            <div class="bar" role="progressbar" aria-valuenow="75" aria-valuemin="0" aria-valuemax="100">
+              <i style="--pct: 75%"></i>
+            </div>
+            <div class="foot">
+              <span>hace 3s</span>
+              <span class="daily">412 / 800</span>
+            </div>
+          </div>
+
+          <!-- key 2 -->
+          <div class="api-key">
+            <div class="head">
+              <span class="name">key 2</span>
+              <span class="used">2<small>/8</small></span>
+            </div>
+            <div class="bar" role="progressbar" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100">
+              <i style="--pct: 25%"></i>
+            </div>
+            <div class="foot">
+              <span>hace 47s</span>
+              <span class="daily">186 / 800</span>
+            </div>
+          </div>
+
+          <!-- key 3 -->
+          <div class="api-key">
+            <div class="head">
+              <span class="name">key 3</span>
+              <span class="used">0<small>/8</small></span>
+            </div>
+            <div class="bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+              <i style="--pct: 0%"></i>
+            </div>
+            <div class="foot">
+              <span>—</span>
+              <span class="daily">0 / 800</span>
+            </div>
+          </div>
+
+          <!-- key 4: vacía -->
+          <div class="api-key empty">
+            <div class="head">
+              <span class="name">key 4</span>
+              <span class="used">—</span>
+            </div>
+            <div class="bar"><i style="--pct: 0%"></i></div>
+            <div class="foot">
+              <span>sin configurar</span>
+              <span class="daily"></span>
+            </div>
+          </div>
+
+          <!-- key 5: vacía -->
+          <div class="api-key empty">
+            <div class="head">
+              <span class="name">key 5</span>
+              <span class="used">—</span>
+            </div>
+            <div class="bar"><i style="--pct: 0%"></i></div>
+            <div class="foot">
+              <span>sin configurar</span>
+              <span class="daily"></span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Daily pool global -->
+        <div class="api-daily">
+          <div>
+            <div class="lbl">créditos diarios</div>
+            <div class="num">598<small>/ 2400</small></div>
+          </div>
+          <div class="bar" role="progressbar" aria-valuenow="24" aria-valuemin="0" aria-valuemax="100">
+            <i style="--pct: 24%"></i>
+          </div>
+          <div class="reset">800 × key · reset 16:00 ET</div>
+        </div>
+      </div>
+
+      <!-- =========================================================
+           MAIN — watchlist (300px) + panel (1fr)
+           ========================================================= -->
+      <div class="main">
+
+        <!-- =========================================================
+             WATCHLIST — 6 slots
+             ========================================================= -->
+        <aside class="watch" aria-label="Watchlist · 6 slots">
+          <h3>watchlist · 6 slots</h3>
+
+          <!-- Slot 1 · QQQ · seleccionada · A+ -->
+          <article class="slot-card sel selcard" data-pilot="ok">
+            <span class="pilot" aria-hidden="true"></span>
+            <div class="row1">
+              <span class="tk">QQQ</span>
+              <span class="dir" data-dir="CALL">CALL</span>
+            </div>
+            <div class="row2">
+              <span class="sc">12.0</span>
+              <span class="band aplus">A+</span>
+            </div>
+            <div class="ts">14:30 ET · vela cerrada</div>
+          </article>
+
+          <!-- Slot 2 · SPY · A -->
+          <article class="slot-card" data-pilot="ok">
+            <span class="pilot" aria-hidden="true"></span>
+            <div class="row1">
+              <span class="tk">SPY</span>
+              <span class="dir" data-dir="CALL">CALL</span>
+            </div>
+            <div class="row2">
+              <span class="sc">6.5</span>
+              <span class="band a">A</span>
+            </div>
+            <div class="ts">14:30 ET</div>
+          </article>
+
+          <!-- Slot 3 · IWM · B -->
+          <article class="slot-card" data-pilot="ok">
+            <span class="pilot" aria-hidden="true"></span>
+            <div class="row1">
+              <span class="tk">IWM</span>
+              <span class="dir" data-dir="PUT">PUT</span>
+            </div>
+            <div class="row2">
+              <span class="sc">3.5</span>
+              <span class="band b">B</span>
+            </div>
+            <div class="ts">14:30 ET</div>
+          </article>
+
+          <!-- Slot 4 · AAPL · REVISAR -->
+          <article class="slot-card" data-pilot="ok">
+            <span class="pilot" aria-hidden="true"></span>
+            <div class="row1">
+              <span class="tk">AAPL</span>
+              <span class="dir" data-dir="—">—</span>
+            </div>
+            <div class="row2">
+              <span class="sc">1.2</span>
+              <span class="band revisar">revisar</span>
+            </div>
+            <div class="ts">14:30 ET</div>
+          </article>
+
+          <!-- Slot 5 · NVDA · S -->
+          <article class="slot-card" data-pilot="ok">
+            <span class="pilot" aria-hidden="true"></span>
+            <div class="row1">
+              <span class="tk">NVDA</span>
+              <span class="dir" data-dir="CALL">CALL</span>
+            </div>
+            <div class="row2">
+              <span class="sc">16.0</span>
+              <span class="band s">S</span>
+            </div>
+            <div class="ts">14:30 ET</div>
+          </article>
+
+          <!-- Slot 6 · TSLA · B -->
+          <article class="slot-card" data-pilot="ok">
+            <span class="pilot" aria-hidden="true"></span>
+            <div class="row1">
+              <span class="tk">TSLA</span>
+              <span class="dir" data-dir="PUT">PUT</span>
+            </div>
+            <div class="row2">
+              <span class="sc">4.0</span>
+              <span class="band b">B</span>
+            </div>
+            <div class="ts">14:30 ET</div>
+          </article>
+
+        </aside>
+
+        <!-- =========================================================
+             PANEL — state toasts + banner + resumen + detalle + chart
+             ========================================================= -->
+        <div class="panel">
+
+          <!-- state toasts (se muestran según body[data-state]) -->
+          <div class="state-toast warmup" role="status">
+            <span class="ic" aria-hidden="true">↻</span>
+            <span>slot <b>QQQ</b> warming up — descargando daily / 1h / 15m desde TwelveData · señales del slot en pausa</span>
+          </div>
+          <div class="state-toast degraded" role="status">
+            <span class="ic" aria-hidden="true">⚠</span>
+            <span><b>ENG-060</b> · 3 fallos consecutivos de fetch en <b>QQQ</b> — revisar Dashboard → Motores</span>
+          </div>
+          <div class="state-toast splus" role="status">
+            <span class="ic" aria-hidden="true">★</span>
+            <span>señal <b>S+</b> emitida en <b>QQQ</b> @ 14:30 ET</span>
+          </div>
+          <div class="state-toast error" role="status">
+            <span class="ic" aria-hidden="true">✕</span>
+            <span><b>ENG-001</b> · Data Engine caído · scan detenido — revisar Dashboard → Motores</span>
+          </div>
+
+          <!-- =========================================================
+               BANNER — ticker · band · dir · score · acierto + acciones
+               ========================================================= -->
+          <div class="banner">
+            <div class="id">
+              <span class="tk">QQQ</span>
+              <span class="band aplus big">A+</span>
+              <span class="dir big">CALL</span>
+              <div class="score-wrap">
+                <div class="score">12.0<small>score</small></div>
+              </div>
+            </div>
+
+            <div class="actions">
+              <button class="btn" type="button" aria-label="Scan ahora">
+                <span class="ic" aria-hidden="true">▸</span>
+                scan ahora
+              </button>
+
+              <button class="toggle-auto on" type="button" aria-pressed="true" aria-label="Auto scan on">
+                <span class="led" aria-hidden="true"></span>
+                auto · on
+              </button>
+
+              <button class="btn" type="button" aria-label="Copiar señal al portapapeles">
+                <span class="ic" aria-hidden="true">↳</span>
+                copiar
+              </button>
+            </div>
+          </div>
+
+          <!-- =========================================================
+               RESUMEN — 6 kvs + flags row
+               ========================================================= -->
+          <div class="resumen">
+            <div class="line">
+              <span class="k">precio</span>
+              <span class="v">$485.32 <span class="up">(+0.82%)</span></span>
+            </div>
+            <div class="line">
+              <span class="k">ATR 15M</span>
+              <span class="v">0.74% <span class="dim">· $3.59</span></span>
+            </div>
+            <div class="line">
+              <span class="k">alineación</span>
+              <span class="v">3/3 bull <span class="dim">· 15M·1H·D</span></span>
+            </div>
+            <div class="line">
+              <span class="k">dMA200</span>
+              <span class="v"><span class="up">+3.2%</span></span>
+            </div>
+            <div class="line">
+              <span class="k">vela</span>
+              <span class="v">14:30 ET <span class="dim">· calc +4s</span></span>
+            </div>
+            <div class="line">
+              <span class="k">bench (SPY)</span>
+              <span class="v"><span class="up">+0.41%</span> <span class="dim">· div +0.41pp</span></span>
+            </div>
+
+            <div class="flags-row">
+              <span class="flag"><span class="fi" aria-hidden="true">⚡</span>squeeze 1H</span>
+              <span class="flag"><span class="fi" aria-hidden="true">↑</span>ORB breakout</span>
+              <span class="flag warn"><span class="fi" aria-hidden="true">⚠</span>catalizador</span>
+              <span class="flag"><span class="fi" aria-hidden="true">↗</span>fza rel extrema</span>
+            </div>
+          </div>
+
+          <!-- =========================================================
+               DET-HEAD — título + contraer
+               ========================================================= -->
+          <div class="det-head">
+            <span class="title"><b>detalle técnico</b> · mismo orden que el texto que se copia</span>
+            <button class="collapse" type="button" aria-expanded="true">
+              contraer
+              <span class="cv" aria-hidden="true">▲</span>
+            </button>
+          </div>
+
+          <!-- =========================================================
+               DETAIL — tabla de 10 bloques
+               precio · contexto · volumen · fza rel · niveles ·
+               eventos · patrones · scoring · resultado · meta
+               ========================================================= -->
+          <div class="detail">
+
+            <div class="blk">
+              <div class="bh">precio</div>
+              <div class="bc">
+                <div class="line"><span class="k">último</span><span class="v"><b>$485.32</b></span></div>
+                <div class="line"><span class="k">chg día</span><span class="v"><span class="up">+0.82%</span></span></div>
+                <div class="line"><span class="k">ATR 15M</span><span class="v">0.74% · $3.59</span></div>
+                <div class="line"><span class="k">dMA200</span><span class="v"><span class="up">+3.2%</span> · $470.12</span></div>
+              </div>
+            </div>
+
+            <div class="blk">
+              <div class="bh">contexto</div>
+              <div class="bc">
+                <div class="line"><span class="k">alineación</span><span class="v">3/3 CALL · 15M·1H·D bull</span></div>
+                <div class="line"><span class="k">MAs diarias</span><span class="v">20=$483 · 40=$478 · 200=$470</span></div>
+                <div class="line"><span class="k">BB 1H</span><span class="v">$482.1 / $484.5 / $486.9</span></div>
+              </div>
+            </div>
+
+            <div class="blk">
+              <div class="bh">volumen</div>
+              <div class="bc">
+                <div class="line"><span class="k">15M</span><span class="v"><b>1.8×</b> mediana</span></div>
+                <div class="line"><span class="k">1H</span><span class="v">1.4× mediana</span></div>
+                <div class="line"><span class="k">vela curso</span><span class="v">2.1× proy · fracción 0.66</span></div>
+                <div class="line"><span class="k">secuencia</span><span class="v"><span class="up">↑</span> creciente</span></div>
+              </div>
+            </div>
+
+            <div class="blk">
+              <div class="bh">fuerza relativa</div>
+              <div class="bc">
+                <div class="line"><span class="k">vs SPY</span><span class="v"><span class="up">+0.87%</span></span></div>
+                <div class="line"><span class="k">DivSPY</span><span class="v">QQQ +0.82% / SPY +0.41%</span></div>
+              </div>
+            </div>
+
+            <div class="blk">
+              <div class="bh">niveles</div>
+              <div class="bc">
+                <div class="line"><span class="k">R</span><span class="v">$487.2 (PD) · $489.5 (R1)</span></div>
+                <div class="line"><span class="k">S</span><span class="v">$483.8 (S1) · $481.1 (PD)</span></div>
+              </div>
+            </div>
+
+            <div class="blk">
+              <div class="bh">eventos</div>
+              <div class="bc">
+                <div class="line"><span class="k">squeeze</span><span class="v">BB 1H p12 → expansión</span></div>
+                <div class="line"><span class="k">ORB</span><span class="v">breakout · rango $484.1-$485.8</span></div>
+                <div class="line"><span class="k">catalizador</span><span class="v">chg &gt; 1.5× ATR</span></div>
+              </div>
+            </div>
+
+            <div class="blk">
+              <div class="bh">patrones (3)</div>
+              <div class="bc">
+                <ul class="patterns">
+                  <li><span class="tag">15M</span>doji BB inf · bull · trigger<span class="w">w:2</span></li>
+                  <li><span class="tag">15M</span>ORB breakout · bull · trigger<span class="w">w:2</span></li>
+                  <li><span class="tag">1H</span>BBinf_1H · bull · confirm<span class="w">w:3</span></li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="blk">
+              <div class="bh">scoring</div>
+              <div class="bc">
+                <div class="line"><span class="k">estructura</span><span class="v"><b>✓</b></span></div>
+                <div class="line"><span class="k">triggers</span><span class="v">2 señales · suma 4.0</span></div>
+                <div class="line"><span class="k">confirms</span><span class="v">1 señal · suma 3.0 <span style="color:var(--text-faint)">(dedup)</span></span></div>
+                <div class="line"><span class="k">bloqueo / conflicto</span><span class="v">— / —</span></div>
+              </div>
+            </div>
+
+            <div class="blk hero">
+              <div class="bh">resultado</div>
+              <div class="bc">
+                <div class="line"><span class="k">score</span><span class="v"><b>12.0</b></span></div>
+                <div class="line"><span class="k">dirección</span><span class="v"><b>CALL</b></span></div>
+                <div class="line"><span class="k">confianza</span><span class="v"><b>A+</b></span></div>
+                <div class="line"><span class="k">señal</span><span class="v"><b>SETUP</b></span></div>
+              </div>
+            </div>
+
+            <div class="blk">
+              <div class="bh">meta</div>
+              <div class="bc">
+                <div class="line"><span class="k">engine</span><span class="v">v5.0.0-dev</span></div>
+                <div class="line"><span class="k">fixture</span><span class="v">qqq_canonical_v1</span></div>
+                <div class="line"><span class="k">slot</span><span class="v">1</span></div>
+                <div class="line"><span class="k">vela</span><span class="v">2026-04-23 14:30 ET</span></div>
+                <div class="line"><span class="k">cálculo</span><span class="v">14:30:04 ET</span></div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- =========================================================
+               CHART — lightweight-charts placeholder
+               ========================================================= -->
+          <div class="chart">
+            <div class="box">
+
+              <div class="ohlc">
+                <span><b>QQQ</b> · <span class="ov">15M</span></span>
+                <span>o <span class="ov">484.80</span></span>
+                <span>h <span class="ov">485.60</span></span>
+                <span>l <span class="ov">484.32</span></span>
+                <span>c <span class="ov">485.32</span></span>
+              </div>
+
+              <a class="tv" href="#" aria-label="Abrir en TradingView">
+                abrir en tradingview
+                <span aria-hidden="true">↗</span>
+              </a>
+
+              <svg class="candle" viewBox="0 0 600 120" preserveAspectRatio="none" aria-hidden="true">
+                <!-- Up = lima sólido ; Down = cuerpo hueco blanco -->
+                <g stroke-width="1.2">
+                  <!-- bearish (down) -->
+                  <line x1="20"  y1="40" x2="20"  y2="92" stroke="#ffffff"/>
+                  <rect x="15"  y="58" width="10" height="22" fill="none" stroke="#ffffff"/>
+
+                  <!-- bullish (up) -->
+                  <line x1="48"  y1="36" x2="48"  y2="86" stroke="#9cc80a"/>
+                  <rect x="43"  y="50" width="10" height="26" fill="#9cc80a" stroke="#9cc80a"/>
+
+                  <line x1="76"  y1="32" x2="76"  y2="80" stroke="#9cc80a"/>
+                  <rect x="71"  y="44" width="10" height="28" fill="#9cc80a" stroke="#9cc80a"/>
+
+                  <!-- bearish -->
+                  <line x1="104" y1="30" x2="104" y2="72" stroke="#ffffff"/>
+                  <rect x="99"  y="42" width="10" height="18" fill="none" stroke="#ffffff"/>
+
+                  <!-- bullish -->
+                  <line x1="132" y1="34" x2="132" y2="78" stroke="#9cc80a"/>
+                  <rect x="127" y="44" width="10" height="26" fill="#9cc80a" stroke="#9cc80a"/>
+
+                  <line x1="160" y1="28" x2="160" y2="72" stroke="#9cc80a"/>
+                  <rect x="155" y="36" width="10" height="24" fill="#9cc80a" stroke="#9cc80a"/>
+
+                  <!-- bearish -->
+                  <line x1="188" y1="24" x2="188" y2="66" stroke="#ffffff"/>
+                  <rect x="183" y="32" width="10" height="22" fill="none" stroke="#ffffff"/>
+
+                  <!-- bullish -->
+                  <line x1="216" y1="22" x2="216" y2="62" stroke="#9cc80a"/>
+                  <rect x="211" y="30" width="10" height="22" fill="#9cc80a" stroke="#9cc80a"/>
+
+                  <line x1="244" y1="20" x2="244" y2="58" stroke="#9cc80a"/>
+                  <rect x="239" y="26" width="10" height="24" fill="#9cc80a" stroke="#9cc80a"/>
+
+                  <!-- bearish -->
+                  <line x1="272" y1="20" x2="272" y2="56" stroke="#ffffff"/>
+                  <rect x="267" y="26" width="10" height="22" fill="none" stroke="#ffffff"/>
+
+                  <!-- bullish -->
+                  <line x1="300" y1="22" x2="300" y2="52" stroke="#9cc80a"/>
+                  <rect x="295" y="28" width="10" height="18" fill="#9cc80a" stroke="#9cc80a"/>
+
+                  <line x1="328" y1="18" x2="328" y2="48" stroke="#9cc80a"/>
+                  <rect x="323" y="22" width="10" height="20" fill="#9cc80a" stroke="#9cc80a"/>
+
+                  <line x1="356" y1="14" x2="356" y2="42" stroke="#9cc80a"/>
+                  <rect x="351" y="18" width="10" height="18" fill="#9cc80a" stroke="#9cc80a"/>
+
+                  <!-- bearish -->
+                  <line x1="384" y1="14" x2="384" y2="40" stroke="#ffffff"/>
+                  <rect x="379" y="20" width="10" height="14" fill="none" stroke="#ffffff"/>
+
+                  <!-- bullish -->
+                  <line x1="412" y1="12" x2="412" y2="36" stroke="#9cc80a"/>
+                  <rect x="407" y="16" width="10" height="14" fill="#9cc80a" stroke="#9cc80a"/>
+
+                  <line x1="440" y1="10" x2="440" y2="32" stroke="#9cc80a"/>
+                  <rect x="435" y="14" width="10" height="14" fill="#9cc80a" stroke="#9cc80a"/>
+
+                  <!-- bearish -->
+                  <line x1="468" y1="10" x2="468" y2="30" stroke="#ffffff"/>
+                  <rect x="463" y="14" width="10" height="12" fill="none" stroke="#ffffff"/>
+
+                  <!-- bullish -->
+                  <line x1="496" y1="6"  x2="496" y2="26" stroke="#9cc80a"/>
+                  <rect x="491" y="10" width="10" height="12" fill="#9cc80a" stroke="#9cc80a"/>
+
+                  <line x1="524" y1="8"  x2="524" y2="24" stroke="#9cc80a"/>
+                  <rect x="519" y="12" width="10" height="10" fill="#9cc80a" stroke="#9cc80a"/>
+
+                  <line x1="552" y1="4"  x2="552" y2="22" stroke="#9cc80a"/>
+                  <rect x="547" y="8"  width="10" height="12" fill="#9cc80a" stroke="#9cc80a"/>
+                </g>
+                <!-- MA overlay -->
+                <path d="M 20 74 C 80 64, 160 54, 260 42 S 460 16, 560 10"
+                      fill="none"
+                      stroke="#9cc80a"
+                      stroke-width="1.2"
+                      stroke-dasharray="4 3"
+                      opacity="0.7"/>
+              </svg>
+
+              <span class="cap">lightweight-charts · MA 20/40/200 · BB</span>
+            </div>
+          </div>
+
+        </div>
+        <!-- /.panel -->
+
+      </div>
+      <!-- /.main -->
+
+    </div>
+    <!-- /.cockpit -->
+  </div>
+  <!-- /.wrap -->
+
+  <!-- =========================================================
+       JS — toggle pills (data-state) + localStorage + copy feedback
+       ========================================================= -->
+  <script>
+    (function(){
+      var body = document.body;
+
+      // Toggle de pills: solo data-group="state" por ahora
+      function bindGroup(group, attr, apply) {
+        var pills = document.querySelectorAll('[data-group="'+group+'"] .pill');
+        pills.forEach(function(btn){
+          btn.addEventListener('click', function(){
+            pills.forEach(function(b){ b.classList.remove('on'); });
+            btn.classList.add('on');
+            var val = btn.getAttribute('data-'+attr);
+            apply(val);
+            try { localStorage.setItem('scv5hi_'+attr, val); } catch(e) {}
+          });
+        });
+      }
+      bindGroup('state', 'state', function(v){ body.dataset.state = v; });
+
+      // Restore último estado
+      try {
+        var last = localStorage.getItem('scv5hi_state');
+        if (last) {
+          var match = document.querySelector('[data-group="state"] .pill[data-state="'+last+'"]');
+          if (match) match.click();
+        }
+      } catch(e) {}
+
+      // Feedback COPIAR
+      document.querySelectorAll('.btn').forEach(function(b){
+        if (!/copiar/i.test(b.textContent)) return;
+        b.addEventListener('click', function(){
+          var orig = b.innerHTML;
+          b.innerHTML = '<span class="ic" aria-hidden="true">✓</span>copiado';
+          b.style.background = 'var(--accent)';
+          b.style.color = 'var(--bg)';
+          b.style.borderColor = 'var(--accent)';
+          setTimeout(function(){
+            b.innerHTML = orig;
+            b.style.background = '';
+            b.style.color = '';
+            b.style.borderColor = '';
+          }, 1400);
+        });
+      });
+
+      // Toggle AUTO · ON/OFF
+      document.querySelectorAll('.toggle-auto').forEach(function(t){
+        t.addEventListener('click', function(){
+          var on = t.classList.toggle('on');
+          t.setAttribute('aria-pressed', on ? 'true' : 'false');
+          t.childNodes.forEach(function(){});  // no-op guard
+          var txt = on ? 'auto · on' : 'auto · off';
+          var led = t.querySelector('.led');
+          t.textContent = '';
+          if (led) t.appendChild(led);
+          t.appendChild(document.createTextNode(txt));
+        });
+      });
+    })();
+  </script>
+
+</body>
+</html>
