@@ -53,7 +53,7 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 
 ## Estado actual de la implementación
 
-**Rama activa:** `claude/review-project-setup-4DnEm` (todo desarrollo va acá). La rama previa `claude/review-project-setup-PqMEL` fue mergeada a main y eliminada; este branch continúa el trabajo sobre Fase 5 del Scoring.
+**Rama activa:** `claude/review-project-status-LhwGj` — scaffolding inicial del frontend Vite + React 18. La rama previa fue mergeada a main; este branch continúa con la app web sobre el backend ya completo.
 
 ### Completado
 
@@ -71,6 +71,8 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 | Fixtures | `backend/modules/fixtures/` — loader | ✅ base |
 
 **Tests totales:** 1068 passing + 1 slow (parity regression guard) en `backend/tests/`. `ruff check .` limpio.
+
+**Frontend tests:** 6/6 passing (`pnpm test` en `frontend/`). Vite build limpio (~261KB JS gzip 82KB · 43KB CSS gzip 9KB). `pnpm lint` (Biome) limpio.
 
 ### Scoring Engine — detalle por fase
 
@@ -236,12 +238,29 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 | `modules/config/loader.py` | `save_config` encripta los 3 secretos (`twelvedata_keys`, `s3_config`, `api_bearer_token`) como `<name>_enc` + atomic write. `load_config` desencripta y reconstruye el modelo |
 | `modules/config/__init__.py` | API pública del módulo |
 
+### Frontend (scaffold inicial · 2026-04-27)
+
+| Capa | Detalle | Estado |
+|---|---|---|
+| Toolchain | Vite 5 + React 18 + TS strict + pnpm + Biome + Vitest + jsdom + RTL | ✅ |
+| Estilos | tokens Phoenix completos (`src/styles/tokens.css`), reset+atmosphere global, `shell.css` topbar/apibar/footer, `cockpit.css` watchlist+panel — ports verbatim del Hi-Fi v2 | ✅ |
+| Tailwind | Plugin custom Phoenix con utilities `glass-*`, `tier-*`, `bookmark-shape`, `iridescent-*`, `num-tabular`. Theme extendido con paleta + radii + tipografías | ✅ |
+| Router | React Router 6 con 4 pestañas + `AppShell` compartido (health-line + topbar + apibar + Outlet + footer). `/` → `/cockpit` | ✅ |
+| Cockpit | Watchlist (6 slots, 5 cargados + 1 vacío) + Panel derecho (banner sticky · resumen ejecutivo · chart estático · detalle técnico colapsable). Selectores CSS 1:1 con Hi-Fi v2 | ✅ shell estático |
+| Stubs | Configuración / Dashboard / Memento — placeholder unificado en `pages/_stub/StubPage.tsx` | ✅ |
+| API client | `src/api/client.ts` con bearer opcional + `ApiError`. Vite proxy `/api`+`/ws` → `VITE_BACKEND_URL` (default localhost:8000) | ✅ base |
+| Tests smoke | `src/test/router.test.tsx` — render + landmarks + 4 pestañas + active state + apibar + cockpit + 2 stubs (6/6) | ✅ |
+
 ### Pendiente
 
-- **Frontend:** React + TS + Vite + Tailwind + shadcn + Zustand + TanStack Query (aún no scaffoldeado, pero arrancó la fase de wireframing hi-fi standalone). Bloque grande — desbloquea el producto entero; backend ya expone todo lo necesario (REST + WS + stats + backup/restore + config encriptado listo para consumir).
-  - **Cockpit Hi-Fi v1** ✅ (2026-04-25) — `frontend/wireframing/Cockpit Hi-Fi v1.html`, preview standalone con los 5 tokens aplicados sobre la distribución variante A. PR #31 esperando review visual antes del scaffolding React.
-  - Configuración / Dashboard / Memento — pendientes de hi-fi.
-  - Scaffolding Vite + stack — pendiente, post-aprobación de los hi-fi.
+- **Frontend (próximas iteraciones, scaffold ya operativo):**
+  - **Stores Zustand** (`auth`, `slots`, `apiUsage`, `signals`) — migrar la fuente de datos del Cockpit desde `pages/Cockpit/data.ts` hacia stores.
+  - **TanStack Query hooks** (`useEngineHealth`, `useSlots`, `useLatestSignals`, `useApiUsage`) consumiendo los endpoints `/api/v1/*`.
+  - **WebSocket listener** `useScannerWS()` que mappea los 6 eventos a actions de stores. Auto-reconnect + token bearer.
+  - **Lightweight Charts** en el panel del Cockpit (reemplaza el SVG estático del prototipo).
+  - **Estados restantes del Cockpit** (warmup, degraded, fatal, scan en curso, S+ nueva, AUTO off) — diseñar variantes y conectarlas al estado global.
+  - **Hi-Fi del Dashboard / Configuración / Memento** y reemplazo de los stubs.
+  - **Cockpit Hi-Fi v1** ya mergeado a main (PR #31, ref histórica). El scaffold actual usa **Hi-Fi v2 "Phoenix"** como fuente.
 - ~~**Fase 5.4 cierre**~~ → **Cerrado 2026-04-23 al 100%.** Post subida del `qqq_1min.json` original del Observatory, se identificaron 2 bugs reales del motor (ver gotchas #16 y #17): aggregator no resetaba al cambio de día + ORB gate usaba mean-cross-day en vez de median-intraday. Ambos arreglados → **245/245 match**. `DEFAULT_MIN_MATCH_RATE` subido a 0.99. Regression guard en `test_parity_regression.py` (slow, ~2min).
 - ~~**Healthcheck continuo spec §3.4**~~ → **Cerrado 2026-04-23.** `engines/scoring/healthcheck.py` wired al `heartbeat_worker` con `healthcheck_fn` opcional. Cada 2 min valida operativamente el motor (no-crash, shape, signal vocab) y reporta green/yellow+ENG-050/red+ENG-001 al Dashboard.
 - ~~**Watchdog automático AR.5**~~ → **Cerrado 2026-04-23.** `engines/database/watchdog.py:aggressive_rotation_watchdog` opt-in via `SCANNER_AGGRESSIVE_ROTATION_ENABLED=true`. Chequea tamaño DB cada `SCANNER_AGGRESSIVE_ROTATION_INTERVAL_S` (default 3600s) y dispara rotación agresiva. Default off por ser destructivo.
@@ -255,7 +274,7 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 
 ### Para el siguiente chat
 
-**Estado al 2026-04-27:** backend **completo a spec §3 + §4 + §9.4** (sin cambios desde 2026-04-23). 1068 tests + 1 slow passing, parity 245/245, ruff limpio. **Cockpit Hi-Fi v2 (Phoenix) listo, prototipo aprobado, ready para scaffolding React.**
+**Estado al 2026-04-27 (segunda sesión del día):** backend **completo a spec §3 + §4 + §9.4** (sin cambios desde 2026-04-23) · 1068 tests + 1 slow passing · parity 245/245 · ruff limpio. **Frontend scaffold operativo** sobre Vite + React 18 + TS strict + Tailwind + Biome + Vitest. Cockpit Hi-Fi v2 portado a componentes React (datos hardcoded), 4 pestañas con router, 6/6 tests smoke verdes, build limpio.
 
 Última sesión (2026-04-26 / 2026-04-27) — **Cockpit Hi-Fi v2 "Phoenix"**:
 
@@ -275,18 +294,22 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
   - Footer con `proveedor · twelvedata · 5 keys` + status `motor scoring · data engine · database`.
 - **Estados:** solo "operativo normal" implementado. Los 7 estados restantes (warmup, degraded, fatal, loading, scan en curso, S+ nueva, AUTO off) quedan para cuando se scaffoldee React.
 
-**Branch de trabajo:** `claude/relaxed-tharp-45c8fe` (worktree dedicado).
+**Branch de trabajo:** `claude/review-project-status-LhwGj`.
 
-**PR pendiente:** abrir manualmente desde https://github.com/Findtheraccoon/Scanner-V5/compare/main...claude/relaxed-tharp-45c8fe (no hay `gh` CLI en este entorno).
+**PR del scaffold:** se crea al pushear (esta sesión).
+
+**Decisiones cerradas en esta sesión:**
+1. Stack: Vite 5 + React 18 + TS strict + Tailwind 3 + Zustand 5 + TanStack Query 5 + React Router 6 + pnpm + Biome + Vitest + jsdom + RTL. **shadcn/ui se difiere** hasta que entremos a Configuración (forms).
+2. Efectos del Hi-Fi v2 → CSS verbatim en `tokens.css`/`global.css`/`shell.css`/`pages/Cockpit/cockpit.css` + Tailwind plugin custom para utilities reutilizables (glass/tier/bookmark/iridescent). Los selectores BEM del prototipo se preservaron 1:1, lo que permite portar futuros hi-fi del diseñador casi sin diff visual.
+3. **Backend desde día 1**: Vite proxy `/api`+`/ws` → `localhost:8000`. No MSW ni fixtures locales — el backend levanta con un comando.
+4. **Lint/format**: Biome (single tool). CSS files ignorados del Biome (son ports verbatim del prototipo del diseñador y el soporte CSS de Biome es preview).
+5. **Tests** desde el día 1: smoke con Vitest + RTL + jsdom. 6/6 verdes.
 
 **Decisiones abiertas para el próximo chat:**
-1. **Stack frontend:** Vite + React 18 + TS + Tailwind + shadcn/ui + Zustand + TanStack Query (recomendación del spec). Confirmar con Álvaro antes de `pnpm create vite`.
-2. **¿Cómo trasladar los efectos del Hi-Fi v2 a componentes React?** Opciones: (a) CSS modules con tokens 1-a-1; (b) Tailwind con plugin propio que registre las utilities iridiscent-/glass-/bookmark-; (c) componentes shadcn con className compositions. Mi recomendación: (a) para el shell + tokens y (b/c) para los componentes funcionales, así no perdemos los efectos quirúrgicos del prototipo.
-3. **Próxima pestaña hi-fi:** Configuración (más compleja, canvas Runpod del Slot Registry) o Dashboard (más simple, refleja estado backend con piloto master + 4 secciones). Mi recomendación: **Dashboard primero** — desbloquea ver el sistema vivo cuando se scaffoldee.
-4. **Deuda técnica del backend ya identificada:** `POST /api/v1/scan/auto/{pause,resume}` para cablear el toggle AUTO. Sigue pendiente.
-5. **Compatibilidad:** las animaciones iridiscentes usan `@property` Houdini (Chrome 85+, Edge 85+, Safari 16.4+, Firefox 128+). Como el target es desktop Windows con browsers modernos, OK. Si hace falta fallback estático, está pensado.
-
-**Próximo bloque: scaffolding Vite + React (post-aprobación del PR) o siguiente pestaña hi-fi.**
+1. **Próximo bloque:** ¿wiring real al backend (stores Zustand + TanStack hooks + `useScannerWS`) o siguiente pestaña hi-fi (Dashboard recomendado)?
+2. **Lightweight Charts** o algún otro lib para el chart real (Hi-Fi v2 actualmente usa SVG estático).
+3. **Deuda técnica del backend ya identificada:** `POST /api/v1/scan/auto/{pause,resume}` para cablear el toggle AUTO. Sigue pendiente.
+4. **Compatibilidad:** las animaciones iridiscentes usan `@property` Houdini (Chrome 85+, Edge 85+, Safari 16.4+, Firefox 128+). Como el target es desktop Windows con browsers modernos, OK. Si hace falta fallback estático, está pensado.
 
 Superficie backend disponible para el frontend:
 
