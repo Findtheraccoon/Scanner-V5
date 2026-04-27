@@ -130,10 +130,13 @@
   --shadow-tab: 0 -3px 8px rgba(0, 0, 0, 0.4);
   --shadow-bookmark: 0 2px 6px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.2);
 
-  --blur-glass: blur(20px) saturate(160%) brightness(1.06) contrast(1.04);
-  --blur-strong: blur(28px) saturate(180%) brightness(1.08) contrast(1.05);
-  --blur-soft: blur(12px) saturate(140%) brightness(1.04) contrast(1.03);
-  --blur-tab: blur(16px) saturate(150%) brightness(1.05) contrast(1.04);
+  /* Blurs subidos un escalón para que el contenido detrás del cristal se
+     difumine más (oculta posterización del color subyacente y eleva la
+     sensación de "frosted glass"). */
+  --blur-glass: blur(28px) saturate(170%) brightness(1.06) contrast(1.04);
+  --blur-strong: blur(36px) saturate(190%) brightness(1.08) contrast(1.05);
+  --blur-soft: blur(18px) saturate(150%) brightness(1.04) contrast(1.03);
+  --blur-tab: blur(22px) saturate(160%) brightness(1.05) contrast(1.04);
 
   --card-bg: rgba(15, 15, 15, 0.62);
   --card-bg-2: rgba(20, 20, 20, 0.6);

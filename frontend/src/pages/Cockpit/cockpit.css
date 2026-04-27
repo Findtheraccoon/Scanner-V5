@@ -237,7 +237,8 @@
 /* S — iridiscente animado en familia dorada (joya pulida) */
 .bookmark[data-band="S"] {
   --iri-angle: 0deg;
-  background: conic-gradient(from var(--iri-angle) at 50% 50%,
+  /* oklab → transiciones perceptuales (menos bandeo en el dorado-cobre) */
+  background: conic-gradient(in oklab from var(--iri-angle) at 50% 50%,
     #DC9418 0deg,
     #FFD580 60deg,
     #FFFFFF 100deg,
@@ -260,8 +261,8 @@
 .bookmark[data-band="S+"] {
   --iri-angle: 0deg;
   background:
-    /* capa iridiscente sutil — solo reflejos, no full color */
-    conic-gradient(from var(--iri-angle) at 50% 50%,
+    /* capa iridiscente sutil — solo reflejos, no full color (oklab anti-bandeo) */
+    conic-gradient(in oklab from var(--iri-angle) at 50% 50%,
       transparent 0deg,
       rgba(255, 200, 130, 0.22) 45deg,
       transparent 90deg,
@@ -485,21 +486,31 @@
   isolation: isolate; /* contiene el blend-mode del sweep */
 }
 /* Capa 1 — iridiscente conic rotando lento (Houdini @property --iri-angle).
-   Mask radial para que decaiga limpio en los bordes y no aparezcan líneas duras. */
+   Mask radial para que decaiga limpio en los bordes y no aparezcan líneas duras.
+   Interpolación en oklab → transiciones perceptualmente uniformes (anti-posterización). */
 .banner::before {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  background: conic-gradient(
-    from var(--iri-angle) at 50% 50%,
-    rgba(255, 106, 44, 0.18)  0deg,
-    rgba(253, 186, 116, 0.14) 60deg,
-    rgba(196, 181, 253, 0.16) 130deg,
-    rgba(249, 168, 212, 0.18) 200deg,
-    rgba(255, 106, 44, 0.14)  280deg,
-    rgba(255, 106, 44, 0.18)  360deg);
+  /* Doble capa: iridiscente conic + dithering SVG turbulence encima.
+     El noise overlay rompe las bandas visibles del gradient gradual. */
+  background:
+    /* dithering — turbulence fina con ramp de luminancia, mix overlay */
+    url("data:image/svg+xml;utf8,<svg viewBox='0 0 320 320' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.8' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1   0 0 0 0 1   0 0 0 0 1   0 0 0 0.5 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
+    /* iridiscente conic — interpolación oklab para transiciones suaves */
+    conic-gradient(
+      in oklab
+      from var(--iri-angle) at 50% 50%,
+      rgba(255, 106, 44, 0.18)  0deg,
+      rgba(253, 186, 116, 0.14) 60deg,
+      rgba(196, 181, 253, 0.16) 130deg,
+      rgba(249, 168, 212, 0.18) 200deg,
+      rgba(255, 106, 44, 0.14)  280deg,
+      rgba(255, 106, 44, 0.18)  360deg);
+  background-size: 240px 240px, 100% 100%;
+  background-blend-mode: overlay, normal;
   mix-blend-mode: screen;
   opacity: 0.85;
   mask-image: radial-gradient(ellipse 90% 110% at 50% 50%, #000 30%, transparent 100%);
@@ -551,7 +562,9 @@
   white-space: nowrap;
   font-family: var(--font-ui);
   text-transform: uppercase;
+  /* conic en oklab → transiciones perceptuales suaves, menos posterización */
   background: conic-gradient(
+    in oklab
     from var(--iri-angle) at 50% 50%,
     rgba(255, 106, 44, 0.28)  0deg,
     rgba(253, 186, 116, 0.22) 60deg,
