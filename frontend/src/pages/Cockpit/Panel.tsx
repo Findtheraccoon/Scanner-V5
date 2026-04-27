@@ -5,6 +5,7 @@ import { useSignalsStore } from "@/stores/signals";
 import { useSlotsStore } from "@/stores/slots";
 import { useState } from "react";
 import { type CockpitState, StateToasts } from "./StateToast";
+import { useEffectiveSlot } from "./useEffectiveSlot";
 
 interface PanelProps {
   cockpitState?: CockpitState;
@@ -12,9 +13,9 @@ interface PanelProps {
 }
 
 /* Panel del Cockpit — banner sticky + resumen ejecutivo + gráfico + detalle.
-   Lee la última señal del slot seleccionado desde el store de signals;
-   cuando no hay datos del backend, cae al payload hardcoded del Hi-Fi v2
-   (QQQ · A+ · CALL · 12.0) para preservar el "look" del scaffold. */
+   Lee el slot efectivo desde useEffectiveSlot (backend si hay, fallback
+   del Hi-Fi v2 si no) — así cambia con cada selección de la watchlist
+   incluso sin backend conectado. */
 export function Panel({ cockpitState = "normal", ticker = null }: PanelProps) {
   const [detailOpen, setDetailOpen] = useState(false);
 
@@ -33,20 +34,24 @@ function Banner() {
   const toast = useToast();
   const [copied, setCopied] = useState(false);
   const selectedId = useSlotsStore((s) => s.selectedSlotId);
-  const slot = useSlotsStore((s) => s.slots.find((sl) => sl.slot_id === selectedId));
+  const effective = useEffectiveSlot(selectedId);
   const signal = useSignalsStore((s) => s.bySlot[selectedId]);
 
-  const ticker = signal?.ticker ?? slot?.ticker ?? "QQQ";
-  const band = signal?.conf ?? "A+";
-  const dir = signal?.dir ?? "CALL";
-  const score = signal?.score ?? 12.0;
+  const ticker = effective.ticker ?? "—";
+  const band = effective.band ?? "B";
+  const dir = effective.direction;
+  const score = effective.score ?? 0;
   const label = signal?.signal ?? "SETUP";
   const slotIdStr = String(selectedId).padStart(2, "0");
-  const fixtureId = signal?.fixture_id ?? slot?.fixture_id ?? "qqq_v5_2_0";
+  const fixtureId = effective.fixtureId ?? "—";
 
   const chatText = signal?.chat_format ?? CHAT_FORMAT_FALLBACK;
 
   const handleCopy = async () => {
+    if (!effective.ticker) {
+      toast.push("slot vacío — nada que copiar", "warn");
+      return;
+    }
     const ok = await copyToClipboard(chatText);
     if (ok) {
       setCopied(true);
@@ -56,6 +61,30 @@ function Banner() {
       toast.push("no se pudo copiar al portapapeles", "error");
     }
   };
+
+  // Slot vacío — mostramos un banner placeholder con texto neutro.
+  if (!effective.ticker) {
+    return (
+      <header className="banner" data-band="REVISAR">
+        <span className="banner__ghost" aria-hidden="true">
+          ···
+        </span>
+        <div className="banner__row">
+          <div className="banner__id">
+            <h1 className="banner__ticker">slot {slotIdStr}</h1>
+            <div className="banner__order2">
+              <span className="banner__signal" style={{ color: "var(--t-55)" }}>
+                vacío
+              </span>
+            </div>
+            <div className="banner__order3">
+              <span>+ agregar slot desde Configuración → Slot Registry</span>
+            </div>
+          </div>
+        </div>
+      </header>
+    );
+  }
 
   return (
     // data-band activo del slot mostrado — alimenta el halo cromático del ticker
@@ -77,11 +106,11 @@ function Banner() {
             <span className="banner__signal">{label.toLowerCase()}</span>
           </div>
           <div className="banner__order3">
-            <span>{ticker.toLowerCase() === "qqq" ? "nasdaq 100 etf" : ticker}</span>
+            <span>{tickerCaption(ticker)}</span>
             <span className="sep">·</span>
             <span>slot {slotIdStr}</span>
             <span className="sep">·</span>
-            <span>fixture {fixtureId}</span>
+            <span>fixture {fixtureId === "—" ? `${ticker.toLowerCase()}_v5_2_0` : fixtureId}</span>
           </div>
         </div>
         <button
@@ -107,6 +136,21 @@ function Banner() {
       </div>
     </header>
   );
+}
+
+const TICKER_NAMES: Record<string, string> = {
+  SPY: "s&p 500 etf",
+  QQQ: "nasdaq 100 etf",
+  IWM: "russell 2000 etf",
+  AAPL: "apple inc",
+  NVDA: "nvidia corp",
+  MSFT: "microsoft corp",
+  TSLA: "tesla inc",
+  AMZN: "amazon.com inc",
+};
+
+function tickerCaption(ticker: string): string {
+  return TICKER_NAMES[ticker.toUpperCase()] ?? ticker.toLowerCase();
 }
 
 function Exec() {

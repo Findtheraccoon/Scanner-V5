@@ -3,6 +3,7 @@ import { useEngineStore } from "@/stores/engine";
 import { useSignalsStore } from "@/stores/signals";
 import { useSlotsStore } from "@/stores/slots";
 import { useEffect, useState } from "react";
+import { useEffectiveSlot } from "./useEffectiveSlot";
 
 export type CockpitState = "normal" | "warmup" | "degraded" | "splus" | "error";
 
@@ -11,18 +12,17 @@ export type CockpitState = "normal" | "warmup" | "degraded" | "splus" | "error";
    con ENG-060) → warmup (slot warming_up) → normal. */
 export function useCockpitState(): { state: CockpitState; ticker: string | null } {
   const engineData = useEngineStore((s) => s.data);
-  const slots = useSlotsStore((s) => s.slots);
   const selectedId = useSlotsStore((s) => s.selectedSlotId);
   const latestSignal = useSignalsStore((s) => s.latest);
+  const effective = useEffectiveSlot(selectedId);
 
-  const slot = slots.find((s) => s.slot_id === selectedId);
-  const ticker = slot?.ticker ?? null;
+  const ticker = effective.ticker;
   const isSplusFresh = isFreshSplus(latestSignal);
 
   if (engineData === "red") return { state: "error", ticker };
   if (isSplusFresh) return { state: "splus", ticker: latestSignal?.ticker ?? ticker };
-  if (slot?.status === "degraded") return { state: "degraded", ticker };
-  if (slot?.status === "warming_up") return { state: "warmup", ticker };
+  if (effective.status === "degraded") return { state: "degraded", ticker };
+  if (effective.status === "warming_up") return { state: "warmup", ticker };
   return { state: "normal", ticker };
 }
 

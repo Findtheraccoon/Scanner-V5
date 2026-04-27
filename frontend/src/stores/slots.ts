@@ -5,7 +5,8 @@ interface SlotsState {
   /* Lista de los 6 slots del registry (alimentado por GET /slots y por
      eventos slot.status del WS). */
   slots: SlotInfo[];
-  /* Slot seleccionado en el Cockpit. Default 1. */
+  /* Slot seleccionado en el Cockpit. Default 2 (matchea el is-selected
+     del Hi-Fi v2 — segundo slot resaltado). */
   selectedSlotId: number;
 
   setSlots: (slots: SlotInfo[]) => void;
@@ -15,7 +16,7 @@ interface SlotsState {
 
 export const useSlotsStore = create<SlotsState>((set) => ({
   slots: [],
-  selectedSlotId: 1,
+  selectedSlotId: 2,
   setSlots: (slots) => set({ slots }),
   applySlotStatus: (p) =>
     set((s) => ({
