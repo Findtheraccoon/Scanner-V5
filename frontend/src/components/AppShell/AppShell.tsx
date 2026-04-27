@@ -11,10 +11,10 @@ import { TopBar } from "./TopBar";
 import "@/styles/shell.css";
 
 const TABS = [
-  { to: "/configuracion", label: "configuración" },
-  { to: "/dashboard", label: "dashboard" },
   { to: "/cockpit", label: "cockpit" },
+  { to: "/dashboard", label: "dashboard" },
   { to: "/memento", label: "memento" },
+  { to: "/configuracion", label: "configuración" },
 ] as const;
 
 /* Wire de stores con datos del backend. Se monta una sola vez al cargar

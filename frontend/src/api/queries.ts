@@ -73,21 +73,32 @@ export function useAutoScanStatus() {
 
 /* Mutations */
 
+interface ScanManualVariables {
+  body?: Record<string, unknown>;
+  /* slot_id que se marca como "scanning" en useScanningStore mientras
+     dura la mutation. Si no se pasa, no se trackea visualmente. */
+  slotId?: number;
+}
+
 export function useScanManual() {
-  return useMutation<
-    ScanManualResponse,
-    Error,
-    Parameters<typeof api>[1] extends infer T
-      ? T extends { body?: unknown }
-        ? Record<string, unknown>
-        : Record<string, unknown>
-      : Record<string, unknown>
-  >({
-    mutationFn: (body) =>
+  return useMutation<ScanManualResponse, Error, ScanManualVariables>({
+    mutationFn: ({ body }) =>
       api<ScanManualResponse>("/scan/manual", {
         method: "POST",
-        body: JSON.stringify(body),
+        body: JSON.stringify(body ?? {}),
       }),
+    onMutate: async ({ slotId }) => {
+      if (slotId !== undefined) {
+        const { useScanningStore } = await import("@/stores/scanning");
+        useScanningStore.getState().start(slotId);
+      }
+    },
+    onSettled: async (_data, _err, { slotId }) => {
+      if (slotId !== undefined) {
+        const { useScanningStore } = await import("@/stores/scanning");
+        useScanningStore.getState().finish(slotId);
+      }
+    },
   });
 }
 

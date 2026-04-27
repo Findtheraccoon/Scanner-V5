@@ -1,28 +1,43 @@
 import type { SignalPayload } from "@/api/types";
 import { useEngineStore } from "@/stores/engine";
+import { useScanningStore } from "@/stores/scanning";
 import { useSignalsStore } from "@/stores/signals";
 import { useSlotsStore } from "@/stores/slots";
 import { useEffect, useState } from "react";
 import { useEffectiveSlot } from "./useEffectiveSlot";
 
-export type CockpitState = "normal" | "warmup" | "degraded" | "splus" | "error";
+export type CockpitState =
+  | "normal"
+  | "warmup"
+  | "degraded"
+  | "splus"
+  | "error"
+  | "scanning"
+  | "loading";
 
 /* Resuelve el estado activo del Cockpit según los stores. Prioridad:
    error (data engine red) → splus (señal S+ reciente) → degraded (slot
-   con ENG-060) → warmup (slot warming_up) → normal. */
+   con ENG-060) → warmup (slot warming_up) → scanning (slot con scan
+   en curso) → normal. El estado "loading" no se resuelve aquí: lo
+   maneja el AppShell según las queries iniciales del backend. El
+   override del DevStateSwitcher (dev-only) tiene prioridad absoluta. */
 export function useCockpitState(): { state: CockpitState; ticker: string | null } {
   const engineData = useEngineStore((s) => s.data);
+  const stateOverride = useEngineStore((s) => s.stateOverride);
   const selectedId = useSlotsStore((s) => s.selectedSlotId);
   const latestSignal = useSignalsStore((s) => s.latest);
   const effective = useEffectiveSlot(selectedId);
+  const scanningSelected = useScanningStore((s) => s.active.has(selectedId));
 
   const ticker = effective.ticker;
   const isSplusFresh = isFreshSplus(latestSignal);
 
+  if (stateOverride !== null) return { state: stateOverride, ticker };
   if (engineData === "red") return { state: "error", ticker };
   if (isSplusFresh) return { state: "splus", ticker: latestSignal?.ticker ?? ticker };
   if (effective.status === "degraded") return { state: "degraded", ticker };
   if (effective.status === "warming_up") return { state: "warmup", ticker };
+  if (scanningSelected) return { state: "scanning", ticker };
   return { state: "normal", ticker };
 }
 
@@ -104,6 +119,28 @@ export function StateToasts({ state, ticker }: StateToastsProps) {
           <b>{errCode ?? "ENG-001"}</b> · Data Engine caído · scan detenido — revisar Dashboard →
           Motores
         </span>
+      </output>
+    );
+  }
+  if (state === "scanning") {
+    return (
+      <output className="state-toast state-toast--scanning">
+        <span className="ic" aria-hidden="true">
+          ⟳
+        </span>
+        <span>
+          escaneando <b>{t}</b> — fetch + scoring en curso
+        </span>
+      </output>
+    );
+  }
+  if (state === "loading") {
+    return (
+      <output className="state-toast state-toast--loading">
+        <span className="ic" aria-hidden="true">
+          ◌
+        </span>
+        <span>cargando estado del backend…</span>
       </output>
     );
   }

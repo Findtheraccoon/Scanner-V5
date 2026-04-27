@@ -1334,3 +1334,81 @@
   20%  { box-shadow: var(--edge-glass-top), var(--edge-glass-bottom), 0 0 24px rgba(155, 168, 195, 0.5); }
   100% { box-shadow: var(--edge-glass-top), var(--edge-glass-bottom), 0 0 0 rgba(155, 168, 195, 0); }
 }
+
+/* ============================================================
+   STATE TOASTS — scanning + loading (sumados a warmup/degraded/splus/error)
+   ============================================================ */
+.state-toast--scanning {
+  border-color: rgba(255, 106, 44, 0.36);
+  background: linear-gradient(90deg, rgba(255, 106, 44, 0.10), transparent 60%);
+}
+.state-toast--scanning .ic {
+  background: rgba(255, 106, 44, 0.18);
+  color: var(--accent);
+  animation: spin 1.2s linear infinite;
+}
+
+.state-toast--loading {
+  border-color: rgba(255, 255, 255, 0.10);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.04), transparent 60%);
+  color: var(--t-55);
+}
+.state-toast--loading .ic {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--t-75);
+  animation: pulse-soft 1.6s var(--ease) infinite;
+}
+@keyframes pulse-soft {
+  0%, 100% { opacity: 0.55; }
+  50%      { opacity: 1; }
+}
+
+/* Card de slot con scan en curso — ring acento + pulso suave */
+.slot.is-scanning {
+  border-color: rgba(255, 106, 44, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.48),
+    inset 1px 0 0 rgba(255, 198, 148, 0.05),
+    inset -1px 0 0 rgba(176, 198, 230, 0.04),
+    0 0 0 1px rgba(255, 106, 44, 0.35),
+    0 0 18px rgba(255, 106, 44, 0.20),
+    var(--shadow-card);
+  animation: slot-scanning-pulse 1.6s var(--ease) infinite;
+}
+@keyframes slot-scanning-pulse {
+  0%, 100% { box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.16),
+    inset 0 -1px 0 rgba(0,0,0,0.48),
+    inset 1px 0 0 rgba(255,198,148,0.05),
+    inset -1px 0 0 rgba(176,198,230,0.04),
+    0 0 0 1px rgba(255, 106, 44, 0.30),
+    0 0 14px rgba(255, 106, 44, 0.15),
+    var(--shadow-card); }
+  50%      { box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.16),
+    inset 0 -1px 0 rgba(0,0,0,0.48),
+    inset 1px 0 0 rgba(255,198,148,0.05),
+    inset -1px 0 0 rgba(176,198,230,0.04),
+    0 0 0 1px rgba(255, 106, 44, 0.50),
+    0 0 24px rgba(255, 106, 44, 0.30),
+    var(--shadow-card); }
+}
+
+/* Ring sutil del banner cuando el slot mostrado está scanneando */
+.cockpit--scanning .banner {
+  position: relative;
+}
+.cockpit--scanning .banner::before {
+  /* hereda el iridiscente — sumamos un acento de borde con shadow inset */
+  box-shadow: inset 0 0 0 1px rgba(255, 106, 44, 0.30);
+}
+
+/* Loading global — opacity reducida en watchlist + skeleton bar arriba */
+.cockpit--loading .watchlist {
+  opacity: 0.65;
+  pointer-events: none;
+}
+.cockpit--loading .panel {
+  opacity: 0.85;
+}
