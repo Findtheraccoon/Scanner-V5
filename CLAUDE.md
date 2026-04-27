@@ -266,11 +266,11 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 - ~~**Watchdog automático AR.5**~~ → **Cerrado 2026-04-23.** `engines/database/watchdog.py:aggressive_rotation_watchdog` opt-in via `SCANNER_AGGRESSIVE_ROTATION_ENABLED=true`. Chequea tamaño DB cada `SCANNER_AGGRESSIVE_ROTATION_INTERVAL_S` (default 3600s) y dispara rotación agresiva. Default off por ser destructivo.
 - ~~**`modules/config/` encriptado**~~ → **Cerrado 2026-04-23 en modo standalone.** Fernet-based con master key desde env `SCANNER_MASTER_KEY` o file `data/master.key` (auto-gen). `UserConfig` Pydantic con 3 campos secretos encriptados inline al persistir. **Wiring a endpoints pendiente** — los endpoints `POST /database/backup` siguen aceptando credenciales en body por compat. Integración cuando el frontend consuma el Config (decisión UX: cómo editar + cuándo recargar).
 - **Distribución Windows:** `.exe` via Inno Setup. Depende de frontend + decisión sobre bundling del `master.key`.
-- **Auto-scan pause/resume (deuda técnica frontend):** el wireframe hi-fi del Cockpit incluye un toggle `AUTO · ON/OFF` en el banner principal. Actualmente `auto_scan_loop` (en `engines/data/scan_loop.py`) corre siempre mientras la app esté viva — no hay forma de pausarlo vía API. Necesario cuando se cablee el toggle del frontend:
-  - Endpoint `POST /api/v1/scan/auto/{pause,resume}` en `api/routes/scan.py`.
-  - Flag `asyncio.Event` o similar en `app.state` que `auto_scan_loop` respete al inicio de cada ciclo 15M.
-  - Emitir `engine.status` con sub-estado `paused` cuando esté en pausa (ver eventos WS).
-  - Persistir estado del flag en settings (`SCANNER_AUTO_SCAN_ENABLED`?) o en `UserConfig` (lo segundo es más coherente con el pattern del módulo `config/`).
+- ~~**Auto-scan pause/resume**~~ → **Cerrado.** `POST /api/v1/scan/auto/{pause,resume,status}` con `asyncio.Event` en `app.state.auto_scan_running`. El loop bloquea en `await running.wait()` antes del próximo ciclo y emite `engine.status={status: "paused"}` por WS. 6 tests nuevos en `tests/api/test_scan.py::TestAutoScanPauseResume`. Frontend cableado vía `useAutoScanPause/Resume/Status`.
+
+#### Deudas técnicas a eliminar antes de la release 1
+
+- **`frontend/src/components/Dev/DevStateSwitcher.tsx` + `dev-state-switcher.css`**: switcher flotante (sólo `import.meta.env.DEV`) que fuerza estados del Cockpit (warmup/degraded/splus/error/scanning/loading) escribiendo en `useEngineStore.stateOverride`. Útil para previsualizar variantes sin levantar backend ni reproducir condiciones reales. Pre-release: borrar la carpeta `Dev/`, quitar `stateOverride` + `setStateOverride` de `engine.ts`, y la rama del override en `useCockpitState`.
 
 ### Para el siguiente chat
 

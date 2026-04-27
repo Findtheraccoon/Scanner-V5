@@ -1,3 +1,4 @@
+import { useScanningStore } from "@/stores/scanning";
 import { Sparkline } from "./Sparkline";
 import type { Band, SlotData } from "./data";
 
@@ -16,6 +17,8 @@ function showsBookmark(band: Band | null): band is Band {
 }
 
 export function Slot({ slot, onSelect }: SlotProps) {
+  const isScanning = useScanningStore((s) => s.active.has(slot.id));
+
   if (!slot.ticker) {
     return (
       <article className="slot--empty" data-slot={slot.id}>
@@ -24,7 +27,9 @@ export function Slot({ slot, onSelect }: SlotProps) {
     );
   }
 
-  const className = ["slot", slot.selected ? "is-selected" : ""].filter(Boolean).join(" ");
+  const className = ["slot", slot.selected ? "is-selected" : "", isScanning ? "is-scanning" : ""]
+    .filter(Boolean)
+    .join(" ");
   const bookmarkClassName = ["bookmark", slot.metallic ? "bookmark--metallic" : ""]
     .filter(Boolean)
     .join(" ");

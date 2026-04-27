@@ -7,6 +7,7 @@ import {
 import { useToast } from "@/components/Toast/ToastProvider";
 import { useApiUsageStore } from "@/stores/apiUsage";
 import { useEngineStore } from "@/stores/engine";
+import { useSlotsStore } from "@/stores/slots";
 import { useEffect, useMemo, useState } from "react";
 
 interface KeyDisplay {
@@ -83,6 +84,8 @@ export function ApiBar() {
     }
   };
 
+  const selectedSlotId = useSlotsStore((s) => s.selectedSlotId);
+
   const handleScan = async () => {
     setPulseScan(true);
     if (wsState !== "connected") {
@@ -95,7 +98,7 @@ export function ApiBar() {
     // del Cockpit es realmente útil cuando hay slot seleccionado y
     // fixture cargada — por ahora lanzamos un dry-run y reportamos.
     try {
-      await scanMut.mutateAsync({});
+      await scanMut.mutateAsync({ slotId: selectedSlotId });
       toast.push("scan disparado", "success");
     } catch (e) {
       const status = (e as { status?: number }).status;

@@ -3,6 +3,17 @@ import { create } from "zustand";
 
 export type WsConnectionState = "disconnected" | "connecting" | "connected" | "error";
 
+/* Estado del Cockpit usado tanto por la lógica real (useCockpitState)
+   como por el override del DevStateSwitcher (dev-only). */
+export type CockpitStateName =
+  | "normal"
+  | "warmup"
+  | "degraded"
+  | "splus"
+  | "error"
+  | "scanning"
+  | "loading";
+
 interface EngineState {
   /* Estado por motor — alimentado por eventos `engine.status` del WS y por
      `GET /engine/health` al arrancar. */
@@ -17,10 +28,16 @@ interface EngineState {
   errorCodes: Partial<Record<EngineStatusPayload["engine"], string>>;
   /* Estado de la conexión WS — UI lo refleja en el indicador "live". */
   ws: WsConnectionState;
+  /* DEUDA TÉCNICA: override del estado del Cockpit, usado únicamente por
+     el DevStateSwitcher en builds DEV. Tiene prioridad absoluta sobre
+     la resolución natural en useCockpitState. Eliminar antes de la
+     release 1 (junto con DevStateSwitcher.tsx). */
+  stateOverride: CockpitStateName | null;
 
   applyEngineStatus: (payload: EngineStatusPayload) => void;
   setWsState: (state: WsConnectionState) => void;
   setDataPaused: (paused: boolean) => void;
+  setStateOverride: (state: CockpitStateName | null) => void;
 }
 
 export const useEngineStore = create<EngineState>((set) => ({
@@ -32,6 +49,7 @@ export const useEngineStore = create<EngineState>((set) => ({
   messages: {},
   errorCodes: {},
   ws: "disconnected",
+  stateOverride: null,
   applyEngineStatus: (p) =>
     set((s) => {
       const isPause = p.engine === "data" && p.status === "paused";
@@ -47,4 +65,5 @@ export const useEngineStore = create<EngineState>((set) => ({
     }),
   setWsState: (ws) => set({ ws }),
   setDataPaused: (paused) => set({ dataPaused: paused }),
+  setStateOverride: (stateOverride) => set({ stateOverride }),
 }));

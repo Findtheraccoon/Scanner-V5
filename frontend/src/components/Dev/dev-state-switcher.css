@@ -1,0 +1,94 @@
+/* DEUDA TÉCNICA — eliminar antes de la release 1 (junto con
+   DevStateSwitcher.tsx). */
+
+.dev-switcher {
+  position: fixed;
+  right: 16px;
+  bottom: 80px;
+  z-index: 250;
+  min-width: 280px;
+  padding: 10px 12px 8px;
+  background:
+    var(--glass-grad-2),
+    linear-gradient(180deg, rgba(20, 22, 28, 0.94) 0%, rgba(13, 15, 18, 0.92) 100%);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border: 1px dashed rgba(245, 158, 11, 0.45);
+  border-radius: var(--r);
+  box-shadow: var(--bevel-full), var(--shadow-card-deep);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--t-90);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dev-switcher--collapsed {
+  width: 32px;
+  height: 32px;
+  min-width: 0;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  color: var(--warn);
+  cursor: pointer;
+}
+
+.dev-switcher__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 9px;
+  color: var(--warn);
+}
+.dev-switcher__close {
+  background: transparent;
+  border: none;
+  color: var(--t-55);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 4px;
+}
+.dev-switcher__close:hover {
+  color: var(--t-100);
+}
+
+.dev-switcher__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.dev-pill {
+  padding: 4px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--t-75);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-pill);
+  cursor: pointer;
+  transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+}
+.dev-pill:hover {
+  color: var(--t-100);
+  border-color: var(--hair-3);
+}
+.dev-pill.is-active {
+  color: var(--warn);
+  border-color: rgba(245, 158, 11, 0.5);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.dev-switcher__hint {
+  margin: 0;
+  font-size: 8.5px;
+  color: var(--t-38);
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+}
