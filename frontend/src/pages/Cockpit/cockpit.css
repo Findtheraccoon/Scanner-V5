@@ -470,13 +470,8 @@
   top: 0;
   z-index: 20;
   overflow: hidden;
+  /* base oscura — el iridiscente animado va en .banner::before */
   background:
-    /* iridiscente sutil de fondo (intensidad subida para que sobreviva al fondo más oscuro) */
-    linear-gradient(120deg,
-      rgba(255,106,44,0.12) 0%,
-      rgba(196,181,253,0.07) 30%,
-      rgba(253,186,116,0.08) 60%,
-      rgba(249,168,212,0.07) 100%),
     var(--glass-grad-1),
     linear-gradient(180deg, rgba(8,8,8,0.92) 0%, rgba(5,5,5,0.85) 100%);
   backdrop-filter: var(--blur-strong);
@@ -487,8 +482,57 @@
     var(--edge-glass-top),
     var(--edge-glass-bottom),
     0 1px 0 rgba(255,255,255,0.03);
+  isolation: isolate; /* contiene el blend-mode del sweep */
 }
-/* ticker ghost gigante atrás */
+/* Capa 1 — iridiscente conic rotando lento (Houdini @property --iri-angle).
+   Mask radial para que decaiga limpio en los bordes y no aparezcan líneas duras. */
+.banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: conic-gradient(
+    from var(--iri-angle) at 50% 50%,
+    rgba(255, 106, 44, 0.18)  0deg,
+    rgba(253, 186, 116, 0.14) 60deg,
+    rgba(196, 181, 253, 0.16) 130deg,
+    rgba(249, 168, 212, 0.18) 200deg,
+    rgba(255, 106, 44, 0.14)  280deg,
+    rgba(255, 106, 44, 0.18)  360deg);
+  mix-blend-mode: screen;
+  opacity: 0.85;
+  mask-image: radial-gradient(ellipse 90% 110% at 50% 50%, #000 30%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 110% at 50% 50%, #000 30%, transparent 100%);
+  animation: iri-rotate 18s linear infinite;
+}
+/* Capa 2 — specular sweep diagonal (banda de luz que cruza cada 12s). */
+.banner::after {
+  content: '';
+  position: absolute;
+  top: -30%;
+  left: -120%;
+  width: 60%;
+  height: 160%;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(115deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.05) 47%,
+    rgba(255, 255, 255, 0.16) 50%,
+    rgba(255, 255, 255, 0.05) 53%,
+    transparent 65%);
+  mix-blend-mode: screen;
+  filter: blur(2px);
+  animation: banner-sweep 12s var(--ease) infinite;
+}
+@keyframes banner-sweep {
+  0%, 75%   { left: -120%; opacity: 0; }
+  78%       { opacity: 1; }
+  92%       { left: 140%;  opacity: 1; }
+  93%, 100% { left: 140%;  opacity: 0; }
+}
+/* ticker ghost gigante atrás · hero iridiscente con conic + text-clip animado */
 .banner__ghost {
   position: absolute;
   top: 50%;
@@ -499,23 +543,31 @@
   letter-spacing: -0.06em;
   line-height: 0.85;
   color: transparent;
-  -webkit-text-stroke: 1.5px rgba(255,255,255,0.045);
-  text-stroke: 1.5px rgba(255,255,255,0.045);
+  -webkit-text-stroke: 1.5px rgba(255,255,255,0.06);
+  text-stroke: 1.5px rgba(255,255,255,0.06);
   pointer-events: none;
   user-select: none;
   z-index: 0;
   white-space: nowrap;
   font-family: var(--font-ui);
   text-transform: uppercase;
-  background: linear-gradient(120deg,
-    rgba(253,186,116,0.18) 0%,
-    rgba(255,106,44,0.14) 35%,
-    rgba(196,181,253,0.14) 65%,
-    rgba(249,168,212,0.18) 100%);
+  background: conic-gradient(
+    from var(--iri-angle) at 50% 50%,
+    rgba(255, 106, 44, 0.28)  0deg,
+    rgba(253, 186, 116, 0.22) 60deg,
+    rgba(255, 255, 255, 0.20) 110deg,
+    rgba(196, 181, 253, 0.26) 160deg,
+    rgba(249, 168, 212, 0.28) 230deg,
+    rgba(253, 186, 116, 0.22) 300deg,
+    rgba(255, 106, 44, 0.28)  360deg);
   -webkit-background-clip: text;
   background-clip: text;
-  opacity: 0.55;
+  opacity: 0.65;
   filter: blur(0.4px);
+  /* mask radial para que los extremos del texto se desvanezcan suavemente */
+  mask-image: radial-gradient(ellipse 75% 90% at 50% 50%, #000 35%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 75% 90% at 50% 50%, #000 35%, transparent 100%);
+  animation: iri-rotate 16s linear infinite reverse;
 }
 .banner__row {
   position: relative;
@@ -539,6 +591,33 @@
   letter-spacing: -0.035em;
   line-height: 1;
   color: var(--t-100);
+  /* halo cromático multi-capa — el color final lo aporta el data-band del .banner padre */
+  text-shadow:
+    0 0 18px var(--ticker-halo, rgba(255, 255, 255, 0.06)),
+    0 0 42px var(--ticker-halo-far, rgba(255, 255, 255, 0.03));
+  transition: text-shadow var(--t-slow);
+}
+/* Halo del ticker tinted por tier (.banner expone el data-band activo).
+   B/A/A+/S/S+ refuerzan el "hero" — REVISAR queda neutro. */
+.banner[data-band="B"] {
+  --ticker-halo: rgba(130, 170, 192, 0.20);
+  --ticker-halo-far: rgba(130, 170, 192, 0.10);
+}
+.banner[data-band="A"] {
+  --ticker-halo: rgba(59, 154, 232, 0.28);
+  --ticker-halo-far: rgba(59, 154, 232, 0.14);
+}
+.banner[data-band="A+"] {
+  --ticker-halo: rgba(185, 65, 213, 0.32);
+  --ticker-halo-far: rgba(185, 65, 213, 0.16);
+}
+.banner[data-band="S"] {
+  --ticker-halo: rgba(220, 148, 30, 0.34);
+  --ticker-halo-far: rgba(220, 148, 30, 0.18);
+}
+.banner[data-band="S+"] {
+  --ticker-halo: rgba(155, 168, 195, 0.26);
+  --ticker-halo-far: rgba(155, 168, 195, 0.14);
 }
 
 /* Orden 2 — info útil */

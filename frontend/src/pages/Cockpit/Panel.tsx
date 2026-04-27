@@ -19,7 +19,8 @@ export function Panel() {
 
 function Banner() {
   return (
-    <header className="banner">
+    // data-band activo del slot mostrado — alimenta el halo cromático del ticker
+    <header className="banner" data-band="A+">
       <span className="banner__ghost" aria-hidden="true">
         QQQ
       </span>
