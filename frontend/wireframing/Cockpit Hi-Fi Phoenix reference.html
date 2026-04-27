@@ -1,0 +1,2717 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Phoenix · Cockpit · Hi-Fi v3</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   COCKPIT v2 · iter 2 — "Glass cromado, instrumental"
+   ────────────────────────────────────────────────────────────
+   Acento: ELECTRIC MINT-CYAN #FF6A2C — microdosis (CTA, focus,
+   AUTO on, health line, sparklines del slot activo).
+
+   Cambios respecto a la iteración previa:
+     · Top bar 2.5× alto, brand prominente, pestañas centradas
+       con geometría tab + sombra superior.
+     · API bar más fina, KEY 1..5, "diaria" colapsada en 5 barras
+       apiladas (sin contador grande).
+     · Watchlist como cards con forma real, bookmark de banda
+       saliendo del borde superior con glass biselado.
+     · Sin glow en bandas (placeholder hasta el efecto nuevo).
+     · S y S+ con barrido metálico animado (ciclo 8s).
+     · Panel derecho con 3 órdenes jerárquicos + banner resumido
+       reorganizado + gráfico antes del detalle, detalle colapsado.
+     · Glass cromado global: gradientes sutiles + biseles inset,
+       sin filtros pesados, sin físicas (compatible con hardware
+       modesto).
+   ============================================================ */
+
+:root {
+  /* ── Base (paleta master · negro #0D0D0D) ── */
+  --bg:            #08090b;
+  --bg-elev-1:     #0d0f12;
+  --bg-elev-2:     #12151a;
+  --bg-elev-3:     #181b21;
+  --bg-elev-4:     #20242b;
+  --bg-row-hover:  #0f1216;
+  --surface-card:  #111317;
+  --surface-card-2:#161920;
+
+  /* ── Hairlines ── */
+  --hair:          rgba(255,255,255,0.05);
+  --hair-2:        rgba(255,255,255,0.08);
+  --hair-3:        rgba(255,255,255,0.14);
+  --hair-vivid:    rgba(255,255,255,0.22);
+
+  /* ── Texto ── */
+  --t-100:         #f5f5f7;
+  --t-90:          rgba(245,245,247,0.90);
+  --t-75:          rgba(245,245,247,0.75);
+  --t-55:          rgba(245,245,247,0.55);
+  --t-38:          rgba(245,245,247,0.38);
+  --t-22:          rgba(245,245,247,0.22);
+  --t-12:          rgba(245,245,247,0.12);
+
+  /* ── Accent · paleta master verde
+        #FF6A2C (lima brillante) → acento principal
+        #E55A1F (verde medio)    → variant medium / focus
+        #7A2E0E (verde oscuro)   → border deep
+        #3D1808 (verde más oscuro) → backgrounds soft
+     ── */
+  --accent:        #FF6A2C;
+  --accent-2:      #E55A1F;
+  --accent-deep:   #7A2E0E;
+  --accent-darker: #3D1808;
+  --accent-glow:   rgba(255,106,44,0.30);
+  --accent-glow-2: rgba(255,106,44,0.18);
+  --accent-soft:   rgba(255,106,44,0.08);
+
+  /* ── Pilotos ── */
+  --ok:            #22c55e;
+  --warn:          #f59e0b;
+  --err:           #ef4444;
+
+  /* ── Tiers de score (color + border + glow específico) ── */
+  --tier-r-color:      #737880;
+  --tier-r-border:     rgba(115, 120, 128, 0.30);
+
+  --tier-b-color:      #82AAC0;
+  --tier-b-border:     rgba(130, 170, 192, 0.38);
+  --tier-b-glow:       rgba(130, 170, 192, 0.25);
+
+  --tier-a-color:      #3B9AE8;
+  --tier-a-border:     rgba(59, 154, 232, 0.55);
+  --tier-a-glow:       rgba(59, 154, 232, 0.40);
+
+  --tier-ap-color:     #B941D5;
+  --tier-ap-border:    rgba(185, 65, 213, 0.60);
+  --tier-ap-glow:      rgba(185, 65, 213, 0.45);
+
+  --tier-s-color:      #DC9418;
+  --tier-s-border:     rgba(220, 148, 30, 0.65);
+  --tier-s-glow:       rgba(220, 148, 30, 0.50);
+
+  --tier-sp-base:      #06080E;
+  --tier-sp-color:     #9AAABF;
+  --tier-sp-border:    rgba(155, 168, 195, 0.42);
+  --tier-sp-glow:      rgba(148, 162, 190, 0.25);
+
+  /* Aliases legacy (por si algún selector residual los referencia) */
+  --band-revisar:  var(--tier-r-color);
+  --band-b:        var(--tier-b-color);
+  --band-a:        var(--tier-a-color);
+  --band-aplus:    var(--tier-ap-color);
+  --band-s:        var(--tier-s-color);
+  --band-splus:    var(--tier-sp-color);
+
+  /* ── Bull/bear ── */
+  --bull:          #22c55e;
+  --bear:          #ef4444;
+
+  /* ── Velas ── */
+  --candle-up:     #FF6A2C;
+  --candle-down:   #f5f5f7;
+
+  /* ──────────────────────────────────────────────
+     GLASS CROMADO — sistema completo
+     · grad: gradiente vertical (highlight arriba, sombra abajo)
+     · shine: brillo diagonal sutil
+     · bevel-X: combinaciones de inset shadows para profundidad
+     ────────────────────────────────────────────── */
+  --glass-grad-1:
+    linear-gradient(180deg,
+      rgba(255,255,255,0.045) 0%,
+      rgba(255,255,255,0.012) 38%,
+      rgba(255,255,255,0)     62%,
+      rgba(0,0,0,0.10)        100%);
+  --glass-grad-2:
+    linear-gradient(180deg,
+      rgba(255,255,255,0.06) 0%,
+      rgba(255,255,255,0.02) 36%,
+      rgba(255,255,255,0)    62%,
+      rgba(0,0,0,0.18)       100%);
+  --glass-grad-3:
+    linear-gradient(180deg,
+      rgba(255,255,255,0.085) 0%,
+      rgba(255,255,255,0.030) 32%,
+      rgba(255,255,255,0.005) 60%,
+      rgba(0,0,0,0.22)        100%);
+  --glass-shine:
+    linear-gradient(135deg,
+      rgba(255,255,255,0.10) 0%,
+      rgba(255,255,255,0.025) 26%,
+      transparent 55%);
+
+  --bevel-soft:
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    inset 0 -1px 0 rgba(0,0,0,0.25);
+  --bevel-full:
+    inset 0 1px 0 rgba(255,255,255,0.10),
+    inset 0 -1px 0 rgba(0,0,0,0.32),
+    inset 1px 0 0 rgba(255,255,255,0.035),
+    inset -1px 0 0 rgba(0,0,0,0.18);
+  --bevel-strong:
+    inset 0 1px 0 rgba(255,255,255,0.16),
+    inset 0 -1px 0 rgba(0,0,0,0.45),
+    inset 1px 0 0 rgba(255,255,255,0.05),
+    inset -1px 0 0 rgba(0,0,0,0.22);
+  --shadow-card:   0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(0,0,0,0.30);
+  --shadow-card-deep: 0 2px 4px rgba(0,0,0,0.4), 0 16px 48px rgba(0,0,0,0.55);
+  --shadow-tab:    0 -3px 8px rgba(0,0,0,0.40);
+  --shadow-bookmark: 0 2px 6px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,0,0,0.20);
+
+  /* ── Glass blur (backdrop) — vidrio real ── */
+  --blur-glass:    blur(20px) saturate(140%);
+  --blur-strong:   blur(28px) saturate(160%);
+  --blur-soft:     blur(12px) saturate(130%);
+  --blur-tab:      blur(16px) saturate(140%);
+
+  /* ── Card bg translúcido (neutro, sin tinte azul) ── */
+  --card-bg:       rgba(15, 15, 15, 0.62);
+  --card-bg-2:     rgba(20, 20, 20, 0.60);
+  --card-bg-elev:  rgba(28, 28, 28, 0.55);
+  --card-border:   rgba(255, 255, 255, 0.06);
+  --card-border-h: rgba(255, 255, 255, 0.12);
+  --edge-glass-top:    inset 0 1px 0 rgba(255,255,255,0.18);
+  --edge-glass-bottom: inset 0 -1px 0 rgba(0,0,0,0.40);
+
+  /* ── Iridiscentes (hero only) ── */
+  --iridescent-1: linear-gradient(135deg,
+    #FF6A2C 0%,
+    #c4b5fd 25%,
+    #fdba74 50%,
+    #f9a8d4 75%,
+    #FF6A2C 100%);
+  --iridescent-2: linear-gradient(120deg,
+    rgba(255,106,44,0.30) 0%,
+    rgba(196,181,253,0.20) 30%,
+    rgba(253,186,116,0.20) 60%,
+    rgba(249,168,212,0.22) 100%);
+
+  /* ── Radii (más generosos) ── */
+  --r:             12px;
+  --r-sm:          8px;
+  --r-md:          16px;
+  --r-lg:          22px;
+  --r-card:        22px;
+  --r-pill:        999px;
+
+  /* ── Tipografía ── */
+  --font-ui:       'Geist','Söhne',system-ui,-apple-system,sans-serif;
+  --font-mono:     'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+
+  /* ── Easings ── */
+  --ease:          cubic-bezier(0.4, 0, 0.2, 1);
+  --t-fast:        140ms var(--ease);
+  --t-base:        220ms var(--ease);
+  --t-slow:        420ms var(--ease);
+
+  /* ── Espaciado ── */
+  --gap-1:         4px;
+  --gap-2:         8px;
+  --gap-3:         12px;
+  --gap-4:         16px;
+  --gap-5:         24px;
+  --gap-6:         32px;
+  --gap-7:         48px;
+
+  /* ── Layout ── */
+  --watchlist-w:   324px;
+  --topbar-h:      100px;
+  --apibar-h:      114px;
+  --footer-h:      56px;
+}
+
+/* ============================================================
+   RESET
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+html { background: var(--bg); }
+body {
+  min-height: 100vh;
+  background:
+    /* warm rim light from upper-right */
+    radial-gradient(ellipse 900px 600px at 92% -8%, rgba(255,140,80,0.05) 0%, rgba(255,140,80,0.012) 45%, transparent 75%),
+    /* deep amber ambient lower-left */
+    radial-gradient(ellipse 600px 450px at 4% 94%, rgba(255,106,44,0.035) 0%, transparent 65%),
+    /* base */
+    var(--bg);
+  color: var(--t-100);
+  font-family: var(--font-ui);
+  font-weight: 400;
+  font-size: 13px;
+  line-height: 1.45;
+  font-feature-settings: 'ss01','ss02','cv01','cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+button {
+  font-family: inherit;
+  color: inherit;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+::selection { background: var(--accent-glow); color: var(--bg); }
+
+.mono, .num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Atmospheric noise — dithering activo para romper posterización en gradientes oscuros */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.55;
+  background-image: radial-gradient(rgba(255,255,255,0.045) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: 0 0;
+  mask-image: radial-gradient(ellipse 90% 80% at 50% 50%, #000 30%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 50%, #000 30%, transparent 100%);
+}
+
+/* ============================================================
+   AMBIENT HEALTH LINE (top 1px)
+   ============================================================ */
+.health-line {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    var(--accent) 12%,
+    var(--accent) 50%,
+    var(--accent-deep) 70%,
+    transparent 100%);
+  z-index: 100;
+  opacity: 0.5;
+  animation: pulse-health 6s var(--ease) infinite;
+}
+@keyframes pulse-health {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 0.85; }
+}
+
+/* ============================================================
+   APP SHELL
+   ============================================================ */
+.app {
+  display: grid;
+  grid-template-rows: var(--topbar-h) var(--apibar-h) 1fr var(--footer-h);
+  min-height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
+/* ============================================================
+   TOP BAR (alto x2.5, brand prominente, pestañas centradas)
+   ============================================================ */
+.topbar {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
+  padding: 0 var(--gap-6) 0;
+  background:
+    var(--glass-grad-2),
+    linear-gradient(180deg, rgba(13,15,18,0.92) 0%, rgba(8,9,11,0.85) 100%);
+  backdrop-filter: var(--blur-strong);
+  -webkit-backdrop-filter: var(--blur-strong);
+  border-bottom: 1px solid var(--card-border);
+  box-shadow: var(--edge-glass-top), var(--edge-glass-bottom);
+}
+
+.topbar__brand {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 4px;
+}
+.brand__mark {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r);
+  position: relative;
+  background:
+    var(--glass-grad-3),
+    radial-gradient(circle at 30% 25%, var(--accent) 0%, var(--accent-deep) 60%, #3D1808 100%);
+  box-shadow:
+    var(--bevel-strong),
+    0 0 16px var(--accent-glow-2),
+    0 4px 10px rgba(0,0,0,0.55);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.brand__mark::before {
+  /* glass shine */
+  content:'';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--glass-shine);
+  pointer-events: none;
+}
+.brand__mark svg {
+  width: 20px; height: 20px;
+  position: relative;
+  z-index: 1;
+  color: #1a0a02;
+  stroke-width: 2.4;
+}
+.brand__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1;
+}
+.brand__name {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--t-100);
+  text-transform: uppercase;
+}
+.brand__sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  color: var(--t-38);
+  text-transform: uppercase;
+}
+
+/* Pestañas centradas con tab-shape */
+.topbar__nav {
+  align-self: end;
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 0;
+  padding: 0;
+}
+.tab {
+  position: relative;
+  padding: 14px 26px 16px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--t-55);
+  background: linear-gradient(180deg, rgba(255,255,255,0.015) 0%, transparent 80%);
+  border: 1px solid var(--hair);
+  border-bottom: none;
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  margin-right: -1px;
+  transition: color var(--t-fast), background var(--t-fast), transform var(--t-fast);
+  font-weight: 500;
+}
+.tab:hover {
+  color: var(--t-90);
+  background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 80%);
+}
+.tab.is-active {
+  color: var(--t-100);
+  background:
+    var(--glass-grad-3),
+    linear-gradient(180deg, var(--bg-elev-3) 0%, var(--bg-elev-2) 100%);
+  border-color: var(--hair-3);
+  box-shadow:
+    var(--shadow-tab),
+    inset 0 1px 0 rgba(255,255,255,0.10);
+  z-index: 2;
+}
+.tab.is-active::after {
+  /* conector inferior — borra la frontera con el cuerpo */
+  content: '';
+  position: absolute;
+  left: -1px; right: -1px;
+  bottom: -1px;
+  height: 2px;
+  background: linear-gradient(180deg, var(--bg-elev-2) 0%, var(--bg) 100%);
+  z-index: 3;
+}
+.tab.is-active::before {
+  /* indicador acento */
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 1px;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow);
+}
+
+.topbar__meta {
+  align-self: center;
+  justify-self: end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  padding-bottom: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t-55);
+  text-align: right;
+}
+.topbar__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent);
+  font-family: var(--font-ui);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.topbar__live::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-glow);
+  animation: pulse-dot 2.4s var(--ease) infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 1;    transform: scale(1.18); }
+}
+.topbar__clock {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.topbar__date {
+  font-size: 10px;
+  color: var(--t-38);
+  letter-spacing: 0.04em;
+}
+
+/* ============================================================
+   API BAR (más fino, KEY 1..5, card de diaria con 5 barras)
+   ============================================================ */
+.apibar {
+  display: grid;
+  grid-template-columns: minmax(132px, 0.7fr) repeat(5, minmax(118px, 1fr)) minmax(360px, 1.85fr);
+  align-items: stretch;
+  background:
+    var(--glass-grad-1),
+    linear-gradient(180deg, rgba(13,15,18,0.78) 0%, rgba(8,9,11,0.65) 100%);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border-bottom: 1px solid var(--card-border);
+  box-shadow: var(--edge-glass-top), var(--edge-glass-bottom);
+}
+.apibar__cell {
+  padding: 12px 14px;
+  border-right: 1px solid var(--card-border);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  position: relative;
+  min-width: 0;
+}
+.apibar__cell:last-child { border-right: none; }
+.apibar__cell--summary {
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.apibar__label {
+  font-size: 9.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--t-38);
+  font-weight: 500;
+}
+.apibar__provider {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.apibar__provider-name {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--t-100);
+  letter-spacing: -0.01em;
+}
+.apibar__provider-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--t-55);
+}
+
+/* Card de KEY individual — KEY 1 · hace 3s en una línea */
+.apibar__keyhead {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.apibar__keyname {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--t-100);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.apibar__keysep {
+  color: var(--t-22);
+  font-size: 11px;
+}
+.apibar__keylast {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t-38);
+  letter-spacing: 0;
+}
+.apibar__keyusage {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--t-90);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.apibar__bar {
+  height: 3px;
+  background:
+    linear-gradient(180deg, rgba(0,0,0,0.4), rgba(0,0,0,0.25)),
+    var(--bg-elev-2);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  box-shadow: inset 0 1px 1px rgba(0,0,0,0.5), inset 0 -1px 0 rgba(255,255,255,0.04);
+}
+.apibar__bar > i {
+  display: block;
+  height: 100%;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.30) 0%, transparent 50%),
+    linear-gradient(90deg, var(--accent-deep) 0%, var(--accent) 100%);
+  border-radius: var(--r-pill);
+  box-shadow: 0 0 6px var(--accent-glow-2);
+  transition: width var(--t-base);
+}
+
+/* Card "diaria" — 5 barras apiladas + número/total a la derecha */
+.daily-stack {
+  display: grid;
+  grid-template-rows: repeat(5, 1fr);
+  row-gap: 6px;
+  width: 100%;
+  height: 100%;
+}
+.daily-row {
+  display: grid;
+  grid-template-columns: 44px 1fr 70px;
+  align-items: center;
+  gap: 12px;
+}
+.daily-row__name {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--t-75);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.daily-row__bar {
+  height: 3px;
+  background:
+    linear-gradient(180deg, rgba(0,0,0,0.4), rgba(0,0,0,0.2)),
+    var(--bg-elev-2);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  box-shadow: inset 0 1px 1px rgba(0,0,0,0.5);
+}
+.daily-row__bar > i {
+  display: block;
+  height: 100%;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.28) 0%, transparent 50%),
+    linear-gradient(90deg, var(--accent-deep) 0%, var(--accent) 100%);
+  border-radius: var(--r-pill);
+  transition: width var(--t-base);
+}
+.daily-row__num {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--t-90);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  letter-spacing: -0.01em;
+}
+.daily-row__num .dim { color: var(--t-38); }
+
+/* ============================================================
+   MAIN
+   ============================================================ */
+.main {
+  display: grid;
+  grid-template-columns: var(--watchlist-w) 1fr;
+  min-height: 0;
+  border-bottom: 1px solid var(--hair);
+}
+
+/* ============================================================
+   WATCHLIST
+   ============================================================ */
+.watchlist {
+  border-right: 1px solid var(--hair);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.014) 0%, transparent 30%);
+  overflow-y: auto;
+  position: relative;
+  padding: 14px 12px 24px;
+}
+.watchlist::-webkit-scrollbar { width: 6px; }
+.watchlist::-webkit-scrollbar-track { background: transparent; }
+.watchlist::-webkit-scrollbar-thumb { background: var(--hair-2); border-radius: var(--r-pill); }
+
+.wl-header {
+  padding: 4px 8px 12px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.wl-title {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--t-55);
+  font-weight: 500;
+}
+.wl-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--t-38);
+}
+
+.slot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 4px; /* deja respirar el bookmark del primero */
+}
+
+.slot {
+  position: relative;
+  background:
+    var(--glass-grad-2),
+    var(--surface-card);
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid rgba(255,255,255,0.09);
+  border-radius: var(--r-card);
+  padding: 14px 14px 12px;
+  cursor: pointer;
+  transition: transform var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast);
+  overflow: visible; /* el bookmark sobresale */
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.14),
+    inset 0 -1px 0 rgba(0,0,0,0.45),
+    var(--shadow-card);
+}
+/* frosted noise overlay sutil — efecto vidrio esmerilado */
+.slot > .slot__row::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: var(--r-card);
+  opacity: 0.06;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1   0 0 0 0 1   0 0 0 0 1   0 0 0 0.6 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  z-index: 0;
+}
+.slot::before {
+  /* shine glass */
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--glass-shine);
+  pointer-events: none;
+  z-index: 1;
+}
+.slot:hover {
+  border-color: var(--hair-3);
+  transform: translateY(-1px);
+  box-shadow:
+    var(--bevel-full),
+    0 2px 4px rgba(0,0,0,0.4),
+    0 12px 28px rgba(0,0,0,0.32);
+}
+
+/* Sparkline ambient (más vivo y glass que la iter previa) */
+.slot__spark {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 50px;
+  pointer-events: none;
+  opacity: 0.55;
+  mask-image: linear-gradient(180deg,
+    transparent 0%,
+    rgba(0,0,0,0.30) 25%,
+    rgba(0,0,0,1) 100%);
+  -webkit-mask-image: linear-gradient(180deg,
+    transparent 0%,
+    rgba(0,0,0,0.30) 25%,
+    rgba(0,0,0,1) 100%);
+  z-index: 0;
+  border-bottom-left-radius: var(--r-card);
+  border-bottom-right-radius: var(--r-card);
+  overflow: hidden;
+}
+.slot__spark svg { width: 100%; height: 100%; display: block; }
+
+/* Bookmark (glass biselado, asoma 4px) */
+.bookmark {
+  position: absolute;
+  top: -4px;
+  right: 14px;
+  width: 32px;
+  min-height: 38px;
+  padding: 8px 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #0a0a0a;
+  border-radius: 2px 2px 6px 6px;
+  z-index: 5;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.20);
+  overflow: hidden;
+  box-shadow:
+    var(--shadow-bookmark),
+    inset 0 1px 0 rgba(255,255,255,0.45),
+    inset 0 -1px 0 rgba(0,0,0,0.30);
+}
+.bookmark::before {
+  /* highlight glass biselado */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg,
+    rgba(255,255,255,0.50) 0%,
+    rgba(255,255,255,0.18) 22%,
+    rgba(255,255,255,0.04) 50%,
+    rgba(0,0,0,0.18) 100%);
+  pointer-events: none;
+  border-radius: inherit;
+}
+.bookmark::after {
+  /* línea de bisel central, sutil */
+  content: '';
+  position: absolute;
+  top: 6px; bottom: 6px;
+  left: 50%;
+  width: 1px;
+  background: linear-gradient(180deg,
+    transparent 0%,
+    rgba(255,255,255,0.18) 30%,
+    rgba(255,255,255,0.18) 70%,
+    transparent 100%);
+  transform: translateX(-0.5px);
+  pointer-events: none;
+}
+.bookmark > span {
+  position: relative;
+  z-index: 2;
+}
+
+/* Color por tier (relleno + border + glow específico) */
+.bookmark[data-band="REVISAR"] {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--tier-r-color) 80%, white 20%) 0%, var(--tier-r-color) 100%);
+  color: #fafafa;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.35);
+  box-shadow:
+    var(--shadow-bookmark),
+    inset 0 1px 0 rgba(255,255,255,0.40),
+    inset 0 -1px 0 rgba(0,0,0,0.30),
+    0 0 0 1px var(--tier-r-border);
+}
+.bookmark[data-band="B"] {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--tier-b-color) 75%, white 25%) 0%, var(--tier-b-color) 100%);
+  color: #0b1218;
+  box-shadow:
+    var(--shadow-bookmark),
+    inset 0 1px 0 rgba(255,255,255,0.45),
+    inset 0 -1px 0 rgba(0,0,0,0.28),
+    0 0 0 1px var(--tier-b-border),
+    0 0 12px var(--tier-b-glow);
+}
+.bookmark[data-band="A"] {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--tier-a-color) 75%, white 25%) 0%, var(--tier-a-color) 100%);
+  color: #04101d;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.18);
+  box-shadow:
+    var(--shadow-bookmark),
+    inset 0 1px 0 rgba(255,255,255,0.45),
+    inset 0 -1px 0 rgba(0,0,0,0.30),
+    0 0 0 1px var(--tier-a-border),
+    0 0 14px var(--tier-a-glow);
+}
+.bookmark[data-band="A+"] {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--tier-ap-color) 70%, white 30%) 0%, var(--tier-ap-color) 100%);
+  color: #1a0421;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.22);
+  box-shadow:
+    var(--shadow-bookmark),
+    inset 0 1px 0 rgba(255,255,255,0.50),
+    inset 0 -1px 0 rgba(0,0,0,0.32),
+    0 0 0 1px var(--tier-ap-border),
+    0 0 16px var(--tier-ap-glow);
+}
+.bookmark[data-band="S"] {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--tier-s-color) 70%, white 30%) 0%, var(--tier-s-color) 100%);
+  color: #1c0e02;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.30);
+  box-shadow:
+    var(--shadow-bookmark),
+    inset 0 1px 0 rgba(255,255,255,0.55),
+    inset 0 -1px 0 rgba(0,0,0,0.35),
+    0 0 0 1px var(--tier-s-border),
+    0 0 18px var(--tier-s-glow);
+}
+.bookmark[data-band="S+"] {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--tier-sp-color) 30%, var(--tier-sp-base) 70%) 0%, var(--tier-sp-base) 100%);
+  color: var(--tier-sp-color);
+  text-shadow: 0 1px 0 rgba(0,0,0,0.55);
+  box-shadow:
+    var(--shadow-bookmark),
+    inset 0 1px 0 rgba(255,255,255,0.30),
+    inset 0 -1px 0 rgba(0,0,0,0.45),
+    0 0 0 1px var(--tier-sp-border),
+    0 0 14px var(--tier-sp-glow);
+}
+
+/* Reflejo metálico animado para S y S+ (ciclo 8s) */
+/* Nota: NO sobrescribir position aquí — el .bookmark ya es absolute
+   y eso le sirve como contenedor de positioning al .metal-sweep child. */
+.bookmark--metallic .metal-sweep {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 1;
+}
+.bookmark--metallic .metal-sweep::before {
+  content: '';
+  position: absolute;
+  top: -50%; left: -150%;
+  width: 80%;
+  height: 200%;
+  background: linear-gradient(115deg,
+    transparent 35%,
+    rgba(255,255,255,0.30) 47%,
+    rgba(255,255,255,0.85) 50%,
+    rgba(255,255,255,0.30) 53%,
+    transparent 65%);
+  transform: rotate(0deg);
+  animation: metal-sweep 8s var(--ease) infinite;
+}
+@keyframes metal-sweep {
+  0%, 80%   { left: -150%; opacity: 0; }
+  82%       { opacity: 1; }
+  92%       { left: 150%; opacity: 1; }
+  93%, 100% { left: 150%; opacity: 0; }
+}
+
+/* Card content layout */
+.slot__row { position: relative; z-index: 2; }
+.slot__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-right: 56px; /* respeta el bookmark a la derecha */
+}
+.slot__id {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--t-38);
+  letter-spacing: 0.06em;
+  font-weight: 500;
+}
+.slot__ticker {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--t-100);
+  line-height: 1;
+}
+.slot__bottom {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 30px; /* deja ver el sparkline */
+}
+.slot__dirline {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.slot__dir {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--t-55);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+}
+.slot__dir[data-dir="CALL"] { color: var(--bull); }
+.slot__dir[data-dir="PUT"]  { color: var(--bear); }
+.slot__dir[data-dir="—"]    { color: var(--t-38); }
+.slot__dir-arrow {
+  font-size: 9px;
+  display: inline-block;
+  transform: translateY(-1px);
+}
+.slot__metrics {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.slot__score {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--t-100);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+.slot__wr {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--t-55);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Selected slot — ribbon acento + thread al panel */
+.slot.is-selected {
+  border-color: rgba(255,106,44,0.55);
+  background:
+    var(--glass-grad-3),
+    var(--surface-card-2);
+  backdrop-filter: blur(44px) saturate(200%);
+  -webkit-backdrop-filter: blur(44px) saturate(200%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.20),
+    inset 0 -1px 0 rgba(0,0,0,0.50),
+    0 0 0 1px rgba(255,106,44,0.40),
+    0 0 30px rgba(255,106,44,0.20),
+    var(--shadow-card-deep);
+}
+.slot.is-selected::after {
+  content: '';
+  position: absolute;
+  right: -13px;
+  top: 50%;
+  width: 12px;
+  height: 1px;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow);
+  z-index: 10;
+}
+/* Bookmark del slot seleccionado: override iridiscente cromado */
+.slot.is-selected .bookmark {
+  background:
+    linear-gradient(115deg,
+      rgba(255,255,255,0.45) 0%,
+      transparent 18%,
+      rgba(255,255,255,0.18) 35%,
+      transparent 52%,
+      rgba(255,255,255,0.30) 70%,
+      transparent 86%,
+      rgba(255,255,255,0.20) 100%),
+    linear-gradient(180deg,
+      #fdba74 0%,
+      #f9a8d4 35%,
+      #c4b5fd 65%,
+      #FF6A2C 100%);
+  box-shadow:
+    var(--shadow-bookmark),
+    inset 0 1px 0 rgba(255,255,255,0.55),
+    inset 0 -1px 0 rgba(0,0,0,0.30),
+    0 0 14px rgba(255,106,44,0.40);
+}
+.slot.is-selected .bookmark > span {
+  color: #1a0a0a;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.50);
+}
+
+/* Empty slot */
+.slot--empty {
+  background: linear-gradient(180deg, rgba(255,255,255,0.020) 0%, rgba(255,255,255,0.005) 100%);
+  backdrop-filter: var(--blur-soft);
+  -webkit-backdrop-filter: var(--blur-soft);
+  border: 1px dashed var(--card-border-h);
+  border-radius: var(--r-card);
+  text-align: center;
+  padding: 24px 14px;
+  color: var(--t-38);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color var(--t-fast), background var(--t-fast), border-color var(--t-fast);
+  font-weight: 500;
+}
+.slot--empty:hover {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-deep);
+}
+
+/* ============================================================
+   PANEL DERECHO
+   ============================================================ */
+.panel {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.010) 0%, transparent 18%);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  position: relative;
+}
+.panel::-webkit-scrollbar { width: 6px; }
+.panel::-webkit-scrollbar-thumb { background: var(--hair-2); border-radius: var(--r-pill); }
+
+/* ── Banner principal sticky (3 jerarquías) ── */
+.banner {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  overflow: hidden;
+  background:
+    /* iridiscente sutil de fondo (intensidad subida para que sobreviva al fondo más oscuro) */
+    linear-gradient(120deg,
+      rgba(255,106,44,0.12) 0%,
+      rgba(196,181,253,0.07) 30%,
+      rgba(253,186,116,0.08) 60%,
+      rgba(249,168,212,0.07) 100%),
+    var(--glass-grad-1),
+    linear-gradient(180deg, rgba(8,8,8,0.92) 0%, rgba(5,5,5,0.85) 100%);
+  backdrop-filter: var(--blur-strong);
+  -webkit-backdrop-filter: var(--blur-strong);
+  padding: 28px var(--gap-6) 22px;
+  border-bottom: 1px solid var(--card-border);
+  box-shadow:
+    var(--edge-glass-top),
+    var(--edge-glass-bottom),
+    0 1px 0 rgba(255,255,255,0.03);
+}
+/* ticker ghost gigante atrás */
+.banner__ghost {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 240px;
+  font-weight: 700;
+  letter-spacing: -0.06em;
+  line-height: 0.85;
+  color: transparent;
+  -webkit-text-stroke: 1.5px rgba(255,255,255,0.045);
+  text-stroke: 1.5px rgba(255,255,255,0.045);
+  pointer-events: none;
+  user-select: none;
+  z-index: 0;
+  white-space: nowrap;
+  font-family: var(--font-ui);
+  text-transform: uppercase;
+  background: linear-gradient(120deg,
+    rgba(253,186,116,0.18) 0%,
+    rgba(255,106,44,0.14) 35%,
+    rgba(196,181,253,0.14) 65%,
+    rgba(249,168,212,0.18) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  opacity: 0.55;
+  filter: blur(0.4px);
+}
+.banner__row {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--gap-5);
+}
+.banner__id {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Orden 1 — Ticker */
+.banner__ticker {
+  font-size: 38px;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1;
+  color: var(--t-100);
+}
+
+/* Orden 2 — info útil */
+.banner__order2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.banner__band {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  border-radius: var(--r-sm);
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  position: relative;
+  overflow: hidden;
+  color: #0a0a0a;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.20);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.40),
+    inset 0 -1px 0 rgba(0,0,0,0.30),
+    0 1px 2px rgba(0,0,0,0.45);
+}
+.banner__band[data-band="REVISAR"] {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tier-r-color) 80%, white 20%) 0%, var(--tier-r-color) 100%);
+  color: #fafafa;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.35);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.40), inset 0 -1px 0 rgba(0,0,0,0.28), 0 0 0 1px var(--tier-r-border), 0 1px 2px rgba(0,0,0,0.45);
+}
+.banner__band[data-band="B"] {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tier-b-color) 75%, white 25%) 0%, var(--tier-b-color) 100%);
+  color: #0b1218;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), inset 0 -1px 0 rgba(0,0,0,0.30), 0 0 0 1px var(--tier-b-border), 0 0 14px var(--tier-b-glow), 0 1px 2px rgba(0,0,0,0.45);
+}
+.banner__band[data-band="A"] {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tier-a-color) 75%, white 25%) 0%, var(--tier-a-color) 100%);
+  color: #04101d;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.18);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), inset 0 -1px 0 rgba(0,0,0,0.32), 0 0 0 1px var(--tier-a-border), 0 0 16px var(--tier-a-glow), 0 1px 2px rgba(0,0,0,0.45);
+}
+.banner__band[data-band="A+"] {
+  background:
+    linear-gradient(115deg,
+      rgba(255,255,255,0.30) 0%,
+      transparent 25%,
+      rgba(255,255,255,0.10) 50%,
+      transparent 75%,
+      rgba(255,255,255,0.20) 100%),
+    linear-gradient(180deg, color-mix(in srgb, var(--tier-ap-color) 70%, white 30%) 0%, var(--tier-ap-color) 50%, color-mix(in srgb, var(--tier-ap-color) 80%, black 20%) 100%);
+  color: #1a0421;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.22);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.50), inset 0 -1px 0 rgba(0,0,0,0.32), 0 0 0 1px var(--tier-ap-border), 0 0 20px var(--tier-ap-glow), 0 1px 2px rgba(0,0,0,0.50);
+}
+.banner__band[data-band="S"] {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tier-s-color) 70%, white 30%) 0%, var(--tier-s-color) 100%);
+  color: #1c0e02;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.30);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.55), inset 0 -1px 0 rgba(0,0,0,0.35), 0 0 0 1px var(--tier-s-border), 0 0 22px var(--tier-s-glow), 0 1px 2px rgba(0,0,0,0.50);
+}
+.banner__band[data-band="S+"] {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tier-sp-color) 30%, var(--tier-sp-base) 70%) 0%, var(--tier-sp-base) 100%);
+  color: var(--tier-sp-color);
+  text-shadow: 0 1px 0 rgba(0,0,0,0.55);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.30), inset 0 -1px 0 rgba(0,0,0,0.45), 0 0 0 1px var(--tier-sp-border), 0 0 18px var(--tier-sp-glow), 0 1px 2px rgba(0,0,0,0.50);
+}
+.banner__band > span { position: relative; z-index: 2; }
+
+.banner__dir {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--bull);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.banner__dir::before {
+  content: '';
+  width: 0; height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 7px solid currentColor;
+}
+.banner__score {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--t-55);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.banner__score b {
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--t-100);
+  font-variant-numeric: tabular-nums;
+}
+.banner__signal {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--accent);
+  padding: 4px 10px;
+  border: 1px solid var(--accent-deep);
+  border-radius: var(--r-sm);
+  background:
+    linear-gradient(180deg, rgba(255,106,44,0.14) 0%, rgba(255,106,44,0.03) 100%);
+  box-shadow: var(--bevel-soft);
+}
+
+/* Orden 3 — subíndices */
+.banner__order3 {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--t-38);
+  font-family: var(--font-ui);
+}
+.banner__order3 .sep { color: var(--t-12); }
+
+/* Botón COPIAR — pill iridiscente hero */
+.btn-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 24px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--t-100);
+  background:
+    linear-gradient(120deg,
+      rgba(255,106,44,0.18) 0%,
+      rgba(196,181,253,0.10) 30%,
+      rgba(253,186,116,0.12) 60%,
+      rgba(249,168,212,0.12) 100%),
+    rgba(22,22,22,0.62);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: var(--r-pill);
+  transition: all var(--t-base);
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.18),
+    inset 0 -1px 0 rgba(0,0,0,0.30),
+    0 4px 20px rgba(0,0,0,0.35),
+    0 0 0 1px rgba(255,255,255,0.02);
+}
+.btn-copy::before {
+  /* iridiscente sweep */
+  content: '';
+  position: absolute;
+  top: 0; left: -100%;
+  width: 100%; height: 100%;
+  background: linear-gradient(115deg,
+    transparent 30%,
+    rgba(255,255,255,0.12) 48%,
+    rgba(255,255,255,0.45) 50%,
+    rgba(255,255,255,0.12) 52%,
+    transparent 70%);
+  transition: left 600ms var(--ease);
+  pointer-events: none;
+}
+.btn-copy:hover {
+  color: var(--t-100);
+  border-color: rgba(255,255,255,0.20);
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.25),
+    inset 0 -1px 0 rgba(0,0,0,0.30),
+    0 8px 28px rgba(0,0,0,0.45),
+    0 0 30px rgba(255,106,44,0.28);
+}
+.btn-copy:hover::before { left: 100%; }
+.btn-copy > * { position: relative; z-index: 1; }
+.btn-copy.is-copied {
+  color: #0a0a0a;
+  background:
+    linear-gradient(180deg, var(--accent) 0%, var(--accent-deep) 100%);
+  border-color: var(--accent);
+}
+.btn-copy svg { width: 13px; height: 13px; stroke-width: 2; }
+
+/* ── Banner resumido ── */
+.exec {
+  padding: 22px var(--gap-6);
+  border-bottom: 1px solid var(--card-border);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.020) 0%, rgba(255,255,255,0.005) 100%),
+    rgba(13,15,18,0.55);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  box-shadow: var(--edge-glass-top);
+}
+.exec__grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) 1fr;
+  gap: var(--gap-7);
+  align-items: center;
+}
+.exec__price {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.exec__price-label {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--t-38);
+  font-weight: 500;
+}
+.exec__price-num {
+  font-family: var(--font-mono);
+  font-size: 38px;
+  font-weight: 500;
+  letter-spacing: -0.035em;
+  color: var(--t-100);
+  line-height: 1;
+}
+.exec__price-chg {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: -0.01em;
+  color: var(--bull);
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+.exec__price-chg::before {
+  content: '▲';
+  font-size: 8px;
+}
+
+/* Right: chips compactos en grid */
+.exec__chips {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px 22px;
+}
+.chip {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.chip__label {
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--t-38);
+  font-weight: 500;
+}
+.chip__val {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--t-100);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.005em;
+  line-height: 1.3;
+}
+.chip__val .dim  { color: var(--t-55); font-weight: 400; }
+.chip__val .pos  { color: var(--bull); }
+.chip__val .neg  { color: var(--bear); }
+.chip__val .accent { color: var(--accent); }
+
+/* Flags row (estilo a — pill plano sin emoji) */
+.exec__flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--hair-2);
+  grid-column: 1 / -1;
+}
+.flag {
+  font-family: var(--font-ui);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 4px 10px 4px 8px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--hair-3);
+  color: var(--t-90);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.030) 0%, transparent 100%),
+    var(--bg-elev-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: var(--bevel-soft);
+}
+.flag::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: var(--r-pill);
+  background: currentColor;
+  opacity: 0.85;
+  flex-shrink: 0;
+}
+.flag--warn  { color: var(--warn); border-color: rgba(245,158,11,0.40); background: linear-gradient(180deg, rgba(245,158,11,0.10) 0%, rgba(245,158,11,0.02) 100%); }
+.flag--ok    { color: var(--ok);   border-color: rgba(34,197,94,0.40);  background: linear-gradient(180deg, rgba(34,197,94,0.10) 0%, rgba(34,197,94,0.02) 100%); }
+.flag--info  { color: var(--accent); border-color: var(--accent-deep);   background: linear-gradient(180deg, rgba(255,106,44,0.14) 0%, rgba(255,106,44,0.03) 100%); }
+
+/* ── Gráfico ── */
+.chart {
+  padding: 24px var(--gap-6);
+  border-bottom: 1px solid var(--hair);
+}
+.chart__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.chart__title {
+  font-size: 10px;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--t-55);
+  font-weight: 500;
+}
+.chart__title b {
+  color: var(--t-90);
+  font-weight: 500;
+  margin-right: 8px;
+}
+.chart__legend {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--t-55);
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+.chart__legend i {
+  display: inline-block;
+  width: 10px;
+  height: 2px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.chart__legend .ma20 i { background: var(--accent); }
+.chart__legend .ma40 i { background: var(--band-b); }
+.chart__legend .ma200 i { background: var(--t-55); }
+
+.chart__canvas {
+  position: relative;
+  background:
+    var(--glass-grad-1),
+    var(--surface-card);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border: 1px solid var(--card-border);
+  border-radius: var(--r-md);
+  padding: 18px 14px 28px;
+  height: 280px;
+  overflow: hidden;
+  box-shadow:
+    var(--edge-glass-top),
+    var(--edge-glass-bottom),
+    var(--shadow-card);
+}
+.chart__canvas svg { width: 100%; height: 100%; display: block; }
+
+.chart__yaxis {
+  position: absolute;
+  top: 12px;
+  bottom: 18px;
+  right: 8px;
+  width: 60px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--t-38);
+  pointer-events: none;
+}
+.chart__open {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--t-55);
+  transition: color var(--t-fast);
+  margin-top: 14px;
+  font-weight: 500;
+}
+.chart__open:hover { color: var(--accent); }
+.chart__open::after { content: '↗'; }
+
+/* ── Detalle técnico (colapsado por default) ── */
+.detail {
+  padding: 22px var(--gap-6);
+  border-bottom: 1px solid var(--hair);
+}
+.detail__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0;
+  cursor: pointer;
+  transition: color var(--t-fast);
+}
+.detail__head.is-open { margin-bottom: var(--gap-5); }
+.detail__title {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--t-55);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.detail__title::before {
+  content: '';
+  width: 16px;
+  height: 1px;
+  background: var(--accent);
+  display: inline-block;
+}
+.detail__toggle {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--t-55);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: color var(--t-fast);
+  font-weight: 500;
+}
+.detail__toggle:hover { color: var(--accent); }
+.detail__toggle .arrow {
+  display: inline-block;
+  transition: transform var(--t-fast);
+  font-size: 11px;
+  transform: rotate(0deg);
+}
+.detail__head.is-open .arrow { transform: rotate(180deg); }
+
+.detail__grid {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  row-gap: 14px;
+  column-gap: var(--gap-5);
+  align-items: start;
+}
+.detail__grid[hidden] { display: none; }
+
+.detail__block-label {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--t-55);
+  font-weight: 600;
+  padding-top: 3px;
+  position: relative;
+}
+.detail__block-label::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 8px;
+  width: 6px;
+  height: 1px;
+  background: var(--accent);
+}
+.detail__block-content {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--t-90);
+  line-height: 1.65;
+  letter-spacing: -0.005em;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+}
+.detail__block-content .k { color: var(--t-55); }
+.detail__block-content .v { color: var(--t-100); }
+.detail__block-content .pos { color: var(--bull); }
+.detail__block-content .neg { color: var(--bear); }
+.detail__block-content .accent { color: var(--accent); }
+.detail__block-content .dim { color: var(--t-55); }
+.detail__block-content .check { color: var(--ok); }
+.detail__block-content .warn { color: var(--warn); }
+.detail__block-content .pat {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 12px 4px 0;
+  margin-right: 10px;
+  border-right: 1px solid var(--hair);
+}
+.detail__block-content .pat:last-child { border-right: none; }
+.detail__block-content .pat .pname { color: var(--t-100); }
+.detail__block-content .pat .pmeta { color: var(--t-55); font-size: 10.5px; }
+
+.detail__sep {
+  grid-column: 1 / -1;
+  height: 1px;
+  background: var(--hair);
+  margin: 6px 0;
+}
+.detail__result {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-5);
+  padding: 14px 18px;
+  margin-top: 6px;
+  background:
+    linear-gradient(180deg, rgba(255,106,44,0.08) 0%, rgba(255,106,44,0.02) 100%);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  box-shadow: var(--bevel-soft);
+}
+.detail__result-label {
+  font-size: 10px;
+  letter-spacing: 0.20em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 700;
+}
+.detail__result-val {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--t-100);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.detail__result-val .big {
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--t-100);
+  margin-right: 14px;
+}
+
+/* ============================================================
+   FOOTER
+   ============================================================ */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--gap-6);
+  background:
+    var(--glass-grad-1),
+    linear-gradient(180deg, rgba(13,15,18,0.78) 0%, rgba(8,9,11,0.65) 100%);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border-top: 1px solid var(--card-border);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.footer__left, .footer__right {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-4);
+}
+.btn-scan {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--t-100);
+  background:
+    var(--glass-grad-2),
+    linear-gradient(180deg, var(--bg-elev-3) 0%, var(--bg-elev-2) 100%);
+  border: 1px solid var(--hair-3);
+  border-radius: var(--r);
+  transition: all var(--t-fast);
+  box-shadow: var(--bevel-soft);
+}
+.btn-scan:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 14px var(--accent-glow-2), var(--bevel-soft);
+}
+.btn-scan svg { width: 12px; height: 12px; stroke-width: 2; }
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--t-75);
+  cursor: pointer;
+  user-select: none;
+}
+.toggle__label { color: var(--t-55); font-weight: 500; }
+.toggle__state {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: 0.10em;
+}
+.toggle__state.is-off { color: var(--t-38); }
+.toggle__switch {
+  position: relative;
+  width: 38px;
+  height: 18px;
+  border-radius: var(--r-pill);
+  background:
+    linear-gradient(180deg, rgba(0,0,0,0.4), rgba(0,0,0,0.15)),
+    var(--bg-elev-3);
+  border: 1px solid var(--hair-3);
+  transition: all var(--t-fast);
+  box-shadow:
+    inset 0 1px 1px rgba(0,0,0,0.5),
+    inset 0 -1px 0 rgba(255,255,255,0.06);
+}
+.toggle__switch::after {
+  content: '';
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(180deg, var(--accent) 0%, var(--accent-deep) 100%);
+  top: 50%;
+  left: 3px;
+  transform: translateY(-50%);
+  transition: all var(--t-base);
+  box-shadow:
+    0 0 8px var(--accent-glow),
+    inset 0 1px 0 rgba(255,255,255,0.45),
+    inset 0 -1px 0 rgba(0,0,0,0.30);
+}
+.toggle.is-on .toggle__switch {
+  background: linear-gradient(180deg, rgba(255,106,44,0.20) 0%, rgba(255,106,44,0.06) 100%);
+  border-color: var(--accent-deep);
+}
+.toggle.is-on .toggle__switch::after { left: calc(100% - 15px); }
+.toggle.is-off .toggle__switch::after {
+  background: linear-gradient(180deg, #4a4f5b 0%, #2a2d35 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.10), inset 0 -1px 0 rgba(0,0,0,0.30);
+}
+
+.footer__status {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t-55);
+  letter-spacing: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+.footer__status .ok::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--ok);
+  margin-right: 6px;
+  box-shadow: 0 0 6px rgba(34,197,94,0.5);
+}
+
+/* ============================================================
+   COPY TOAST
+   ============================================================ */
+.toast {
+  position: fixed;
+  bottom: calc(var(--footer-h) + 24px);
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background:
+    var(--glass-grad-2),
+    var(--bg-elev-3);
+  color: var(--accent);
+  border: 1px solid var(--accent-deep);
+  border-radius: var(--r);
+  padding: 10px 18px;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 700;
+  opacity: 0;
+  transition: all var(--t-base);
+  z-index: 200;
+  box-shadow: 0 0 24px var(--accent-glow), 0 8px 32px rgba(0,0,0,0.6), var(--bevel-full);
+  pointer-events: none;
+}
+.toast.is-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 1500px) {
+  .banner__ticker { font-size: 32px; }
+  .exec__grid { gap: var(--gap-6); }
+  .exec__chips { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 1300px) {
+  :root { --watchlist-w: 296px; }
+  .banner__ticker { font-size: 28px; }
+  .banner { padding: 18px var(--gap-5) 14px; }
+  .exec, .detail, .chart { padding-left: var(--gap-5); padding-right: var(--gap-5); }
+  .topbar { padding: 0 var(--gap-5); }
+}
+
+</style>
+</head>
+<body>
+
+<div class="health-line"></div>
+
+<div class="app">
+
+  <!-- ============================================================
+       TOP BAR
+       ============================================================ -->
+  <header class="topbar">
+    <div class="topbar__brand">
+      <span class="brand__mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12h3l2-7 4 14 2-7h7"/>
+        </svg>
+      </span>
+      <span class="brand__text">
+        <span class="brand__name">PHOENIX</span>
+        <span class="brand__sub">v5 · cockpit</span>
+      </span>
+    </div>
+
+    <nav class="topbar__nav" aria-label="pestañas">
+      <button class="tab">configuración</button>
+      <button class="tab">dashboard</button>
+      <button class="tab is-active">cockpit</button>
+      <button class="tab">memento</button>
+    </nav>
+
+    <div class="topbar__meta">
+      <span class="topbar__live">live</span>
+      <span class="topbar__clock">14:30:04 ET</span>
+      <span class="topbar__date">vie 25 abr 2026</span>
+    </div>
+  </header>
+
+  <!-- ============================================================
+       API BAR (más fina)
+       ============================================================ -->
+  <section class="apibar" aria-label="estado api">
+
+    <div class="apibar__cell apibar__cell--summary">
+      <span class="apibar__label">api · twelvedata</span>
+      <span class="apibar__provider">
+        <span class="apibar__provider-name">5 keys</span>
+        <span class="apibar__provider-meta">round-robin</span>
+      </span>
+    </div>
+
+    <!-- KEY 1 -->
+    <div class="apibar__cell">
+      <div class="apibar__keyhead">
+        <span class="apibar__keyname">key 1</span>
+        <span class="apibar__keysep">·</span>
+        <span class="apibar__keylast">hace 3s</span>
+      </div>
+      <div class="apibar__keyusage">4/8</div>
+      <div class="apibar__bar"><i style="width:50%"></i></div>
+    </div>
+
+    <!-- KEY 2 -->
+    <div class="apibar__cell">
+      <div class="apibar__keyhead">
+        <span class="apibar__keyname">key 2</span>
+        <span class="apibar__keysep">·</span>
+        <span class="apibar__keylast">hace 1s</span>
+      </div>
+      <div class="apibar__keyusage">6/8</div>
+      <div class="apibar__bar"><i style="width:75%"></i></div>
+    </div>
+
+    <!-- KEY 3 -->
+    <div class="apibar__cell">
+      <div class="apibar__keyhead">
+        <span class="apibar__keyname">key 3</span>
+        <span class="apibar__keysep">·</span>
+        <span class="apibar__keylast">hace 7s</span>
+      </div>
+      <div class="apibar__keyusage">2/8</div>
+      <div class="apibar__bar"><i style="width:25%"></i></div>
+    </div>
+
+    <!-- KEY 4 -->
+    <div class="apibar__cell">
+      <div class="apibar__keyhead">
+        <span class="apibar__keyname">key 4</span>
+        <span class="apibar__keysep">·</span>
+        <span class="apibar__keylast">hace 4s</span>
+      </div>
+      <div class="apibar__keyusage">5/8</div>
+      <div class="apibar__bar"><i style="width:62.5%"></i></div>
+    </div>
+
+    <!-- KEY 5 -->
+    <div class="apibar__cell">
+      <div class="apibar__keyhead">
+        <span class="apibar__keyname">key 5</span>
+        <span class="apibar__keysep">·</span>
+        <span class="apibar__keylast">hace 9s</span>
+      </div>
+      <div class="apibar__keyusage">3/8</div>
+      <div class="apibar__bar"><i style="width:37.5%"></i></div>
+    </div>
+
+    <!-- DAILY (5 barras apiladas) -->
+    <div class="apibar__cell">
+      <div class="daily-stack">
+        <div class="daily-row">
+          <span class="daily-row__name">key 1</span>
+          <span class="daily-row__bar"><i style="width:39%"></i></span>
+          <span class="daily-row__num">312<span class="dim">/800</span></span>
+        </div>
+        <div class="daily-row">
+          <span class="daily-row__name">key 2</span>
+          <span class="daily-row__bar"><i style="width:35.9%"></i></span>
+          <span class="daily-row__num">287<span class="dim">/800</span></span>
+        </div>
+        <div class="daily-row">
+          <span class="daily-row__name">key 3</span>
+          <span class="daily-row__bar"><i style="width:24.75%"></i></span>
+          <span class="daily-row__num">198<span class="dim">/800</span></span>
+        </div>
+        <div class="daily-row">
+          <span class="daily-row__name">key 4</span>
+          <span class="daily-row__bar"><i style="width:32%"></i></span>
+          <span class="daily-row__num">256<span class="dim">/800</span></span>
+        </div>
+        <div class="daily-row">
+          <span class="daily-row__name">key 5</span>
+          <span class="daily-row__bar"><i style="width:21.6%"></i></span>
+          <span class="daily-row__num">173<span class="dim">/800</span></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       MAIN
+       ============================================================ -->
+  <main class="main">
+
+    <!-- =================== WATCHLIST =================== -->
+    <aside class="watchlist" aria-label="watchlist">
+      <header class="wl-header">
+        <span class="wl-title">watchlist</span>
+        <span class="wl-count">06 / 06</span>
+      </header>
+
+      <div class="slot-list">
+
+        <!-- slot 1 — SPY · A · CALL · 9 -->
+        <article class="slot" data-slot="1">
+          <span class="bookmark" data-band="A"><span>A</span></span>
+          <div class="slot__row">
+            <div class="slot__head">
+              <span class="slot__id">01</span>
+              <span class="slot__ticker">SPY</span>
+            </div>
+            <div class="slot__bottom">
+              <span class="slot__dirline">
+                <span class="slot__dir" data-dir="CALL"><span class="slot__dir-arrow">▲</span> CALL</span>
+              </span>
+              <span class="slot__metrics">
+                <span class="slot__score">9.0</span>
+                <span class="slot__wr">61%</span>
+              </span>
+            </div>
+          </div>
+          <div class="slot__spark">
+            <svg viewBox="0 0 320 50" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="sg1" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#FF6A2C" stop-opacity="0.55"/>
+                  <stop offset="100%" stop-color="#FF6A2C" stop-opacity="0"/>
+                </linearGradient>
+                <linearGradient id="ss1" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stop-color="#FF6A2C" stop-opacity="0.55"/>
+                  <stop offset="50%" stop-color="#FF6A2C" stop-opacity="1"/>
+                  <stop offset="100%" stop-color="#FFB088" stop-opacity="1"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,38 L20,36 L40,32 L60,34 L80,30 L100,26 L120,28 L140,22 L160,24 L180,18 L200,16 L220,20 L240,14 L260,12 L280,8 L300,6 L320,4 L320,50 L0,50 Z" fill="url(#sg1)"/>
+              <path d="M0,38 L20,36 L40,32 L60,34 L80,30 L100,26 L120,28 L140,22 L160,24 L180,18 L200,16 L220,20 L240,14 L260,12 L280,8 L300,6 L320,4" fill="none" stroke="url(#ss1)" stroke-width="1.4"/>
+            </svg>
+          </div>
+        </article>
+
+        <!-- slot 2 — QQQ · A+ · CALL · 12 (SELECTED) -->
+        <article class="slot is-selected" data-slot="2">
+          <span class="bookmark" data-band="A+"><span>A+</span></span>
+          <div class="slot__row">
+            <div class="slot__head">
+              <span class="slot__id">02</span>
+              <span class="slot__ticker">QQQ</span>
+            </div>
+            <div class="slot__bottom">
+              <span class="slot__dirline">
+                <span class="slot__dir" data-dir="CALL"><span class="slot__dir-arrow">▲</span> CALL</span>
+              </span>
+              <span class="slot__metrics">
+                <span class="slot__score">12.0</span>
+                <span class="slot__wr">68%</span>
+              </span>
+            </div>
+          </div>
+          <div class="slot__spark">
+            <svg viewBox="0 0 320 50" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="sg2" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#FF6A2C" stop-opacity="0.65"/>
+                  <stop offset="100%" stop-color="#FF6A2C" stop-opacity="0"/>
+                </linearGradient>
+                <linearGradient id="ss2" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stop-color="#FF6A2C" stop-opacity="0.6"/>
+                  <stop offset="50%" stop-color="#FF6A2C" stop-opacity="1"/>
+                  <stop offset="100%" stop-color="#FFB088" stop-opacity="1"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,42 L20,40 L40,37 L60,34 L80,36 L100,30 L120,28 L140,32 L160,26 L180,22 L200,18 L220,20 L240,14 L260,10 L280,8 L300,6 L320,4 L320,50 L0,50 Z" fill="url(#sg2)"/>
+              <path d="M0,42 L20,40 L40,37 L60,34 L80,36 L100,30 L120,28 L140,32 L160,26 L180,22 L200,18 L220,20 L240,14 L260,10 L280,8 L300,6 L320,4" fill="none" stroke="url(#ss2)" stroke-width="1.6"/>
+            </svg>
+          </div>
+        </article>
+
+        <!-- slot 3 — IWM · REVISAR -->
+        <article class="slot" data-slot="3">
+          <span class="bookmark" data-band="REVISAR"><span>R</span></span>
+          <div class="slot__row">
+            <div class="slot__head">
+              <span class="slot__id">03</span>
+              <span class="slot__ticker">IWM</span>
+            </div>
+            <div class="slot__bottom">
+              <span class="slot__dirline">
+                <span class="slot__dir" data-dir="—">—</span>
+              </span>
+              <span class="slot__metrics">
+                <span class="slot__score">4.0</span>
+                <span class="slot__wr">42%</span>
+              </span>
+            </div>
+          </div>
+          <div class="slot__spark">
+            <svg viewBox="0 0 320 50" preserveAspectRatio="none">
+              <path d="M0,28 L20,30 L40,26 L60,32 L80,28 L100,30 L120,26 L140,32 L160,28 L180,34 L200,30 L220,28 L240,32 L260,30 L280,28 L300,30 L320,28" fill="none" stroke="#9aa0aa" stroke-width="1.2" opacity="0.85"/>
+            </svg>
+          </div>
+        </article>
+
+        <!-- slot 4 — AAPL · B · CALL · 6 -->
+        <article class="slot" data-slot="4">
+          <span class="bookmark" data-band="B"><span>B</span></span>
+          <div class="slot__row">
+            <div class="slot__head">
+              <span class="slot__id">04</span>
+              <span class="slot__ticker">AAPL</span>
+            </div>
+            <div class="slot__bottom">
+              <span class="slot__dirline">
+                <span class="slot__dir" data-dir="CALL"><span class="slot__dir-arrow">▲</span> CALL</span>
+              </span>
+              <span class="slot__metrics">
+                <span class="slot__score">6.0</span>
+                <span class="slot__wr">54%</span>
+              </span>
+            </div>
+          </div>
+          <div class="slot__spark">
+            <svg viewBox="0 0 320 50" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="sg4" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.50"/>
+                  <stop offset="100%" stop-color="#60a5fa" stop-opacity="0"/>
+                </linearGradient>
+                <linearGradient id="ss4" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.6"/>
+                  <stop offset="100%" stop-color="#bfdbfe" stop-opacity="1"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,32 L20,30 L40,34 L60,28 L80,30 L100,26 L120,28 L140,22 L160,24 L180,20 L200,22 L220,18 L240,20 L260,16 L280,18 L300,14 L320,12 L320,50 L0,50 Z" fill="url(#sg4)"/>
+              <path d="M0,32 L20,30 L40,34 L60,28 L80,30 L100,26 L120,28 L140,22 L160,24 L180,20 L200,22 L220,18 L240,20 L260,16 L280,18 L300,14 L320,12" fill="none" stroke="url(#ss4)" stroke-width="1.4"/>
+            </svg>
+          </div>
+        </article>
+
+        <!-- slot 5 — NVDA · S+ · CALL · 18 -->
+        <article class="slot" data-slot="5">
+          <span class="bookmark bookmark--metallic" data-band="S+">
+            <span class="metal-sweep"></span>
+            <span>S+</span>
+          </span>
+          <div class="slot__row">
+            <div class="slot__head">
+              <span class="slot__id">05</span>
+              <span class="slot__ticker">NVDA</span>
+            </div>
+            <div class="slot__bottom">
+              <span class="slot__dirline">
+                <span class="slot__dir" data-dir="CALL"><span class="slot__dir-arrow">▲</span> CALL</span>
+              </span>
+              <span class="slot__metrics">
+                <span class="slot__score">18.0</span>
+                <span class="slot__wr">76%</span>
+              </span>
+            </div>
+          </div>
+          <div class="slot__spark">
+            <svg viewBox="0 0 320 50" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="sg5" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#f5f5f7" stop-opacity="0.55"/>
+                  <stop offset="100%" stop-color="#f5f5f7" stop-opacity="0"/>
+                </linearGradient>
+                <linearGradient id="ss5" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stop-color="#cbd5e1" stop-opacity="0.7"/>
+                  <stop offset="100%" stop-color="#ffffff" stop-opacity="1"/>
+                </linearGradient>
+              </defs>
+              <path d="M0,46 L20,44 L40,40 L60,36 L80,30 L100,24 L120,20 L140,16 L160,12 L180,10 L200,8 L220,6 L240,4 L260,3 L280,3 L300,2 L320,2 L320,50 L0,50 Z" fill="url(#sg5)"/>
+              <path d="M0,46 L20,44 L40,40 L60,36 L80,30 L100,24 L120,20 L140,16 L160,12 L180,10 L200,8 L220,6 L240,4 L260,3 L280,3 L300,2 L320,2" fill="none" stroke="url(#ss5)" stroke-width="1.6"/>
+            </svg>
+          </div>
+        </article>
+
+        <!-- slot 6 — empty -->
+        <article class="slot--empty" data-slot="6">
+          + agregar slot
+        </article>
+
+      </div>
+    </aside>
+
+    <!-- =================== PANEL DERECHO =================== -->
+    <section class="panel" aria-label="detalle">
+
+      <!-- Banner principal sticky · 3 jerarquías -->
+      <header class="banner">
+        <span class="banner__ghost" aria-hidden="true">QQQ</span>
+        <div class="banner__row">
+          <div class="banner__id">
+            <!-- Orden 1 -->
+            <h1 class="banner__ticker">QQQ</h1>
+            <!-- Orden 2 -->
+            <div class="banner__order2">
+              <span class="banner__band" data-band="A+"><span>A+</span></span>
+              <span class="banner__dir">CALL</span>
+              <span class="banner__score">score <b>12.0</b></span>
+              <span class="banner__signal">setup</span>
+            </div>
+            <!-- Orden 3 -->
+            <div class="banner__order3">
+              <span>nasdaq 100 etf</span>
+              <span class="sep">·</span>
+              <span>slot 02</span>
+              <span class="sep">·</span>
+              <span>fixture qqq_v5_2_0</span>
+            </div>
+          </div>
+          <button class="btn-copy" id="btnCopy" aria-label="copiar señal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="8" y="8" width="12" height="12" rx="2"/>
+              <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>
+            </svg>
+            <span class="btn-copy__label">copiar</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- Banner resumido -->
+      <section class="exec" aria-label="resumen ejecutivo">
+        <div class="exec__grid">
+          <div class="exec__price">
+            <div class="exec__price-label">último</div>
+            <div class="exec__price-num">$485.32</div>
+            <div class="exec__price-chg">+0.82% · +$3.96</div>
+          </div>
+          <div class="exec__chips">
+            <div class="chip">
+              <span class="chip__label">alineación</span>
+              <span class="chip__val"><span class="pos">3/3 bullish</span> <span class="dim">15M·1H·D</span></span>
+            </div>
+            <div class="chip">
+              <span class="chip__label">atr 15M</span>
+              <span class="chip__val">0.74% <span class="dim">($3.59)</span></span>
+            </div>
+            <div class="chip">
+              <span class="chip__label">vela</span>
+              <span class="chip__val">14:30 ET <span class="dim">· calc +4s</span></span>
+            </div>
+            <div class="chip">
+              <span class="chip__label">resistencias</span>
+              <span class="chip__val">$487.20 <span class="dim">PD</span> · $489.50 <span class="dim">R1</span></span>
+            </div>
+            <div class="chip">
+              <span class="chip__label">soportes</span>
+              <span class="chip__val">$483.80 <span class="dim">S1</span> · $481.10 <span class="dim">PD</span></span>
+            </div>
+            <div class="chip">
+              <span class="chip__label">vol mediana 15M</span>
+              <span class="chip__val">1.8× <span class="dim">·</span> <span class="accent">vela 2.1×</span> <span class="dim">(0.66)</span></span>
+            </div>
+          </div>
+          <div class="exec__flags">
+            <span class="flag flag--warn">catalizador</span>
+            <span class="flag flag--info">squeeze</span>
+            <span class="flag flag--ok">orb</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Gráfico (antes del detalle) -->
+      <section class="chart" aria-label="gráfico ticker">
+        <div class="chart__head">
+          <span class="chart__title"><b>QQQ · 15M</b><span style="color:var(--t-38);">últimas 30 velas</span></span>
+          <span class="chart__legend">
+            <span class="ma20"><i></i>MA20</span>
+            <span class="ma40"><i></i>MA40</span>
+            <span class="ma200"><i></i>MA200</span>
+          </span>
+        </div>
+        <div class="chart__canvas">
+          <svg viewBox="0 0 920 240" preserveAspectRatio="none" id="chartSvg">
+            <g stroke="rgba(255,255,255,0.04)" stroke-width="1">
+              <line x1="0" y1="40" x2="920" y2="40"/>
+              <line x1="0" y1="80" x2="920" y2="80"/>
+              <line x1="0" y1="120" x2="920" y2="120"/>
+              <line x1="0" y1="160" x2="920" y2="160"/>
+              <line x1="0" y1="200" x2="920" y2="200"/>
+            </g>
+            <path d="M10,180 L40,178 L70,176 L100,174 L130,172 L160,170 L190,168 L220,166 L250,164 L280,162 L310,160 L340,158 L370,156 L400,154 L430,152 L460,150 L490,148 L520,146 L550,144 L580,142 L610,140 L640,138 L670,136 L700,134 L730,132 L760,130 L790,128 L820,126 L850,124 L880,122 L910,120" fill="none" stroke="rgba(245,245,247,0.45)" stroke-width="1.2"/>
+            <path d="M10,140 L40,138 L70,135 L100,132 L130,130 L160,128 L190,125 L220,122 L250,120 L280,118 L310,115 L340,112 L370,110 L400,108 L430,105 L460,102 L490,100 L520,97 L550,95 L580,92 L610,90 L640,88 L670,85 L700,82 L730,80 L760,78 L790,75 L820,72 L850,70 L880,68 L910,65" fill="none" stroke="#60a5fa" stroke-width="1.4" opacity="0.75"/>
+            <path d="M10,120 L40,116 L70,112 L100,108 L130,105 L160,102 L190,98 L220,94 L250,90 L280,86 L310,82 L340,78 L370,75 L400,72 L430,68 L460,64 L490,60 L520,57 L550,54 L580,52 L610,50 L640,48 L670,46 L700,44 L730,42 L760,40 L790,38 L820,36 L850,34 L880,32 L910,30" fill="none" stroke="#FF6A2C" stroke-width="1.6"/>
+            <g id="candles"></g>
+          </svg>
+          <div class="chart__yaxis">
+            <span>$489.50</span>
+            <span>$487.20</span>
+            <span>$485.32</span>
+            <span>$483.80</span>
+            <span>$481.10</span>
+          </div>
+        </div>
+        <a class="chart__open" href="https://www.tradingview.com/symbols/NASDAQ-QQQ/" target="_blank" rel="noopener">abrir en tradingview</a>
+      </section>
+
+      <!-- Detalle técnico (colapsado por default) -->
+      <section class="detail" aria-label="detalle técnico">
+        <div class="detail__head" id="detailHead">
+          <span class="detail__title">detalle técnico</span>
+          <button class="detail__toggle" id="detailToggle">
+            <span class="label">expandir</span>
+            <span class="arrow">▾</span>
+          </button>
+        </div>
+
+        <div class="detail__grid" id="detailGrid" hidden>
+
+          <span class="detail__block-label">precio</span>
+          <span class="detail__block-content">
+            <span><span class="k">último</span> <span class="v">$485.32</span></span>
+            <span><span class="k">chg día</span> <span class="pos">+0.82%</span></span>
+            <span><span class="k">ATR 15M</span> <span class="v">0.74%</span> <span class="dim">($3.59)</span></span>
+            <span><span class="k">dMA200</span> <span class="pos">+3.2%</span> <span class="dim">($470.12)</span></span>
+          </span>
+
+          <span class="detail__block-label">contexto</span>
+          <span class="detail__block-content">
+            <span><span class="k">align</span> <span class="pos">3/3</span> <span class="dim">15M:bull · 1H:bull · D:bull</span></span>
+            <span><span class="k">MAs D</span> <span class="v">20=$483 · 40=$478 · 200=$470</span></span>
+            <span><span class="k">BB 1H</span> <span class="v">$482.10 / $484.50 / $486.90</span></span>
+          </span>
+
+          <span class="detail__block-label">volumen</span>
+          <span class="detail__block-content">
+            <span><span class="k">15M</span> <span class="v">1.8×</span> <span class="dim">mediana día</span></span>
+            <span><span class="k">1H</span> <span class="v">1.4×</span></span>
+            <span><span class="k">vela curso</span> <span class="v">2.1×</span> <span class="dim">proyectado (frac 0.66)</span></span>
+            <span><span class="k">secuencia</span> <span class="pos">↑ creciente</span></span>
+          </span>
+
+          <span class="detail__block-label">fuerza relativa</span>
+          <span class="detail__block-content">
+            <span><span class="k">vs SPY</span> <span class="pos">+0.87%</span></span>
+            <span><span class="k">DivSPY</span> <span class="v">QQQ +0.82% · SPY +0.41%</span></span>
+          </span>
+
+          <span class="detail__block-label">niveles</span>
+          <span class="detail__block-content">
+            <span><span class="k">R</span> <span class="v">$487.20</span> <span class="dim">(PD)</span></span>
+            <span><span class="v">$489.50</span> <span class="dim">(R1)</span></span>
+            <span><span class="k">S</span> <span class="v">$483.80</span> <span class="dim">(S1)</span></span>
+            <span><span class="v">$481.10</span> <span class="dim">(PD)</span></span>
+          </span>
+
+          <span class="detail__block-label">eventos</span>
+          <span class="detail__block-content">
+            <span><span class="warn">⚡</span> <span class="v">Squeeze BB 1H</span> <span class="dim">ancho p12 → expansión</span></span>
+            <span><span class="check">↑</span> <span class="v">ORB Breakout</span> <span class="dim">rango $484.10–$485.80</span></span>
+            <span><span class="warn">⚠</span> <span class="v">Catalizador</span> <span class="dim">chg &gt; 1.5× ATR</span></span>
+          </span>
+
+          <span class="detail__block-label">patrones <span style="color:var(--t-38);font-family:var(--font-mono);font-size:9.5px;">(3)</span></span>
+          <span class="detail__block-content">
+            <span class="pat"><span class="pname">Doji BB inf</span><span class="pmeta">15M · bull · trigger · w:2</span></span>
+            <span class="pat"><span class="pname">ORB Breakout</span><span class="pmeta">15M · bull · trigger · w:2</span></span>
+            <span class="pat"><span class="pname">BBinf_1H</span><span class="pmeta">1H · bull · confirm · w:3</span></span>
+          </span>
+
+          <span class="detail__block-label">scoring</span>
+          <span class="detail__block-content">
+            <span><span class="k">estructura</span> <span class="check">✓</span></span>
+            <span><span class="k">triggers</span> <span class="v">2</span> <span class="dim">(suma 4.0)</span></span>
+            <span><span class="k">confirms</span> <span class="v">1</span> <span class="dim">(suma 3.0) tras dedup</span></span>
+            <span><span class="k">bloqueo</span> <span class="dim">—</span></span>
+            <span><span class="k">conflicto</span> <span class="dim">—</span></span>
+          </span>
+
+          <div class="detail__sep"></div>
+
+          <div class="detail__result">
+            <span class="detail__result-label">resultado</span>
+            <span class="detail__result-val">
+              <span class="big">12.0</span>
+              <span style="color:var(--bull); margin-right:14px;">CALL</span>
+              <span style="color:var(--band-aplus); margin-right:14px;">A+</span>
+              <span style="color:var(--accent);">SETUP</span>
+            </span>
+          </div>
+
+          <span class="detail__block-label">meta</span>
+          <span class="detail__block-content">
+            <span><span class="k">engine</span> <span class="v">5.2.0</span></span>
+            <span><span class="k">fixture</span> <span class="v">qqq_v5_2_0</span> <span class="dim">v5.2.0</span></span>
+            <span><span class="k">slot</span> <span class="v">02</span></span>
+            <span><span class="k">vela</span> <span class="v">2026-04-25 14:30 ET</span></span>
+            <span><span class="k">calc</span> <span class="v">2026-04-25 14:30:04 ET</span></span>
+          </span>
+        </div>
+      </section>
+
+    </section>
+  </main>
+
+  <!-- ============================================================
+       FOOTER
+       ============================================================ -->
+  <footer class="footer">
+    <div class="footer__left">
+      <button class="btn-scan" id="btnScan">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 21l-4.35-4.35"/>
+          <circle cx="11" cy="11" r="7"/>
+        </svg>
+        <span>scan ahora</span>
+      </button>
+      <div class="toggle is-on" id="autoToggle">
+        <span class="toggle__label">modo auto</span>
+        <span class="toggle__switch"></span>
+        <span class="toggle__state" id="autoState">on</span>
+      </div>
+    </div>
+    <div class="footer__right">
+      <span class="footer__status">
+        <span class="ok">motor scoring</span>
+        <span class="ok">data engine</span>
+        <span class="ok">database</span>
+      </span>
+    </div>
+  </footer>
+
+</div>
+
+<div class="toast" id="toast">✓ copiado al portapapeles</div>
+
+<script>
+// ──────────────────────────────────────────────────────────────
+// Candles (30 velas → $485.32)
+// ──────────────────────────────────────────────────────────────
+(function buildCandles() {
+  const g = document.getElementById('candles');
+  if (!g) return;
+  const series = [
+    {o:482.1, h:483.0, l:481.5, c:482.8},{o:482.8, h:483.5, l:482.0, c:482.4},
+    {o:482.4, h:483.0, l:481.9, c:482.7},{o:482.7, h:483.4, l:481.8, c:482.0},
+    {o:482.0, h:482.8, l:481.2, c:482.6},{o:482.6, h:483.2, l:482.1, c:483.0},
+    {o:483.0, h:483.5, l:482.5, c:482.7},{o:482.7, h:483.4, l:482.0, c:483.2},
+    {o:483.2, h:484.0, l:482.8, c:483.6},{o:483.6, h:484.1, l:483.0, c:483.4},
+    {o:483.4, h:484.2, l:483.0, c:484.0},{o:484.0, h:484.3, l:483.5, c:483.8},
+    {o:483.8, h:484.4, l:483.4, c:484.2},{o:484.2, h:484.6, l:483.7, c:483.9},
+    {o:483.9, h:484.5, l:483.5, c:484.4},{o:484.4, h:484.8, l:484.0, c:484.6},
+    {o:484.6, h:484.9, l:484.2, c:484.3},{o:484.3, h:484.7, l:483.9, c:484.5},
+    {o:484.5, h:485.0, l:484.2, c:484.8},{o:484.8, h:485.2, l:484.5, c:484.6},
+    {o:484.6, h:485.0, l:484.3, c:484.9},{o:484.9, h:485.3, l:484.6, c:485.1},
+    {o:485.1, h:485.4, l:484.8, c:484.7},{o:484.7, h:485.1, l:484.4, c:485.0},
+    {o:485.0, h:485.5, l:484.8, c:485.3},{o:485.3, h:485.7, l:485.0, c:485.0},
+    {o:485.0, h:485.4, l:484.7, c:485.2},{o:485.2, h:485.6, l:484.9, c:485.4},
+    {o:485.4, h:485.8, l:485.1, c:485.1},{o:485.1, h:485.5, l:484.9, c:485.32}
+  ];
+  const minP = Math.min(...series.map(c=>c.l));
+  const maxP = Math.max(...series.map(c=>c.h));
+  const pad = (maxP - minP) * 0.20;
+  const top = maxP + pad, bot = minP - pad;
+  const chartH = 240, chartW = 920;
+  const slotW = chartW / series.length;
+  const bodyW = slotW * 0.55;
+  const yOf = p => chartH - ((p - bot) / (top - bot)) * chartH;
+  const NS = 'http://www.w3.org/2000/svg';
+  series.forEach((c, i) => {
+    const cx = i * slotW + slotW / 2;
+    const isUp = c.c >= c.o;
+    const color = isUp ? '#FF6A2C' : '#f5f5f7';
+    const wick = document.createElementNS(NS, 'line');
+    wick.setAttribute('x1', cx); wick.setAttribute('x2', cx);
+    wick.setAttribute('y1', yOf(c.h)); wick.setAttribute('y2', yOf(c.l));
+    wick.setAttribute('stroke', color);
+    wick.setAttribute('stroke-width', '1');
+    wick.setAttribute('opacity', isUp ? 0.95 : 0.85);
+    g.appendChild(wick);
+    const body = document.createElementNS(NS, 'rect');
+    const yTop = Math.min(yOf(c.o), yOf(c.c));
+    const h = Math.max(1, Math.abs(yOf(c.o) - yOf(c.c)));
+    body.setAttribute('x', cx - bodyW / 2);
+    body.setAttribute('y', yTop);
+    body.setAttribute('width', bodyW);
+    body.setAttribute('height', h);
+    body.setAttribute('fill', isUp ? color : 'transparent');
+    body.setAttribute('stroke', color);
+    body.setAttribute('stroke-width', '1');
+    body.setAttribute('opacity', isUp ? 0.95 : 0.85);
+    g.appendChild(body);
+  });
+})();
+
+// ──────────────────────────────────────────────────────────────
+// COPIAR
+// ──────────────────────────────────────────────────────────────
+const copyText = `═══════════════════════════════════════
+SEÑAL · QQQ · A+ · CALL · score 12.0
+═══════════════════════════════════════
+
+PRECIO
+Último:     $485.32
+Chg día:    +0.82%
+ATR 15M:    0.74% ($3.59)
+dMA200:     +3.2% ($470.12)
+
+CONTEXTO
+Alineación: 3/3 CALL  (15M:bull · 1H:bull · D:bull)
+MAs diarias: 20=$483 · 40=$478 · 200=$470
+BB 1H:      $482.1 / $484.5 / $486.9
+
+VOLUMEN
+15M:        1.8× mediana del día
+1H:         1.4× mediana del día
+Vela curso: 2.1× proyectado (fracción 0.66)
+Secuencia:  ↑ creciente
+
+FUERZA RELATIVA
+vs SPY:     +0.87%
+DivSPY:     QQQ=+0.82% · SPY=+0.41%
+
+NIVELES CLAVE
+R: $487.2 (PD) · $489.5 (R1)
+S: $483.8 (S1) · $481.1 (PD)
+
+EVENTOS
+⚡ Squeeze BB 1H   ancho p12 → expansión
+↑ ORB Breakout    rango $484.1-$485.8
+⚠️ Catalizador    chg > 1.5×ATR
+
+PATRONES (3)
+• [15M] Doji BB inf      bull · trigger · w:2
+• [15M] ORB Breakout     bull · trigger · w:2
+• [1H]  BBinf_1H         bull · confirm · w:3
+
+SCORING
+Estructura: ✓
+Triggers:   2 señales  (suma 4.0)
+Confirms:   1 señal    (suma 3.0)   tras dedup por categoría
+Bloqueo:    —
+Conflicto:  —
+
+RESULTADO
+Score:      12.0
+Dirección:  CALL
+Confianza:  A+
+Señal:      SETUP
+
+───────────────────────────────────────
+Meta
+Engine:     5.2.0
+Fixture:    qqq_v5_2_0 v5.2.0
+Slot:       02
+Vela:       2026-04-25 14:30 ET
+Cálculo:    2026-04-25 14:30:04 ET`;
+
+const btnCopy = document.getElementById('btnCopy');
+const toast = document.getElementById('toast');
+btnCopy.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(copyText);
+  } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = copyText;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+  btnCopy.classList.add('is-copied');
+  btnCopy.querySelector('.btn-copy__label').textContent = 'copiado';
+  toast.classList.add('is-visible');
+  setTimeout(() => {
+    btnCopy.classList.remove('is-copied');
+    btnCopy.querySelector('.btn-copy__label').textContent = 'copiar';
+    toast.classList.remove('is-visible');
+  }, 2000);
+});
+
+// ──────────────────────────────────────────────────────────────
+// AUTO toggle
+// ──────────────────────────────────────────────────────────────
+const autoToggle = document.getElementById('autoToggle');
+const autoState = document.getElementById('autoState');
+autoToggle.addEventListener('click', () => {
+  const isOn = autoToggle.classList.contains('is-on');
+  autoToggle.classList.toggle('is-on', !isOn);
+  autoToggle.classList.toggle('is-off', isOn);
+  autoState.textContent = isOn ? 'off' : 'on';
+  autoState.classList.toggle('is-off', isOn);
+});
+
+// ──────────────────────────────────────────────────────────────
+// Slot selection
+// ──────────────────────────────────────────────────────────────
+document.querySelectorAll('.slot').forEach(slot => {
+  slot.addEventListener('click', () => {
+    document.querySelectorAll('.slot').forEach(s => s.classList.remove('is-selected'));
+    slot.classList.add('is-selected');
+  });
+});
+
+// ──────────────────────────────────────────────────────────────
+// Detail toggle (colapsado por default)
+// ──────────────────────────────────────────────────────────────
+const detailHead = document.getElementById('detailHead');
+const detailToggle = document.getElementById('detailToggle');
+const detailGrid = document.getElementById('detailGrid');
+detailHead.addEventListener('click', () => {
+  const isHidden = detailGrid.hasAttribute('hidden');
+  if (isHidden) {
+    detailGrid.removeAttribute('hidden');
+    detailHead.classList.add('is-open');
+    detailToggle.querySelector('.label').textContent = 'colapsar';
+  } else {
+    detailGrid.setAttribute('hidden', '');
+    detailHead.classList.remove('is-open');
+    detailToggle.querySelector('.label').textContent = 'expandir';
+  }
+});
+
+// ──────────────────────────────────────────────────────────────
+// Scan
+// ──────────────────────────────────────────────────────────────
+const btnScan = document.getElementById('btnScan');
+btnScan.addEventListener('click', () => {
+  const span = btnScan.querySelector('span');
+  const original = span.textContent;
+  span.textContent = 'escaneando…';
+  btnScan.style.borderColor = 'var(--accent)';
+  btnScan.style.color = 'var(--accent)';
+  setTimeout(() => {
+    span.textContent = original;
+    btnScan.style.borderColor = '';
+    btnScan.style.color = '';
+  }, 900);
+});
+</script>
+
+</body>
+</html>
