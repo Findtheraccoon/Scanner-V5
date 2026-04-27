@@ -497,8 +497,8 @@
   /* Doble capa: iridiscente conic + dithering SVG turbulence encima.
      El noise overlay rompe las bandas visibles del gradient gradual. */
   background:
-    /* dithering — turbulence fina con ramp de luminancia, mix overlay */
-    url("data:image/svg+xml;utf8,<svg viewBox='0 0 320 320' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.8' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1   0 0 0 0 1   0 0 0 0 1   0 0 0 0.5 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
+    /* dithering — turbulence fina con ramp de luminancia, mix overlay (alpha 0.3) */
+    url("data:image/svg+xml;utf8,<svg viewBox='0 0 320 320' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.8' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1   0 0 0 0 1   0 0 0 0 1   0 0 0 0.3 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
     /* iridiscente conic — interpolación oklab para transiciones suaves */
     conic-gradient(
       in oklab
