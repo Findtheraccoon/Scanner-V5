@@ -1,0 +1,230 @@
+/* ============================================================
+   PHOENIX DESIGN TOKENS
+   Origen: frontend/wireframing/Cockpit Hi-Fi v2.html
+   ============================================================ */
+
+/* @property para animar gradients iridiscentes (Houdini)
+   Soporte: Chrome/Edge 85+, Safari 16.4+, Firefox 128+ */
+@property --iri-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+@property --iri-shift {
+  syntax: "<percentage>";
+  initial-value: 0%;
+  inherits: false;
+}
+
+:root {
+  /* ── Base (paleta master · negro #0D0D0D) ── */
+  --bg: #08090b;
+  --bg-elev-1: #0d0f12;
+  --bg-elev-2: #12151a;
+  --bg-elev-3: #181b21;
+  --bg-elev-4: #20242b;
+  --bg-row-hover: #0f1216;
+  --surface-card: #111317;
+  --surface-card-2: #161920;
+
+  /* ── Hairlines ── */
+  --hair: rgba(255, 255, 255, 0.05);
+  --hair-2: rgba(255, 255, 255, 0.08);
+  --hair-3: rgba(255, 255, 255, 0.14);
+  --hair-vivid: rgba(255, 255, 255, 0.22);
+
+  /* ── Texto ── */
+  --t-100: #f5f5f7;
+  --t-90: rgba(245, 245, 247, 0.9);
+  --t-75: rgba(245, 245, 247, 0.75);
+  --t-55: rgba(245, 245, 247, 0.55);
+  --t-38: rgba(245, 245, 247, 0.38);
+  --t-22: rgba(245, 245, 247, 0.22);
+  --t-12: rgba(245, 245, 247, 0.12);
+
+  /* ── Accent · Phoenix orange ── */
+  --accent: #ff6a2c;
+  --accent-2: #e55a1f;
+  --accent-deep: #7a2e0e;
+  --accent-darker: #3d1808;
+  --accent-glow: rgba(255, 106, 44, 0.3);
+  --accent-glow-2: rgba(255, 106, 44, 0.18);
+  --accent-soft: rgba(255, 106, 44, 0.08);
+
+  /* ── Pilotos ── */
+  --ok: #22c55e;
+  --warn: #f59e0b;
+  --err: #ef4444;
+
+  /* ── Tiers de score ── */
+  --tier-r-color: #737880;
+  --tier-r-border: rgba(115, 120, 128, 0.3);
+
+  --tier-b-color: #82aac0;
+  --tier-b-border: rgba(130, 170, 192, 0.38);
+  --tier-b-glow: rgba(130, 170, 192, 0.25);
+
+  --tier-a-color: #3b9ae8;
+  --tier-a-border: rgba(59, 154, 232, 0.55);
+  --tier-a-glow: rgba(59, 154, 232, 0.4);
+
+  --tier-ap-color: #b941d5;
+  --tier-ap-border: rgba(185, 65, 213, 0.6);
+  --tier-ap-glow: rgba(185, 65, 213, 0.45);
+
+  --tier-s-color: #dc9418;
+  --tier-s-border: rgba(220, 148, 30, 0.65);
+  --tier-s-glow: rgba(220, 148, 30, 0.5);
+
+  --tier-sp-base: #06080e;
+  --tier-sp-color: #9aaabf;
+  --tier-sp-border: rgba(155, 168, 195, 0.42);
+  --tier-sp-glow: rgba(148, 162, 190, 0.25);
+
+  /* ── Bull/bear · velas ── */
+  --bull: #22c55e;
+  --bear: #ef4444;
+  --candle-up: #ff6a2c;
+  --candle-down: #f5f5f7;
+
+  /* ── Glass cromado ── */
+  --glass-grad-1: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.045) 0%,
+    rgba(255, 255, 255, 0.012) 38%,
+    rgba(255, 255, 255, 0) 62%,
+    rgba(0, 0, 0, 0.1) 100%
+  );
+  --glass-grad-2: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.06) 0%,
+    rgba(255, 255, 255, 0.02) 36%,
+    rgba(255, 255, 255, 0) 62%,
+    rgba(0, 0, 0, 0.18) 100%
+  );
+  --glass-grad-3: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.085) 0%,
+    rgba(255, 255, 255, 0.03) 32%,
+    rgba(255, 255, 255, 0.005) 60%,
+    rgba(0, 0, 0, 0.22) 100%
+  );
+  --glass-shine: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    rgba(255, 255, 255, 0.025) 26%,
+    transparent 55%
+  );
+
+  --bevel-soft: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 -1px 0 rgba(0, 0, 0, 0.25);
+  --bevel-full: inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.32),
+    inset 1px 0 0 rgba(255, 255, 255, 0.035),
+    inset -1px 0 0 rgba(0, 0, 0, 0.18);
+  --bevel-strong: inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.45),
+    inset 1px 0 0 rgba(255, 255, 255, 0.05),
+    inset -1px 0 0 rgba(0, 0, 0, 0.22);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35), 0 6px 18px rgba(0, 0, 0, 0.3);
+  --shadow-card-deep: 0 2px 4px rgba(0, 0, 0, 0.4), 0 16px 48px rgba(0, 0, 0, 0.55);
+  --shadow-tab: 0 -3px 8px rgba(0, 0, 0, 0.4);
+  --shadow-bookmark: 0 2px 6px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.2);
+
+  --blur-glass: blur(20px) saturate(160%) brightness(1.06) contrast(1.04);
+  --blur-strong: blur(28px) saturate(180%) brightness(1.08) contrast(1.05);
+  --blur-soft: blur(12px) saturate(140%) brightness(1.04) contrast(1.03);
+  --blur-tab: blur(16px) saturate(150%) brightness(1.05) contrast(1.04);
+
+  --card-bg: rgba(15, 15, 15, 0.62);
+  --card-bg-2: rgba(20, 20, 20, 0.6);
+  --card-bg-elev: rgba(28, 28, 28, 0.55);
+  --card-border: rgba(255, 255, 255, 0.06);
+  --card-border-h: rgba(255, 255, 255, 0.12);
+  --edge-glass-top: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  --edge-glass-bottom: inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+
+  --iridescent-1: linear-gradient(
+    135deg,
+    #ff6a2c 0%,
+    #c4b5fd 25%,
+    #fdba74 50%,
+    #f9a8d4 75%,
+    #ff6a2c 100%
+  );
+
+  /* ── Radii ── */
+  --r: 12px;
+  --r-sm: 8px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-card: 22px;
+  --r-pill: 999px;
+
+  /* ── Tipografía ── */
+  --font-ui: "Geist", "Söhne", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ── Easings ── */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --t-fast: 140ms var(--ease);
+  --t-base: 220ms var(--ease);
+  --t-slow: 420ms var(--ease);
+
+  /* ── Espaciado (para usos directos en CSS Modules) ── */
+  --gap-1: 4px;
+  --gap-2: 8px;
+  --gap-3: 12px;
+  --gap-4: 16px;
+  --gap-5: 24px;
+  --gap-6: 32px;
+  --gap-7: 48px;
+
+  /* ── Layout ── */
+  --watchlist-w: 324px;
+  --topbar-h: 100px;
+  --apibar-h: 114px;
+  --footer-h: 56px;
+}
+
+/* ============================================================
+   GLOBAL ANIMATIONS (referenciadas por utilities Tailwind)
+   ============================================================ */
+@keyframes iri-rotate {
+  to {
+    --iri-angle: 360deg;
+  }
+}
+@keyframes iri-pan {
+  to {
+    --iri-shift: 100%;
+  }
+}
+@keyframes pulse-health {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+@keyframes grain-breathe {
+  0% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-3%, 2%);
+  }
+  40% {
+    transform: translate(2%, -3%);
+  }
+  60% {
+    transform: translate(-2%, -2%);
+  }
+  80% {
+    transform: translate(3%, 2%);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
