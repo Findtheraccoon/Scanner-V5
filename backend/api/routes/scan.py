@@ -30,9 +30,10 @@ más la clave `id` del registro persistido en `signals`.
 
 from __future__ import annotations
 
+import asyncio
 import datetime as _dt
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,6 +43,21 @@ from modules.db import ET_TZ
 from modules.signal_pipeline import scan_and_emit
 
 router = APIRouter(prefix="/scan", tags=["scan"])
+
+
+def _get_running_event(request: Request) -> asyncio.Event:
+    """Recupera el `auto_scan_running` event desde `app.state`.
+
+    Si el app no tiene scan loop activo (e.g. arrancado sin keys de
+    TwelveData), retorna 503 — no hay nada que pausar/resumir.
+    """
+    running = getattr(request.app.state, "auto_scan_running", None)
+    if running is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Auto-scan loop no está activo (data engine no inicializado)",
+        )
+    return running
 
 
 class ScanManualRequest(BaseModel):
@@ -98,3 +114,44 @@ async def scan_manual(
         sim_datetime=req.sim_datetime,
         sim_date=req.sim_date,
     )
+
+
+@router.get("/auto/status")
+async def auto_scan_status(
+    request: Request,
+    _token: str = Depends(require_auth),
+) -> dict:
+    """Retorna `{paused: bool}` con el estado del auto-scan loop.
+
+    Útil para que el frontend sincronice el toggle AUTO al cargar la
+    página, sin tener que esperar al primer `engine.status` por WS.
+    """
+    running = _get_running_event(request)
+    return {"paused": not running.is_set()}
+
+
+@router.post("/auto/pause")
+async def auto_scan_pause(
+    request: Request,
+    _token: str = Depends(require_auth),
+) -> dict:
+    """Pausa el auto-scan loop. Idempotente — pausar dos veces no falla.
+
+    El loop bloquea en su próximo `await running.wait()` y emite
+    `engine.status={status: "paused"}` por WS para que el frontend
+    refleje el cambio en otros clientes.
+    """
+    running = _get_running_event(request)
+    running.clear()
+    return {"paused": True}
+
+
+@router.post("/auto/resume")
+async def auto_scan_resume(
+    request: Request,
+    _token: str = Depends(require_auth),
+) -> dict:
+    """Reanuda el auto-scan loop. Idempotente."""
+    running = _get_running_event(request)
+    running.set()
+    return {"paused": False}

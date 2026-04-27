@@ -1,14 +1,26 @@
+import { useToast } from "@/components/Toast/ToastProvider";
+import { CHAT_FORMAT_FALLBACK } from "@/lib/chatFormat";
+import { copyToClipboard } from "@/lib/copyToClipboard";
+import { useSignalsStore } from "@/stores/signals";
+import { useSlotsStore } from "@/stores/slots";
 import { useState } from "react";
+import { type CockpitState, StateToasts } from "./StateToast";
+
+interface PanelProps {
+  cockpitState?: CockpitState;
+  ticker?: string | null;
+}
 
 /* Panel del Cockpit — banner sticky + resumen ejecutivo + gráfico + detalle.
-   Datos hardcoded del Hi-Fi v2 (QQQ · A+ · CALL · 12.0). Wiring a backend
-   en iteración siguiente: leer el slot seleccionado del store + último signal
-   por TanStack Query (`/api/v1/signals/latest?slot=<id>`). */
-export function Panel() {
+   Lee la última señal del slot seleccionado desde el store de signals;
+   cuando no hay datos del backend, cae al payload hardcoded del Hi-Fi v2
+   (QQQ · A+ · CALL · 12.0) para preservar el "look" del scaffold. */
+export function Panel({ cockpitState = "normal", ticker = null }: PanelProps) {
   const [detailOpen, setDetailOpen] = useState(false);
 
   return (
     <section className="panel" aria-label="detalle">
+      <StateToasts state={cockpitState} ticker={ticker} />
       <Banner />
       <Exec />
       <Chart />
@@ -18,34 +30,66 @@ export function Panel() {
 }
 
 function Banner() {
+  const toast = useToast();
+  const [copied, setCopied] = useState(false);
+  const selectedId = useSlotsStore((s) => s.selectedSlotId);
+  const slot = useSlotsStore((s) => s.slots.find((sl) => sl.slot_id === selectedId));
+  const signal = useSignalsStore((s) => s.bySlot[selectedId]);
+
+  const ticker = signal?.ticker ?? slot?.ticker ?? "QQQ";
+  const band = signal?.conf ?? "A+";
+  const dir = signal?.dir ?? "CALL";
+  const score = signal?.score ?? 12.0;
+  const label = signal?.signal ?? "SETUP";
+  const slotIdStr = String(selectedId).padStart(2, "0");
+  const fixtureId = signal?.fixture_id ?? slot?.fixture_id ?? "qqq_v5_2_0";
+
+  const chatText = signal?.chat_format ?? CHAT_FORMAT_FALLBACK;
+
+  const handleCopy = async () => {
+    const ok = await copyToClipboard(chatText);
+    if (ok) {
+      setCopied(true);
+      toast.push("✓ copiado al portapapeles", "success");
+      setTimeout(() => setCopied(false), 2000);
+    } else {
+      toast.push("no se pudo copiar al portapapeles", "error");
+    }
+  };
+
   return (
     // data-band activo del slot mostrado — alimenta el halo cromático del ticker
-    <header className="banner" data-band="A+">
+    <header className="banner" data-band={band}>
       <span className="banner__ghost" aria-hidden="true">
-        QQQ
+        {ticker}
       </span>
       <div className="banner__row">
         <div className="banner__id">
-          <h1 className="banner__ticker">QQQ</h1>
+          <h1 className="banner__ticker">{ticker}</h1>
           <div className="banner__order2">
-            <span className="banner__band" data-band="A+">
-              <span>A+</span>
+            <span className="banner__band" data-band={band}>
+              <span>{band}</span>
             </span>
-            <span className="banner__dir">CALL</span>
+            <span className="banner__dir">{dir}</span>
             <span className="banner__score">
-              score <b>12.0</b>
+              score <b>{score.toFixed(1)}</b>
             </span>
-            <span className="banner__signal">setup</span>
+            <span className="banner__signal">{label.toLowerCase()}</span>
           </div>
           <div className="banner__order3">
-            <span>nasdaq 100 etf</span>
+            <span>{ticker.toLowerCase() === "qqq" ? "nasdaq 100 etf" : ticker}</span>
             <span className="sep">·</span>
-            <span>slot 02</span>
+            <span>slot {slotIdStr}</span>
             <span className="sep">·</span>
-            <span>fixture qqq_v5_2_0</span>
+            <span>fixture {fixtureId}</span>
           </div>
         </div>
-        <button type="button" className="btn-copy" aria-label="copiar señal">
+        <button
+          type="button"
+          className={copied ? "btn-copy is-copied" : "btn-copy"}
+          aria-label="copiar señal"
+          onClick={handleCopy}
+        >
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -58,7 +102,7 @@ function Banner() {
             <rect x="8" y="8" width="12" height="12" rx="2" />
             <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
           </svg>
-          <span className="btn-copy__label">copiar</span>
+          <span className="btn-copy__label">{copied ? "copiado" : "copiar"}</span>
         </button>
       </div>
     </header>

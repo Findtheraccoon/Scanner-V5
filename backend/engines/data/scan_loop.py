@@ -98,6 +98,7 @@ async def auto_scan_loop(
     delay_after_close_s: float = DEFAULT_DELAY_AFTER_CLOSE_S,
     test_interval_s: float | None = None,
     tracker: SlotFailureTracker | None = None,
+    running: asyncio.Event | None = None,
 ) -> None:
     """Loop infinito: detecta cierre 15M y dispara scan por cada slot.
 
@@ -106,14 +107,18 @@ async def auto_scan_loop(
         session_factory: factory de sesiones DB.
         broadcaster: broadcaster para emitir `signal.new` y
             `engine.status`.
-        slot_tickers: tickers de los slots operativos en orden. El slot
-            con `slot_id=1` es el primero, `2` el segundo, etc.
-        fixture: dict del fixture canonical usado por todos los slots
-            (MVP — en fase Slot Registry cada slot tiene su fixture).
+        registry: runtime registry — fuente de los slots operativos del
+            ciclo.
         delay_after_close_s: segundos de espera post-cierre para que
             el provider consolide (spec §3.1, default 3s).
         test_interval_s: si se pasa, bypasea market calendar — dispara
             un ciclo cada `test_interval_s` segundos. Útil para tests.
+        running: `asyncio.Event` opcional que controla pausa/resume.
+            Cuando `is_set()` el loop corre normalmente; cuando se
+            limpia (`clear()`), el loop se bloquea en `await
+            running.wait()` antes del próximo ciclo. Si es `None`, el
+            loop siempre corre (compat). Wire desde
+            `POST /api/v1/scan/auto/{pause,resume}`.
     """
     tracker = tracker or SlotFailureTracker()
     logger.info(
@@ -121,8 +126,34 @@ async def auto_scan_loop(
         f"delay_after_close={delay_after_close_s}s "
         f"mode={'TEST' if test_interval_s is not None else 'PRODUCTION'}",
     )
+    was_paused = False
     try:
         while True:
+            # Gate de pausa — bloquea hasta que `running` esté set.
+            if running is not None and not running.is_set():
+                if not was_paused:
+                    logger.info("Auto-scan loop paused — waiting for resume")
+                    await broadcaster.broadcast(
+                        EVENT_ENGINE_STATUS,
+                        {
+                            "engine": "data",
+                            "status": "paused",
+                            "message": "auto-scan paused",
+                        },
+                    )
+                    was_paused = True
+                await running.wait()
+                logger.info("Auto-scan loop resumed")
+                await broadcaster.broadcast(
+                    EVENT_ENGINE_STATUS,
+                    {
+                        "engine": "data",
+                        "status": "green",
+                        "message": "auto-scan resumed",
+                    },
+                )
+                was_paused = False
+
             if test_interval_s is not None:
                 await asyncio.sleep(test_interval_s)
                 candle_ts = now_et()

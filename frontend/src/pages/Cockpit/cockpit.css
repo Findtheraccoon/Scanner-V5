@@ -1238,3 +1238,99 @@
   .banner { padding: 18px var(--gap-5) 14px; }
   .exec, .detail, .chart { padding-left: var(--gap-5); padding-right: var(--gap-5); }
 }
+
+/* ============================================================
+   STATE TOASTS (Hi-Fi v1) — warmup / degraded / splus / error
+   Aparecen al inicio del panel cuando el cockpit cambia de estado.
+   ============================================================ */
+.state-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 18px 0;
+  padding: 10px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  border: 1px solid var(--card-border);
+  border-radius: var(--r);
+  background: var(--surface-card);
+  color: var(--t-75);
+}
+.state-toast .ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-sm);
+  flex-shrink: 0;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  line-height: 1;
+  font-weight: 700;
+}
+.state-toast b {
+  color: var(--t-100);
+  font-weight: 600;
+}
+
+.state-toast--warmup {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.08), transparent 60%);
+}
+.state-toast--warmup .ic {
+  background: rgba(245, 158, 11, 0.18);
+  color: var(--warn);
+  animation: spin 1.6s linear infinite;
+}
+
+.state-toast--degraded {
+  border-color: rgba(245, 158, 11, 0.36);
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.10), transparent 60%);
+}
+.state-toast--degraded .ic {
+  background: rgba(245, 158, 11, 0.18);
+  color: var(--warn);
+}
+
+.state-toast--splus {
+  border-color: rgba(155, 168, 195, 0.45);
+  background: linear-gradient(90deg, rgba(155, 168, 195, 0.10), transparent 60%);
+  color: var(--t-90);
+}
+.state-toast--splus .ic {
+  background: rgba(155, 168, 195, 0.16);
+  color: var(--tier-sp-color);
+}
+
+.state-toast--error {
+  border-color: rgba(239, 68, 68, 0.45);
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.10), transparent 60%);
+}
+.state-toast--error .ic {
+  background: rgba(239, 68, 68, 0.18);
+  color: var(--err);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Estados visuales aplicados al panel cuando el cockpit está en degraded/error */
+.cockpit--warmup .banner { opacity: 0.55; }
+.cockpit--warmup .banner__score b { text-decoration: line-through; text-decoration-color: var(--t-38); }
+.cockpit--error .banner { opacity: 0.45; }
+.cockpit--error .banner__ticker { color: var(--t-55); }
+.cockpit--error .btn-copy { opacity: 0.4; pointer-events: none; }
+
+/* S+ pulse en banner durante 4s tras la emisión */
+.cockpit--splus .banner {
+  animation: splus-pulse 4s var(--ease) 1;
+}
+@keyframes splus-pulse {
+  0%   { box-shadow: var(--edge-glass-top), var(--edge-glass-bottom), 0 0 0 rgba(155, 168, 195, 0); }
+  20%  { box-shadow: var(--edge-glass-top), var(--edge-glass-bottom), 0 0 24px rgba(155, 168, 195, 0.5); }
+  100% { box-shadow: var(--edge-glass-top), var(--edge-glass-bottom), 0 0 0 rgba(155, 168, 195, 0); }
+}

@@ -1,3 +1,5 @@
+import { formatEtDate, formatEtTime, useNow } from "@/lib/clock";
+import { useEngineStore } from "@/stores/engine";
 import type { ReactNode } from "react";
 
 interface TopBarProps {
@@ -5,6 +7,11 @@ interface TopBarProps {
 }
 
 export function TopBar({ children }: TopBarProps) {
+  const now = useNow();
+  const ws = useEngineStore((s) => s.ws);
+  const liveClass = ws === "connected" ? "topbar__live" : `topbar__live topbar__live--${ws}`;
+  const liveLabel = ws === "connected" ? "live" : ws === "connecting" ? "linking" : "offline";
+
   return (
     <header className="topbar">
       <div className="topbar__brand">
@@ -15,9 +22,9 @@ export function TopBar({ children }: TopBarProps) {
       </div>
       {children}
       <div className="topbar__meta">
-        <span className="topbar__live">live</span>
-        <span className="topbar__clock">14:30:04 ET</span>
-        <span className="topbar__date">vie 25 abr 2026</span>
+        <span className={liveClass}>{liveLabel}</span>
+        <span className="topbar__clock">{formatEtTime(now)}</span>
+        <span className="topbar__date">{formatEtDate(now)}</span>
       </div>
     </header>
   );
