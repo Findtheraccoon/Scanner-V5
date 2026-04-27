@@ -32,6 +32,7 @@ engine.
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
 
@@ -142,8 +143,13 @@ def build_scan_loop_factory_for_app(
     session_factory,
     registry: RegistryRuntime,
     delay_after_close_s: float,
+    running: asyncio.Event,
 ):
-    """Crea la corutina factory que el lifespan de `create_app` usa."""
+    """Crea la corutina factory que el lifespan de `create_app` usa.
+
+    `running` se construye fuera y se expone vía `app.state` para que
+    `POST /api/v1/scan/auto/{pause,resume}` pueda alternar el flag.
+    """
 
     async def factory():
         await auto_scan_loop(
@@ -152,6 +158,7 @@ def build_scan_loop_factory_for_app(
             broadcaster=app_broadcaster,
             registry=registry,
             delay_after_close_s=delay_after_close_s,
+            running=running,
         )
 
     return factory
@@ -329,18 +336,23 @@ def main() -> int:
         )
 
     if use_real_scan_loop:
+        # `running` por default empieza set → loop corre sin pausa. El
+        # endpoint /scan/auto/{pause,resume} lo alterna en tiempo real.
+        running = asyncio.Event()
+        running.set()
         factory = build_scan_loop_factory_for_app(
             app_broadcaster=app.state.broadcaster,
             data_engine=scan_context["data_engine"],
             session_factory=scan_context["session_factory"],
             registry=scan_context["registry"],
             delay_after_close_s=scan_context["delay_after_close_s"],
+            running=running,
         )
         extra_workers.append(factory)
-        # Expose registry + data_engine via app.state para que los
-        # endpoints REST puedan consultarlos (SR.3 + PATCH enable).
+        # Expose registry + data_engine + running event via app.state.
         app.state.registry_runtime = scan_context["registry"]
         app.state.data_engine = scan_context["data_engine"]
+        app.state.auto_scan_running = running
 
     # V.7 — Validator wiring. Se construye siempre (standalone si no
     # hay scan_context) y se engancha al app.state para que los

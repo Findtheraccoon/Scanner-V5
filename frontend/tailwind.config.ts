@@ -67,10 +67,10 @@ const phoenixPlugin = plugin(({ addUtilities }) => {
       clipPath: "polygon(0 0, 100% 0, 100% 70%, 92% 78%, 50% 100%, 8% 78%, 0 70%)",
     },
 
-    /* ── iridescent panels (rotación Houdini) ─────────────────── */
+    /* ── iridescent panels (rotación Houdini, interpolación oklab) ── */
     ".iridescent-bg": {
       background:
-        "conic-gradient(from var(--iri-angle) at 50% 50%, #FF6A2C, #c4b5fd, #fdba74, #f9a8d4, #FF6A2C)",
+        "conic-gradient(in oklab from var(--iri-angle) at 50% 50%, #FF6A2C, #c4b5fd, #fdba74, #f9a8d4, #FF6A2C)",
       animation: "iri-rotate 11s linear infinite",
     },
     ".iridescent-pan": {

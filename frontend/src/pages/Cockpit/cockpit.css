@@ -237,7 +237,8 @@
 /* S — iridiscente animado en familia dorada (joya pulida) */
 .bookmark[data-band="S"] {
   --iri-angle: 0deg;
-  background: conic-gradient(from var(--iri-angle) at 50% 50%,
+  /* oklab → transiciones perceptuales (menos bandeo en el dorado-cobre) */
+  background: conic-gradient(in oklab from var(--iri-angle) at 50% 50%,
     #DC9418 0deg,
     #FFD580 60deg,
     #FFFFFF 100deg,
@@ -260,8 +261,8 @@
 .bookmark[data-band="S+"] {
   --iri-angle: 0deg;
   background:
-    /* capa iridiscente sutil — solo reflejos, no full color */
-    conic-gradient(from var(--iri-angle) at 50% 50%,
+    /* capa iridiscente sutil — solo reflejos, no full color (oklab anti-bandeo) */
+    conic-gradient(in oklab from var(--iri-angle) at 50% 50%,
       transparent 0deg,
       rgba(255, 200, 130, 0.22) 45deg,
       transparent 90deg,
@@ -470,13 +471,8 @@
   top: 0;
   z-index: 20;
   overflow: hidden;
+  /* base oscura — el iridiscente animado va en .banner::before */
   background:
-    /* iridiscente sutil de fondo (intensidad subida para que sobreviva al fondo más oscuro) */
-    linear-gradient(120deg,
-      rgba(255,106,44,0.12) 0%,
-      rgba(196,181,253,0.07) 30%,
-      rgba(253,186,116,0.08) 60%,
-      rgba(249,168,212,0.07) 100%),
     var(--glass-grad-1),
     linear-gradient(180deg, rgba(8,8,8,0.92) 0%, rgba(5,5,5,0.85) 100%);
   backdrop-filter: var(--blur-strong);
@@ -487,8 +483,67 @@
     var(--edge-glass-top),
     var(--edge-glass-bottom),
     0 1px 0 rgba(255,255,255,0.03);
+  isolation: isolate; /* contiene el blend-mode del sweep */
 }
-/* ticker ghost gigante atrás */
+/* Capa 1 — iridiscente conic rotando lento (Houdini @property --iri-angle).
+   Mask radial para que decaiga limpio en los bordes y no aparezcan líneas duras.
+   Interpolación en oklab → transiciones perceptualmente uniformes (anti-posterización). */
+.banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  /* Doble capa: iridiscente conic + dithering SVG turbulence encima.
+     El noise overlay rompe las bandas visibles del gradient gradual. */
+  background:
+    /* dithering — turbulence fina con ramp de luminancia, mix overlay (alpha 0.3) */
+    url("data:image/svg+xml;utf8,<svg viewBox='0 0 320 320' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.8' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1   0 0 0 0 1   0 0 0 0 1   0 0 0 0.3 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>"),
+    /* iridiscente conic — interpolación oklab para transiciones suaves */
+    conic-gradient(
+      in oklab
+      from var(--iri-angle) at 50% 50%,
+      rgba(255, 106, 44, 0.18)  0deg,
+      rgba(253, 186, 116, 0.14) 60deg,
+      rgba(196, 181, 253, 0.16) 130deg,
+      rgba(249, 168, 212, 0.18) 200deg,
+      rgba(255, 106, 44, 0.14)  280deg,
+      rgba(255, 106, 44, 0.18)  360deg);
+  background-size: 240px 240px, 100% 100%;
+  background-blend-mode: overlay, normal;
+  mix-blend-mode: screen;
+  opacity: 0.85;
+  mask-image: radial-gradient(ellipse 90% 110% at 50% 50%, #000 30%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 110% at 50% 50%, #000 30%, transparent 100%);
+  animation: iri-rotate 18s linear infinite;
+}
+/* Capa 2 — specular sweep diagonal (banda de luz que cruza cada 12s). */
+.banner::after {
+  content: '';
+  position: absolute;
+  top: -30%;
+  left: -120%;
+  width: 60%;
+  height: 160%;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(115deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.05) 47%,
+    rgba(255, 255, 255, 0.16) 50%,
+    rgba(255, 255, 255, 0.05) 53%,
+    transparent 65%);
+  mix-blend-mode: screen;
+  filter: blur(2px);
+  animation: banner-sweep 12s var(--ease) infinite;
+}
+@keyframes banner-sweep {
+  0%, 75%   { left: -120%; opacity: 0; }
+  78%       { opacity: 1; }
+  92%       { left: 140%;  opacity: 1; }
+  93%, 100% { left: 140%;  opacity: 0; }
+}
+/* ticker ghost gigante atrás · hero iridiscente con conic + text-clip animado */
 .banner__ghost {
   position: absolute;
   top: 50%;
@@ -499,23 +554,33 @@
   letter-spacing: -0.06em;
   line-height: 0.85;
   color: transparent;
-  -webkit-text-stroke: 1.5px rgba(255,255,255,0.045);
-  text-stroke: 1.5px rgba(255,255,255,0.045);
+  -webkit-text-stroke: 1.5px rgba(255,255,255,0.06);
+  text-stroke: 1.5px rgba(255,255,255,0.06);
   pointer-events: none;
   user-select: none;
   z-index: 0;
   white-space: nowrap;
   font-family: var(--font-ui);
   text-transform: uppercase;
-  background: linear-gradient(120deg,
-    rgba(253,186,116,0.18) 0%,
-    rgba(255,106,44,0.14) 35%,
-    rgba(196,181,253,0.14) 65%,
-    rgba(249,168,212,0.18) 100%);
+  /* conic en oklab → transiciones perceptuales suaves, menos posterización */
+  background: conic-gradient(
+    in oklab
+    from var(--iri-angle) at 50% 50%,
+    rgba(255, 106, 44, 0.28)  0deg,
+    rgba(253, 186, 116, 0.22) 60deg,
+    rgba(255, 255, 255, 0.20) 110deg,
+    rgba(196, 181, 253, 0.26) 160deg,
+    rgba(249, 168, 212, 0.28) 230deg,
+    rgba(253, 186, 116, 0.22) 300deg,
+    rgba(255, 106, 44, 0.28)  360deg);
   -webkit-background-clip: text;
   background-clip: text;
-  opacity: 0.55;
+  opacity: 0.65;
   filter: blur(0.4px);
+  /* mask radial para que los extremos del texto se desvanezcan suavemente */
+  mask-image: radial-gradient(ellipse 75% 90% at 50% 50%, #000 35%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 75% 90% at 50% 50%, #000 35%, transparent 100%);
+  animation: iri-rotate 16s linear infinite reverse;
 }
 .banner__row {
   position: relative;
@@ -539,6 +604,33 @@
   letter-spacing: -0.035em;
   line-height: 1;
   color: var(--t-100);
+  /* halo cromático multi-capa — el color final lo aporta el data-band del .banner padre */
+  text-shadow:
+    0 0 18px var(--ticker-halo, rgba(255, 255, 255, 0.06)),
+    0 0 42px var(--ticker-halo-far, rgba(255, 255, 255, 0.03));
+  transition: text-shadow var(--t-slow);
+}
+/* Halo del ticker tinted por tier (.banner expone el data-band activo).
+   B/A/A+/S/S+ refuerzan el "hero" — REVISAR queda neutro. */
+.banner[data-band="B"] {
+  --ticker-halo: rgba(130, 170, 192, 0.20);
+  --ticker-halo-far: rgba(130, 170, 192, 0.10);
+}
+.banner[data-band="A"] {
+  --ticker-halo: rgba(59, 154, 232, 0.28);
+  --ticker-halo-far: rgba(59, 154, 232, 0.14);
+}
+.banner[data-band="A+"] {
+  --ticker-halo: rgba(185, 65, 213, 0.32);
+  --ticker-halo-far: rgba(185, 65, 213, 0.16);
+}
+.banner[data-band="S"] {
+  --ticker-halo: rgba(220, 148, 30, 0.34);
+  --ticker-halo-far: rgba(220, 148, 30, 0.18);
+}
+.banner[data-band="S+"] {
+  --ticker-halo: rgba(155, 168, 195, 0.26);
+  --ticker-halo-far: rgba(155, 168, 195, 0.14);
 }
 
 /* Orden 2 — info útil */
@@ -1145,4 +1237,100 @@
   .banner__ticker { font-size: 28px; }
   .banner { padding: 18px var(--gap-5) 14px; }
   .exec, .detail, .chart { padding-left: var(--gap-5); padding-right: var(--gap-5); }
+}
+
+/* ============================================================
+   STATE TOASTS (Hi-Fi v1) — warmup / degraded / splus / error
+   Aparecen al inicio del panel cuando el cockpit cambia de estado.
+   ============================================================ */
+.state-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 18px 0;
+  padding: 10px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  border: 1px solid var(--card-border);
+  border-radius: var(--r);
+  background: var(--surface-card);
+  color: var(--t-75);
+}
+.state-toast .ic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--r-sm);
+  flex-shrink: 0;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  line-height: 1;
+  font-weight: 700;
+}
+.state-toast b {
+  color: var(--t-100);
+  font-weight: 600;
+}
+
+.state-toast--warmup {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.08), transparent 60%);
+}
+.state-toast--warmup .ic {
+  background: rgba(245, 158, 11, 0.18);
+  color: var(--warn);
+  animation: spin 1.6s linear infinite;
+}
+
+.state-toast--degraded {
+  border-color: rgba(245, 158, 11, 0.36);
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.10), transparent 60%);
+}
+.state-toast--degraded .ic {
+  background: rgba(245, 158, 11, 0.18);
+  color: var(--warn);
+}
+
+.state-toast--splus {
+  border-color: rgba(155, 168, 195, 0.45);
+  background: linear-gradient(90deg, rgba(155, 168, 195, 0.10), transparent 60%);
+  color: var(--t-90);
+}
+.state-toast--splus .ic {
+  background: rgba(155, 168, 195, 0.16);
+  color: var(--tier-sp-color);
+}
+
+.state-toast--error {
+  border-color: rgba(239, 68, 68, 0.45);
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.10), transparent 60%);
+}
+.state-toast--error .ic {
+  background: rgba(239, 68, 68, 0.18);
+  color: var(--err);
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Estados visuales aplicados al panel cuando el cockpit está en degraded/error */
+.cockpit--warmup .banner { opacity: 0.55; }
+.cockpit--warmup .banner__score b { text-decoration: line-through; text-decoration-color: var(--t-38); }
+.cockpit--error .banner { opacity: 0.45; }
+.cockpit--error .banner__ticker { color: var(--t-55); }
+.cockpit--error .btn-copy { opacity: 0.4; pointer-events: none; }
+
+/* S+ pulse en banner durante 4s tras la emisión */
+.cockpit--splus .banner {
+  animation: splus-pulse 4s var(--ease) 1;
+}
+@keyframes splus-pulse {
+  0%   { box-shadow: var(--edge-glass-top), var(--edge-glass-bottom), 0 0 0 rgba(155, 168, 195, 0); }
+  20%  { box-shadow: var(--edge-glass-top), var(--edge-glass-bottom), 0 0 24px rgba(155, 168, 195, 0.5); }
+  100% { box-shadow: var(--edge-glass-top), var(--edge-glass-bottom), 0 0 0 rgba(155, 168, 195, 0); }
 }

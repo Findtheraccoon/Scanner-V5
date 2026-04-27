@@ -203,3 +203,82 @@ class TestScanManualOpenApi:
         paths = r.json()["paths"]
         assert "/api/v1/scan/manual" in paths
         assert "post" in paths["/api/v1/scan/manual"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Auto-scan pause / resume / status (deuda técnica del Cockpit AUTO toggle)
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+@pytest_asyncio.fixture
+async def client_with_running():
+    """App con `app.state.auto_scan_running` precargado (set = corriendo)."""
+    import asyncio as _asyncio
+
+    app = create_app(
+        valid_api_keys={"sk-test"},
+        db_url="sqlite+aiosqlite:///:memory:",
+        auto_init_db=False,
+    )
+    await init_db(app.state.db_engine)
+    running = _asyncio.Event()
+    running.set()
+    app.state.auto_scan_running = running
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c, running
+    await app.state.db_engine.dispose()
+
+
+class TestAutoScanPauseResume:
+    @pytest.mark.asyncio
+    async def test_status_initial_running(self, client_with_running) -> None:
+        c, _running = client_with_running
+        r = await c.get("/api/v1/scan/auto/status", headers=AUTH)
+        assert r.status_code == 200
+        assert r.json() == {"paused": False}
+
+    @pytest.mark.asyncio
+    async def test_pause_then_status(self, client_with_running) -> None:
+        c, running = client_with_running
+        r = await c.post("/api/v1/scan/auto/pause", headers=AUTH)
+        assert r.status_code == 200
+        assert r.json() == {"paused": True}
+        assert not running.is_set()
+        # status refleja el cambio
+        r = await c.get("/api/v1/scan/auto/status", headers=AUTH)
+        assert r.json() == {"paused": True}
+
+    @pytest.mark.asyncio
+    async def test_resume_clears_pause(self, client_with_running) -> None:
+        c, running = client_with_running
+        await c.post("/api/v1/scan/auto/pause", headers=AUTH)
+        r = await c.post("/api/v1/scan/auto/resume", headers=AUTH)
+        assert r.status_code == 200
+        assert r.json() == {"paused": False}
+        assert running.is_set()
+
+    @pytest.mark.asyncio
+    async def test_pause_idempotent(self, client_with_running) -> None:
+        c, running = client_with_running
+        for _ in range(3):
+            r = await c.post("/api/v1/scan/auto/pause", headers=AUTH)
+            assert r.status_code == 200
+            assert r.json() == {"paused": True}
+        assert not running.is_set()
+
+    @pytest.mark.asyncio
+    async def test_unauthenticated_returns_401(self, client_with_running) -> None:
+        c, _running = client_with_running
+        r = await c.post("/api/v1/scan/auto/pause")
+        assert r.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_503_when_no_running_event(self, client) -> None:
+        """Sin `auto_scan_running` en app.state (e.g. arrancado sin keys)."""
+        r = await client.post("/api/v1/scan/auto/pause", headers=AUTH)
+        assert r.status_code == 503
+        r = await client.post("/api/v1/scan/auto/resume", headers=AUTH)
+        assert r.status_code == 503
+        r = await client.get("/api/v1/scan/auto/status", headers=AUTH)
+        assert r.status_code == 503

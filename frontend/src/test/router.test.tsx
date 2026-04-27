@@ -3,6 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { describe, expect, it } from "vitest";
 import { AppShell } from "../components/AppShell/AppShell";
+import { ToastProvider } from "../components/Toast/ToastProvider";
 import { CockpitPage } from "../pages/Cockpit/CockpitPage";
 import { ConfigurationPage } from "../pages/Configuration/ConfigurationPage";
 import { DashboardPage } from "../pages/Dashboard/DashboardPage";
@@ -12,16 +13,18 @@ function renderAt(path: string) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route path="/" element={<AppShell />}>
-            <Route path="configuracion" element={<ConfigurationPage />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="cockpit" element={<CockpitPage />} />
-            <Route path="memento" element={<MementoPage />} />
-          </Route>
-        </Routes>
-      </MemoryRouter>
+      <ToastProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route path="/" element={<AppShell />}>
+              <Route path="configuracion" element={<ConfigurationPage />} />
+              <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="cockpit" element={<CockpitPage />} />
+              <Route path="memento" element={<MementoPage />} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </ToastProvider>
     </QueryClientProvider>,
   );
 }

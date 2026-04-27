@@ -1,6 +1,7 @@
 /* Cliente HTTP base contra `/api/v1`. El proxy de Vite (vite.config.ts)
    redirige `/api` y `/ws` a `VITE_BACKEND_URL` (default http://localhost:8000).
-   El bearer token se inyecta cuando esté disponible — placeholder en runtime. */
+   El bearer token se inyecta vía `setBearerToken` (lo llama el store de auth
+   al hidratar y al cambiar el valor). */
 
 const BASE = "/api/v1";
 
@@ -10,8 +11,13 @@ export function setBearerToken(token: string | null): void {
   bearerToken = token;
 }
 
-interface FetchOptions extends RequestInit {
+export function getBearerToken(): string | null {
+  return bearerToken;
+}
+
+interface FetchOptions extends Omit<RequestInit, "body"> {
   query?: Record<string, string | number | boolean | undefined>;
+  body?: BodyInit | null;
 }
 
 export class ApiError extends Error {
