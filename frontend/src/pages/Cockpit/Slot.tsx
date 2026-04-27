@@ -1,9 +1,18 @@
 import { Sparkline } from "./Sparkline";
-import type { SlotData } from "./data";
+import type { Band, SlotData } from "./data";
 
 interface SlotProps {
   slot: SlotData;
   onSelect?: (id: number) => void;
+}
+
+/* Spec del Hi-Fi v2: el bookmark de tier sólo aparece para setups
+   destacados (A / A+ / S / S+). En B y REVISAR el tier se infiere del
+   score numérico que ya está visible en la métrica de la card. */
+const BOOKMARK_BANDS: ReadonlySet<Band> = new Set(["A", "A+", "S", "S+"]);
+
+function showsBookmark(band: Band | null): band is Band {
+  return band !== null && BOOKMARK_BANDS.has(band);
 }
 
 export function Slot({ slot, onSelect }: SlotProps) {
@@ -19,6 +28,7 @@ export function Slot({ slot, onSelect }: SlotProps) {
   const bookmarkClassName = ["bookmark", slot.metallic ? "bookmark--metallic" : ""]
     .filter(Boolean)
     .join(" ");
+  const renderBookmark = showsBookmark(slot.band);
 
   return (
     <article
@@ -37,7 +47,7 @@ export function Slot({ slot, onSelect }: SlotProps) {
       role="button"
       tabIndex={0}
     >
-      {slot.band ? (
+      {renderBookmark ? (
         <span className={bookmarkClassName} data-band={slot.band}>
           {slot.metallic ? <span className="metal-sweep" /> : null}
           <span>{slot.band}</span>
