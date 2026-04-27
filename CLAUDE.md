@@ -255,28 +255,38 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 
 ### Para el siguiente chat
 
-**Estado al 2026-04-25:** backend **completo a spec §3 + §4 + §9.4** (sin cambios desde 2026-04-23). 1068 tests + 1 slow passing, parity 245/245, ruff limpio. **Frontend arrancó por wireframing hi-fi.**
+**Estado al 2026-04-27:** backend **completo a spec §3 + §4 + §9.4** (sin cambios desde 2026-04-23). 1068 tests + 1 slow passing, parity 245/245, ruff limpio. **Cockpit Hi-Fi v2 (Phoenix) listo, prototipo aprobado, ready para scaffolding React.**
 
-Última sesión (2026-04-25) — **Cockpit Hi-Fi v1**:
+Última sesión (2026-04-26 / 2026-04-27) — **Cockpit Hi-Fi v2 "Phoenix"**:
 
-- Creado `frontend/wireframing/Cockpit Hi-Fi v1.html` — preview standalone (sin build, ~1840 líneas, 18 commits dividido en micro-bloques).
-- 5 design tokens aplicados: acento `#9cc80a` glass + Söhne→Inter + candles up=lima/down=blanco + pulse 4s + base `#050505`/`#0a0a0a`.
-- 5 estados alternables vía pills (normal / warmup / degraded / splus / error) con persist en localStorage.
-- ADN visual: icomat (cromática + tipografía + densidad aireada + hairlines) + runpod (cards/iconos/estados/progress bars con acento lima en vez de violeta).
-- Corner radius 6px (balanceado), botones estilo A (icomat pill glass).
-- Adaptado al backend real: removido "acierto hist." (post-release), state-toasts fieles (warmup sin %, splus sin spread), API keys numeradas 1..5, meta `engine v5.0.0-dev` + `fixture qqq_canonical_v1`.
-- Deuda técnica registrada (sección "Pendiente"): `POST /api/v1/scan/auto/{pause,resume}` para cablear el toggle AUTO del banner.
+- Creado `frontend/wireframing/Cockpit Hi-Fi v2.html` (~90KB, ~2700 líneas) usando el plugin `frontend-design` (ahora sí disponible) + iteraciones cromáticas con la referencia `frontend/wireframing/Cockpit Hi-Fi Phoenix reference.html` que aportó Álvaro desde un editor visual externo.
+- **Paleta master:** acento naranja `#FF6A2C` Phoenix (variantes `#E55A1F / #7A2E0E / #3D1808`) sobre base neutra `#0d0d0d`. Bull/bear semánticos verde/rojo se mantienen.
+- **Tiers de score con paleta dedicada:** `--tier-r/b/a/ap/s/sp-{color,border,glow}` (R `#737880`, B `#82AAC0`, A `#3B9AE8`, A+ `#B941D5`, S `#DC9418`, S+ base `#06080E` + texto `#9AAABF`).
+- **Glass cromado real** (no físicas pesadas): `backdrop-filter: blur(40-44px) saturate(180-220%) brightness/contrast` en topbar, apibar, cards de watchlist, banner principal, exec, chart canvas, footer. Edge glass top/bottom + bordes refractivos laterales (cálido izq + frío der). Watchlist y panel transparentes para que los glows ambient atraviesen.
+- **Iridiscentes Houdini animados:** `@property --iri-angle` para `conic-gradient` rotando. Aplicado solo a tiers premium: **S** (familia dorada full-color rotación 8s) y **S+** (reflejos translúcidos sobre `#06080E` premium, rotación 11s). Botón COPIAR con `iri-pan` 9s. R/B/A/A+ con relleno plano del color del tier.
+- **Bookmarks como lengüeta de marca-páginas:** `clip-path: polygon(...)` con bordes superiores planos, costados rectos, punta triangular abajo (V con micro-suavizado en los hombros). Tamaño 26×30px. Solo se muestran en setups A, A+, S, S+ (R y B sin bookmark — su tier se infiere del score numérico). El sweep metálico blanco animado del S+ sigue activo encima del iridiscente.
+- **Banner principal del ticker** con 3 órdenes jerárquicos: ticker grande, banda+score+CALL+SETUP, subíndices uppercase. **Banda del banner sin relleno**, solo la letra del tier con `text-shadow` glow doble. Ticker ghost gigante translúcido detrás (240px, gradient text-clip iridiscente). Más oscuro `rgba(8,8,8,0.92→0.85)`.
+- **Ambient atmosphere:** glows del body en paleta cálida libre (naranja, rosa magenta, ámbar — sin azul ni mint). Dithering multi-capa: puntos 22×22px + turbulence SVG fina animada (`grain-breathe` 14s) para romper banding sin centellar.
+- **Layout final:**
+  - Topbar 100px sin logo (solo `SCANNER` uppercase letterspaced + `v5.0.0-dev` mono pequeño) + pestañas centradas con tab-shape + sombra superior + indicador "live" verde.
+  - API bar 114px, primera celda con **scan ahora + auto toggle** apilados centrados (migrados desde el footer); 5 cells de KEY 1..5 con `KEY 1 · hace 3s` en una línea + uso `4/8` + barra; última celda "diaria" con 5 filas apiladas `[name · barra · usados/800]`.
+  - Watchlist con cards de glass esmerilado, sparkline ambient con gradient stroke, contenido `slot · ticker · CALL · score · WR%`.
+  - Panel: banner sticky → resumido (precio + 6 chips: alineación, ATR, vela, R, S, vol) → gráfico SVG con MA20/40/200 + 30 velas → detalle técnico colapsado por default.
+  - Footer con `proveedor · twelvedata · 5 keys` + status `motor scoring · data engine · database`.
+- **Estados:** solo "operativo normal" implementado. Los 7 estados restantes (warmup, degraded, fatal, loading, scan en curso, S+ nueva, AUTO off) quedan para cuando se scaffoldee React.
 
-**Branch de trabajo:** `claude/review-project-setup-4DnEm`.
+**Branch de trabajo:** `claude/relaxed-tharp-45c8fe` (worktree dedicado).
 
-**PR abierto:** [#31](https://github.com/Findtheraccoon/Scanner-V5/pull/31) — Cockpit Hi-Fi v1 preview standalone. Esperando review visual de Álvaro antes de scaffoldear Vite + React.
+**PR pendiente:** abrir manualmente desde https://github.com/Findtheraccoon/Scanner-V5/compare/main...claude/relaxed-tharp-45c8fe (no hay `gh` CLI en este entorno).
 
 **Decisiones abiertas para el próximo chat:**
-1. **¿Aprobás el Cockpit Hi-Fi v1?** Si sí → scaffoldear Vite + React + Tailwind + shadcn (mover el HTML a componentes JSX).
-2. **¿Próxima pestaña a hi-fi?** Configuración (más compleja: 4 pasos apilados, canvas Runpod del Slot Registry, upload fixtures) o Dashboard (más simple: refleja estado backend con piloto master + 4 secciones).
-3. **Plugin de frontend-design no disponible** en el sandbox — Álvaro confirmó que terminamos sin él.
+1. **Stack frontend:** Vite + React 18 + TS + Tailwind + shadcn/ui + Zustand + TanStack Query (recomendación del spec). Confirmar con Álvaro antes de `pnpm create vite`.
+2. **¿Cómo trasladar los efectos del Hi-Fi v2 a componentes React?** Opciones: (a) CSS modules con tokens 1-a-1; (b) Tailwind con plugin propio que registre las utilities iridiscent-/glass-/bookmark-; (c) componentes shadcn con className compositions. Mi recomendación: (a) para el shell + tokens y (b/c) para los componentes funcionales, así no perdemos los efectos quirúrgicos del prototipo.
+3. **Próxima pestaña hi-fi:** Configuración (más compleja, canvas Runpod del Slot Registry) o Dashboard (más simple, refleja estado backend con piloto master + 4 secciones). Mi recomendación: **Dashboard primero** — desbloquea ver el sistema vivo cuando se scaffoldee.
+4. **Deuda técnica del backend ya identificada:** `POST /api/v1/scan/auto/{pause,resume}` para cablear el toggle AUTO. Sigue pendiente.
+5. **Compatibilidad:** las animaciones iridiscentes usan `@property` Houdini (Chrome 85+, Edge 85+, Safari 16.4+, Firefox 128+). Como el target es desktop Windows con browsers modernos, OK. Si hace falta fallback estático, está pensado.
 
-**Próximo bloque: Cockpit en producción (post-aprobación) o siguiente pestaña en hi-fi.**
+**Próximo bloque: scaffolding Vite + React (post-aprobación del PR) o siguiente pestaña hi-fi.**
 
 Superficie backend disponible para el frontend:
 
