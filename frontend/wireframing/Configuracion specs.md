@@ -139,4 +139,180 @@ Rutas de archivo que el backend usa. Editables sólo cuando el backend está apa
 
 ---
 
-> **Pendientes (B2 – B6):** TwelveData (Paso 2), Slot Registry + fixtures (Paso 3), Backup + retención (Paso 4), Validator + arranque (Paso 5), Apéndice de contratos.
+## 2. Paso 2 — Proveedor de datos (TwelveData)
+
+Configura las **5 API keys** que el `KeyPool` rota round-robin para todos los fetches del Data Engine. Backend espera el formato CSV `key_id:secret:credits_per_minute:credits_per_day` en `SCANNER_TWELVEDATA_KEYS` o vía el módulo `config/` encriptado.
+
+### 2.1 Bloque "Lista de keys"
+
+**Una fila por cada key registrada.** El frontend admite hasta 5 keys (límite operativo del producto · spec §3.1) y al menos 1 (sin keys el Data Engine no arranca).
+
+**Campos por fila:**
+
+| Campo | Tipo | Requerido | Validación |
+|---|---|---|---|
+| `key_id` | texto corto | Sí | único entre las 5 keys, alfanumérico, máx 24 chars. Es el label que aparece en la `apibar` del Cockpit (`KEY 1`, `KEY 2`, etc). |
+| `secret` | password (oculto, toggle "mostrar") | Sí | API key real de TwelveData. Mín 16 chars. |
+| `credits_per_minute` | numérico (entero) | Sí | rango 1-1000. Default sugerido: 8 (plan free). |
+| `credits_per_day` | numérico (entero) | Sí | rango 100-100000. Default sugerido: 800 (plan free). |
+| **estado** | badge read-only | — | "ok" / "fail" / "probando" / "no probada" según el último probe. |
+
+**Acciones por fila:**
+
+- **Probar** — dispara probe individual (ver §2.2). Cambia el badge a "probando" mientras dura, después a "ok" o "fail" con mensaje del backend.
+- **Eliminar** — confirma inline ("seguro? la key se borra de la rotación") y la quita. Si era la última key, se bloquea con tooltip ("debe quedar al menos 1 key configurada").
+- **Mostrar/ocultar secret** — toggle del input de password.
+
+### 2.2 Bloque "Probe de conectividad"
+
+Verifica que cada key responda al endpoint `/quote` de TwelveData con sus credenciales. Sin probe pasado las keys quedan "no probadas" pero igual se persisten — el backend las usa hasta que la primera fetch real falle.
+
+**Comportamiento del probe individual:**
+
+- Llama `POST /api/v1/validator/connectivity` enviando sólo el `key_id` a probar (el endpoint actual prueba todas; mientras no se extienda con filtro, el frontend filtra el response por `key_id`).
+- Time-out de 10s. Si excede, badge "fail" con mensaje "timeout".
+- Mensaje "ok" cuando la key responde 200; "fail · &lt;código&gt;" con el código real (401 invalid key, 429 rate limit, 5xx upstream).
+
+**Comportamiento del probe agregado:**
+
+- Botón **"probar todas las keys"** al final del bloque.
+- Llama `POST /api/v1/validator/connectivity` y mappea el response (lista de `{key_id, ok, error?}`) a los badges de cada fila simultáneamente.
+- Mientras dura, todas las filas pasan a "probando" y el botón se deshabilita.
+- Al finalizar muestra un toast resumen: "5/5 keys ok" o "3/5 keys ok · 2 con error".
+
+**Probe de S3 (opcional, embebido aquí porque comparte endpoint):** el endpoint `/validator/connectivity` también prueba S3 si está configurado. Si falla, se dispara un toast warning ("S3 sin conexión — configurar en Paso 4") sin bloquear las keys.
+
+### 2.3 Bloque "Estado en vivo de las keys"
+
+Refleja en tiempo real el uso de cada key, alimentado por el evento WebSocket `api_usage.tick` que el Data Engine emite al cierre de cada ciclo 15M.
+
+**Por key (read-only, una fila resumida):**
+
+- `key_id`
+- créditos usados en el último minuto (`used_minute / max_minute` con barra)
+- créditos usados en el día (`used_daily / max_daily` con barra)
+- timestamp del último call (`hace 3s`, `hace 1m`, etc — formato relativo)
+- flag `exhausted` (true cuando la key ya no acepta más fetches en el minuto/día actual)
+
+Es el mismo dato que el Cockpit muestra en su `apibar`, replicado acá para que el usuario pueda diagnosticar problemas de capacity sin salir de Configuración.
+
+### 2.4 Acciones del paso
+
+- **Agregar key** — botón "+ agregar key" al final de la lista. Habilitado sólo si hay menos de 5 keys.
+- **Guardar cambios** — persiste las 5 filas vía el módulo `config/` (con master key del Paso 1) o, mientras la deuda esté abierta, vía un endpoint provisorio `PUT /api/v1/config/twelvedata_keys` que el backend tiene que exponer (todavía no existe — anotar como deuda técnica del wiring).
+- **Recargar pool** — fuerza al `KeyPool` del backend a leer de nuevo las keys (hot-reload sin reiniciar). Sólo necesario si se editó el config externamente.
+
+**Indicador de estado del paso:**
+
+- "configurado" cuando hay al menos 1 key con probe "ok".
+- "probando" cuando hay al menos un probe en curso.
+- "con error" cuando todas las keys están en "fail".
+- "incompleto" cuando hay 0 keys configuradas.
+
+---
+
+## 3. Paso 3 — Slot Registry + fixtures
+
+Configura los **6 slots paralelos** del scanner: a cada uno se le asigna un ticker, un fixture canonical y un benchmark. El backend persiste todo en `slot_registry.json` y los cambios disparan hot-reload del runtime + revalidación del Validator (checks A/B/C).
+
+### 3.1 Bloque "Tabla de slots"
+
+**6 filas fijas** (slots 1-6, no se pueden agregar ni eliminar — son el límite operativo del producto). Cada fila representa un slot y muestra todo lo necesario para ver y editarlo.
+
+**Columnas por slot:**
+
+| Columna | Tipo | Editable | Origen |
+|---|---|---|---|
+| `slot_id` | label (`01` a `06`) | No | hardcoded |
+| `ticker` | texto corto (input) | Sí | `GET /slots[].ticker` |
+| `fixture` | selector (lista de fixtures disponibles) | Sí | listado del Paso 3.2 |
+| `benchmark` | selector (default SPY · vacío = usa el del fixture) | Sí | `GET /slots[].benchmark` |
+| `enabled` | toggle on/off | Sí | `GET /slots[].enabled` |
+| **estado runtime** | badge | No (lectura del WS) | `slot.status` event + `GET /slots[].status` |
+
+**Estados runtime posibles (4):**
+
+- `active` — slot operativo, recibe scans.
+- `warming_up` — slot recién enabled, descargando velas. Animación spinner. Toast amarillo en el Cockpit.
+- `degraded` — 3 fallos consecutivos de fetch (ENG-060). Badge rojo, tooltip con mensaje del backend.
+- `disabled` — slot apagado por el usuario o nunca enabled.
+
+### 3.2 Bloque "Fixtures disponibles"
+
+Lista de los `*.json` que viven en `backend/fixtures/`. Cada fixture es un canonical validado por hash SHA-256 contra `<fixture>.sha256`.
+
+**Por fixture:**
+
+| Campo | Origen |
+|---|---|
+| `fixture_id` (label) | metadata interna del JSON (`metadata.fixture_id`) |
+| `version` | `metadata.fixture_version` |
+| `ticker_default` | `ticker_info.ticker` |
+| `benchmark_default` | `ticker_info.benchmark` |
+| `engine_compat_range` | `metadata.engine_compat_range` |
+| `hash_status` | "ok" / "mismatch" / "no canonical" según el SHA-256 |
+| `usado por` | lista de los slots que lo tienen asignado (e.g. `slot 01, slot 03`) |
+
+**Acciones por fixture:**
+
+- **Ver detalle** — abre un panel lateral con el JSON pretty-printed (read-only) y los campos críticos (confirm_weights, score_bands, detection_thresholds).
+- **Eliminar** — sólo si `usado por = []`. Confirma inline. Si está asignado, el botón está deshabilitado con tooltip.
+
+### 3.3 Bloque "Upload de fixture"
+
+Permite agregar fixtures nuevos al backend sin tener que pasar por el filesystem manualmente.
+
+**Componente:**
+
+- Drop zone + file picker que acepta archivos `.json`.
+- Al seleccionar un archivo, el frontend:
+  1. Lee el JSON localmente y valida estructura (Pydantic schema mismo que el backend usa para `Fixture`).
+  2. Computa SHA-256 local del payload.
+  3. Lo envía vía `POST /api/v1/fixtures/upload` con multipart o body. **Endpoint inexistente — deuda técnica del wiring**: el backend hoy lee `backend/fixtures/` desde disco al startup. Hasta que el endpoint exista, el frontend muestra un mensaje "para agregar fixture: copiar el `.json` y `.sha256` a `backend/fixtures/` y reiniciar".
+- Si el upload existe: muestra preview de la metadata (`fixture_id`, `version`, `ticker_default`, `engine_compat_range`) y un botón **"confirmar y subir"**.
+- Validación: si el `engine_compat_range` no incluye la versión del engine actual (`/engine/health.engine_version`), bloquea la subida con mensaje "fixture incompatible — engine actual: 5.2.0 · rango exigido: ≥6.0.0".
+
+### 3.4 Bloque "Acciones por slot"
+
+**Por cada fila de la tabla 3.1:**
+
+- **Habilitar** (cuando `enabled=false`):
+  1. Frontend llama `PATCH /api/v1/slots/{id}` con `{enabled: true, ticker, fixture, benchmark?}`.
+  2. Backend valida el fixture (REG-011/012/013), persiste el JSON, marca el slot `warming_up` y broadcast `slot.status`.
+  3. Backend lanza warmup task en background (`DataEngine.warmup([ticker])`) → al terminar, marca `active` y broadcast.
+  4. Backend lanza también `Validator.run_slot_revalidation()` (checks A/B/C limitados al slot tocado).
+  5. UI muestra el slot con badge `warming_up` (con tiempo estimado, ~30s típico).
+
+- **Deshabilitar** (cuando `enabled=true`):
+  1. Frontend llama `PATCH /api/v1/slots/{id}` con `{enabled: false}`.
+  2. Backend marca `disabled`, broadcast, dispara revalidation A/B/C.
+  3. UI refleja inmediatamente; el slot deja de recibir scans.
+
+- **Editar ticker / fixture / benchmark sin tocar el flag** — sólo permitido cuando el slot está `disabled` (cambiar ticker en vivo es destructivo). Si el usuario intenta cambiar ticker con el slot enabled, el frontend pregunta "para cambiar el ticker hay que deshabilitar primero · seguir?" y si confirma, deshabilita → cambia → re-habilita en 3 calls atómicos.
+
+**Comportamiento de errores:**
+
+- Si el `PATCH` retorna 400 (fixture inválido, ticker malformado), toast con el mensaje + el slot queda en su estado previo.
+- Si retorna 503 (data_engine no disponible), toast "data engine no inicializado — esperá que arranque" + el slot queda en su estado previo.
+- Si la warmup task falla (rate limit de TD durante el fetch), backend broadcasts `slot.status=degraded ENG-060` y la UI lo refleja en el badge.
+
+### 3.5 Bloque "Slot registry — vista canvas (opcional)"
+
+> **Decisión abierta:** el spec menciona una visualización "estilo Runpod nodo-conexión" para esta sección. Es la única parte del producto que considera ese lenguaje visual. Si se implementa, vive en este bloque y reemplaza la tabla de 3.1 cuando el usuario clickea "vista canvas". Si no, queda fuera del MVP.
+
+**Comportamiento si se implementa:**
+
+- 6 nodos (uno por slot) conectados al Data Engine + al Scoring Engine.
+- Click en un nodo abre un panel lateral con los mismos controles que la fila de la tabla (3.1) — son dos vistas equivalentes del mismo dato.
+- Las conexiones tienen estado visual: "fluyendo" (animación) cuando hay un scan reciente, "estática" cuando el slot está disabled o degraded.
+- Botón "vista tabla" / "vista canvas" para alternar.
+
+**Indicador de estado del paso (3 en total):**
+
+- "configurado" cuando hay al menos 1 slot enabled con badge `active` o `warming_up`.
+- "incompleto" cuando todos los slots están `disabled`.
+- "con error" cuando hay al menos un slot `degraded`.
+
+---
+
+> **Pendientes (B4 – B6):** Persistencia + backup S3 + retención (Paso 4), Validator + arranque (Paso 5), Apéndice de contratos.
