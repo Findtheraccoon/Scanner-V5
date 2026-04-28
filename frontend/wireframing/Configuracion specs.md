@@ -315,4 +315,204 @@ Permite agregar fixtures nuevos al backend sin tener que pasar por el filesystem
 
 ---
 
-> **Pendientes (B4 – B6):** Persistencia + backup S3 + retención (Paso 4), Validator + arranque (Paso 5), Apéndice de contratos.
+## 4. Paso 4 — Persistencia, backup y retención
+
+Controla la **base de datos operativa**, el **archivo histórico**, los **backups remotos a S3** y las **políticas de rotación**. Es el paso "operaciones" — el usuario sólo lo toca una vez al setup y después cuando algo se llena o se rompe.
+
+### 4.1 Bloque "Stats de la base de datos"
+
+Vista en vivo del estado de la DB operativa y del archive. Refrescable (poll cada 30s + manual).
+
+**Datos mostrados (alimentados por `GET /api/v1/database/stats`):**
+
+| Campo | Origen | Formato |
+|---|---|---|
+| **Tamaño DB operativa** | `size_mb_operative` | "342 MB · de 5000 MB · 6.8% usado" + barra de progreso |
+| **Tamaño DB archive** | `size_mb_archive` | "1.2 GB" |
+| **Size limit** | `size_limit_mb` | "5000 MB" (numérico, lectura) |
+| **Filas por tabla operativa** | `tables_operative` | tabla con `signals`, `heartbeats`, `system_logs`, `validator_reports`, `candles_daily/1h/15m` y filas + retention_seconds |
+| **Filas por tabla archive** | `tables_archive` | tabla análoga |
+| **Última rotación** | `last_rotation_at` | timestamp + tipo ("normal" / "agresiva" / "shutdown") |
+
+**Acciones:**
+
+- **Refrescar** — botón manual (auto-refresh cada 30s en background).
+- **Rotación normal ahora** — `POST /api/v1/database/rotate`. Mueve filas expiradas (según retention policies) a `archive`. Con confirmación inline ("se moverán N filas a archive · seguir?"). Toast "rotación completa: N filas movidas".
+- **Rotación agresiva ahora** — `POST /api/v1/database/rotate/aggressive`. Sólo dispara si la DB supera el size limit. Si no, muestra mensaje "no se necesita rotación agresiva (tamaño OK)". Si dispara, retorna `{triggered, size_mb_before, size_mb_after, vacuum_recommended}` y muestra los 3 valores en un toast.
+- **VACUUM** — visible sólo cuando la rotación agresiva retornó `vacuum_recommended=true`. SQLite no reclama espacio en disco hasta hacer VACUUM. **Endpoint inexistente** — anotar como deuda técnica del backend (`POST /api/v1/database/vacuum`).
+
+**Indicador visual del bloque:**
+
+- "ok" cuando `size_mb_operative < 80% size_limit_mb`.
+- "atención" cuando `size_mb_operative ≥ 80% size_limit_mb` (sugerir rotación).
+- "crítico" cuando `size_mb_operative ≥ 95% size_limit_mb` (rotación urgente, banner rojo).
+
+### 4.2 Bloque "Backup remoto S3-compatible"
+
+Configura las credenciales de un bucket S3 (AWS S3, Backblaze B2, Cloudflare R2, MinIO, etc) y permite backup + restore desde la UI.
+
+**Inputs:**
+
+| Campo | Tipo | Requerido | Ejemplo |
+|---|---|---|---|
+| `endpoint_url` | URL | Sí | `https://s3.amazonaws.com` · `https://s3.us-west-002.backblazeb2.com` · `https://<account>.r2.cloudflarestorage.com` |
+| `region` | texto corto | Sí | `us-east-1` |
+| `bucket` | texto corto | Sí | `scanner-v5-backups` |
+| `access_key` | texto | Sí | clear text — no es secret |
+| `secret_key` | password (oculto) | Sí | encriptado por master key (Paso 1) cuando se persiste |
+| `prefix` | texto corto | No | `backups/` (default vacío) — útil para compartir bucket con otros productos |
+
+**Botones:**
+
+- **Probar conexión** — llama `POST /api/v1/database/backups` con las credenciales en body como dry-run (sólo lista, no escribe). Si el endpoint responde 200 y devuelve un array (aunque vacío), conexión OK. Si retorna 4xx, toast "credenciales inválidas / bucket inexistente". Si timeout, "no se pudo conectar a `<endpoint_url>`".
+
+- **Backup ahora** — `POST /api/v1/database/backup` con las credenciales en body. El backend hace `VACUUM INTO` + gzip + `upload_fileobj` al bucket. Mientras dura, botón deshabilitado y aparece spinner. Al terminar, toast "backup subido: `s3://<bucket>/<prefix><filename>` · 234 MB". Recarga el listado de backups.
+
+- **Listar backups** — `POST /api/v1/database/backups` con credenciales. Retorna array ordenado descendente por timestamp. Tabla con: nombre, tamaño, fecha de subida, botón "restaurar" por fila.
+
+- **Restaurar desde backup** — `POST /api/v1/database/restore` con credenciales + key del backup. **Doble confirmación obligatoria** ("se descargará `<filename>` y se creará un sibling de la DB operativa actual · esta operación NO sobrescribe la DB en uso · seguir?"). Toast "restore completado: `<sibling_path>` · cerrar el backend, reemplazar la DB y reiniciar para usar la backup". El backend nunca pisa la DB viva.
+
+**Indicador del bloque:**
+
+- "configurado" cuando hay credenciales guardadas y el último probe pasó.
+- "configurado · sin conexión" cuando hay credenciales pero el último probe falló.
+- "incompleto" cuando faltan credenciales.
+- No bloquea: el sistema funciona perfectamente sin S3.
+
+### 4.3 Bloque "Políticas de retención"
+
+Cuándo y cómo se rotan datos viejos. Estos toggles afectan el comportamiento del Database Engine y el watchdog.
+
+**Inputs:**
+
+| Campo | Tipo | Default | Origen | Comportamiento |
+|---|---|---|---|---|
+| `rotate_on_shutdown` | toggle | `false` | `SCANNER_ROTATE_ON_SHUTDOWN` | Si `true`, dispara una rotación normal al cerrar el backend (lifespan hook). Útil para que los desarrollos largos no acumulen basura. |
+| `db_size_limit_mb` | numérico | `5000` | `SCANNER_DB_SIZE_LIMIT_MB` | Umbral en MB que dispara la rotación agresiva. Cambiarlo es un toggle de qué tan agresivo es el watchdog. |
+| `aggressive_rotation_enabled` | toggle | `false` | `SCANNER_AGGRESSIVE_ROTATION_ENABLED` | Activa el watchdog automático. Sin esto, sólo la rotación agresiva manual del 4.1 funciona. |
+| `aggressive_rotation_interval_s` | numérico | `3600` | `SCANNER_AGGRESSIVE_ROTATION_INTERVAL_S` | Cada cuánto el watchdog chequea el tamaño. Default 1h — conservador para no martirizar el disco. |
+
+**Política normal (informativa, read-only):** la tabla de retention_seconds por tabla viene de `DEFAULT_RETENTION_POLICIES` del backend y NO es editable desde la UI (decisión de producto: la política se ajusta desde código, no desde Configuración). Se muestra como referencia con valores actuales: `signals=∞`, `heartbeats=24h`, `system_logs=7d`, `validator_reports=30d`, etc.
+
+**Política agresiva (informativa):** ~50% de las normales. También read-only.
+
+**Acciones:**
+
+- **Aplicar cambios** — guarda los 4 inputs en `UserConfig` (módulo `config/`) o pide reinicio del backend si toca settings inmutables (los cambios de `aggressive_rotation_enabled` requieren reiniciar el watchdog — el backend tiene que exponer un endpoint hot-reload `POST /api/v1/config/reload-policies` que **no existe todavía** — anotar deuda técnica).
+
+**Indicador del bloque:** siempre "informativo" — no hay validaciones que fallen, sólo cambios de comportamiento.
+
+### 4.4 Indicador de estado del paso
+
+- "configurado" cuando S3 está OK y al menos `rotate_on_shutdown` o `aggressive_rotation_enabled` está marcado.
+- "incompleto" cuando S3 nunca fue probado.
+- "atención" cuando la DB operativa supera 80% del size limit.
+
+---
+
+## 5. Paso 5 — Arranque y diagnóstico
+
+Controla **qué corre al iniciar el backend** y **cómo se diagnostican problemas en runtime**. Es el paso operativo del día a día — el usuario lo abre cuando algo no anda.
+
+### 5.1 Bloque "Validator — batería completa"
+
+Corre los 7 checks (D, A, B, C, E, F, G) y persiste el reporte en DB + TXT en `LOG/`. Es la herramienta principal de diagnóstico del producto.
+
+**Estado actual del validator (lectura):**
+
+Datos del último reporte vía `GET /api/v1/validator/reports/latest`:
+
+| Campo | Origen |
+|---|---|
+| `run_id` | UUID del reporte |
+| `trigger` | `startup` / `manual` / `hot_reload` / `connectivity` |
+| `started_at` / `finished_at` | timestamps con duración derivada |
+| `overall_status` | `pass` / `warning` / `fail` |
+| Lista de los 7 tests con su `status` individual | `tests_json` |
+
+**Acciones:**
+
+- **Correr validator ahora** — `POST /api/v1/validator/run`. Bloquea el botón mientras dura (~30-90s típico).
+- **Solo conectividad** — `POST /api/v1/validator/connectivity`. Más rápido (~5s), corre solo el check G.
+
+**Progress bar (live):**
+
+Mientras corre la batería, una barra de progreso se alimenta del evento WebSocket `validator.progress`. Cada test emite 2 eventos (start + end). El frontend mantiene un dict `{test_id: status}` y cuenta los completados.
+
+**Visualización en tiempo real:**
+
+- **Lista de los 7 tests** con su nombre y un badge dinámico:
+  - `pending` (gris) cuando todavía no llegó el `running` event.
+  - `running` (azul, spinner) cuando llegó el primer event.
+  - `passed` / `warning` / `failed` (verde / amarillo / rojo) cuando llegó el segundo.
+- **Barra de progreso global**: 0/7 → 7/7. La barra se llena con el color del peor estado (verde si todos pass, amarillo si hay warning, rojo si hay fail).
+- **Mensaje del último test**: muestra el `message` del backend del test que está corriendo (e.g. "Check F · parity 245/245 matches").
+
+### 5.2 Bloque "Histórico de reportes"
+
+Lista los últimos reportes persistidos para auditoría.
+
+**Componente:** lista colapsable con paginación (cursor pagination del backend vía `GET /api/v1/validator/reports?cursor=<id>&limit=20`).
+
+**Por reporte:**
+
+- timestamp + duración
+- `trigger` (badge: startup / manual / hot_reload / connectivity)
+- `overall_status` (badge verde / amarillo / rojo)
+- 7 mini-badges (uno por test) con el resultado
+
+**Click en un reporte:** abre detalle vía `GET /api/v1/validator/reports/{id}`:
+
+- Metadata completa.
+- Por test: nombre, descripción, status, mensaje, duración, errores si los hubo.
+- Botón "exportar a TXT" (descarga el reporte formateado igual que el TXT que vive en `LOG/`).
+
+**Filtros (opcionales):**
+
+- Por trigger (multi-select).
+- Por status (pass / warning / fail).
+- Por rango de fecha.
+
+### 5.3 Bloque "Flags de arranque"
+
+Controla qué corre el backend al iniciar.
+
+**Inputs:**
+
+| Campo | Tipo | Default | Origen | Comportamiento |
+|---|---|---|---|---|
+| `validator_run_at_startup` | toggle | `true` | `SCANNER_VALIDATOR_RUN_AT_STARTUP` | Si `true`, corre la batería completa al arrancar el backend antes de aceptar requests. |
+| `validator_parity_enabled` | toggle | `true` | `SCANNER_VALIDATOR_PARITY_ENABLED` | Habilita el Check F (parity exhaustivo). Costoso (~60-90s). |
+| `validator_parity_limit` | numérico | `30` | `SCANNER_VALIDATOR_PARITY_LIMIT` | Cuántas señales del parity sample se chequean (vacío = 245, todas). Trade-off entre tiempo y cobertura. |
+| `auto_scan_run_at_startup` | toggle | `true` | nuevo (deuda técnica · "Auto-LAST" del spec §5.2) | Si `true`, el `auto_scan_loop` arranca corriendo. Si `false`, arranca pausado y el usuario tiene que hacer "resume" manual. |
+| `heartbeat_interval_s` | numérico | `120` | `SCANNER_HEARTBEAT_INTERVAL_S` | Cada cuántos segundos el backend emite heartbeat + corre healthcheck del scoring. |
+
+**Acciones:**
+
+- **Aplicar al próximo arranque** — guarda en el `.env` o en el `UserConfig` (vía `POST /api/v1/config/save` que **no existe todavía** — deuda técnica). Mensaje "los cambios toman efecto al reiniciar el backend".
+- **Reiniciar backend ahora** — botón con doble confirmación. **Endpoint inexistente** — deuda técnica (`POST /api/v1/system/restart`). Hasta que exista, el frontend muestra mensaje "para reiniciar: detener y volver a ejecutar `python backend/main.py`".
+
+### 5.4 Bloque "Estado de los motores"
+
+Vista informativa que duplica la del footer del shell, con más detalle. Útil para diagnóstico rápido.
+
+**Por motor (3 motores: data, scoring, database):**
+
+- Badge de status (`green` / `yellow` / `red` / `paused`) — alimentado por WebSocket `engine.status` + `GET /api/v1/engine/health` al cargar.
+- Último mensaje recibido del motor.
+- Último `error_code` si lo hay.
+- Timestamp del último heartbeat.
+
+**Acción:**
+
+- **Ver último healthcheck** — abre el JSON del último `/engine/health` con todos los detalles (uptime, last_heartbeat_at, parity_match_rate del scoring, etc).
+
+### 5.5 Indicador de estado del paso
+
+- "ok" cuando los 3 motores están green y el último reporte del validator es `pass`.
+- "atención" cuando hay al menos un motor en yellow o el último reporte tiene `warning`.
+- "con error" cuando hay un motor en red o el último reporte falló.
+
+---
+
+> **Pendiente (B6):** Apéndice de contratos (tabla completa de endpoints + payloads esperados, eventos WS con su shape, comportamiento de hot-reload vs reinicio).
