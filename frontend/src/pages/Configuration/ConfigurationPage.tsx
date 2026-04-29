@@ -6,6 +6,7 @@ import { Box1Engines } from "./boxes/Box1Engines";
 import { Box2Config } from "./boxes/Box2Config";
 import { Box3Keys } from "./boxes/Box3Keys";
 import { Box4Slots } from "./boxes/Box4Slots";
+import { Box5Validator } from "./boxes/Box5Validator";
 import "./configuration.css";
 
 /* ConfigurationPage · root de la pestaña Configuración.
@@ -42,16 +43,7 @@ export function ConfigurationPage(): ReactElement {
         <Box2Config />
         <Box3Keys />
         <Box4Slots />
-
-        <Box
-          id={5}
-          state="pend"
-          title="Validator + diagnóstico"
-          sub="batería D / A / B / C / E / F / G · histórico de reportes"
-          statusText="—"
-        >
-          <div className="note">Pendiente · contenido en commit 8.</div>
-        </Box>
+        <Box5Validator />
 
         <Box
           id={6}
