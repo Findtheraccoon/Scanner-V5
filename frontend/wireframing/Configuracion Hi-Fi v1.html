@@ -1,0 +1,3043 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Scanner v5 · Configuración · Hi-Fi Phoenix v1</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   SCANNER V5 · CONFIGURACIÓN · Hi-Fi PHOENIX v1
+   ────────────────────────────────────────────────────────────
+   Lenguaje visual heredado del Cockpit Hi-Fi v2 (Phoenix glass
+   cromado · negro instrumental · accent #FF6A2C).
+
+   Decisiones específicas de esta pestaña:
+   · Sin apibar (no se muestran TD keys live · scan · auto).
+   · Sólo topbar + contenido + footer.
+   · Layout: rail vertical izquierdo (80px) con dots de estado +
+     frame con 6 boxes plegables, divididos por hairline.
+   · Estado fijo de iteración v1:
+       Box 1 · ok    — 5 motores green
+       Box 2 · ok    — config cargado
+       Box 3 · warn  — 1 TD key falló probe
+       Box 4 · warn  — 1 slot degraded
+       Box 5 · ok    — último reporte 7/7 pass
+       Box 6 · pend  — sin credenciales S3
+   · Tweaks panel dev con icono engranaje (bottom-right) que
+     expande/colapsa; en v1 sólo previsualiza el estado por
+     default — los demás estados se completan en iteraciones
+     siguientes.
+   ============================================================ */
+
+@property --iri-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+@property --iri-shift { syntax: '<percentage>'; initial-value: 0%; inherits: false; }
+
+:root {
+  /* ── Base ── */
+  --bg:            #08090b;
+  --bg-elev-1:     #0d0f12;
+  --bg-elev-2:     #12151a;
+  --bg-elev-3:     #181b21;
+  --bg-elev-4:     #20242b;
+  --bg-row-hover:  #0f1216;
+  --surface-card:  #111317;
+  --surface-card-2:#161920;
+
+  /* ── Hairlines ── */
+  --hair:          rgba(255,255,255,0.05);
+  --hair-2:        rgba(255,255,255,0.08);
+  --hair-3:        rgba(255,255,255,0.14);
+  --hair-vivid:    rgba(255,255,255,0.22);
+
+  /* ── Texto ── */
+  --t-100:         #f5f5f7;
+  --t-90:          rgba(245,245,247,0.90);
+  --t-75:          rgba(245,245,247,0.75);
+  --t-55:          rgba(245,245,247,0.55);
+  --t-38:          rgba(245,245,247,0.38);
+  --t-22:          rgba(245,245,247,0.22);
+  --t-12:          rgba(245,245,247,0.12);
+
+  /* ── Accent · Phoenix ── */
+  --accent:        #FF6A2C;
+  --accent-2:      #E55A1F;
+  --accent-deep:   #7A2E0E;
+  --accent-darker: #3D1808;
+  --accent-glow:   rgba(255,106,44,0.30);
+  --accent-glow-2: rgba(255,106,44,0.18);
+  --accent-soft:   rgba(255,106,44,0.08);
+
+  /* ── Pilotos ── */
+  --ok:            #22c55e;
+  --warn:          #f59e0b;
+  --err:           #ef4444;
+  --pend:          var(--t-38);
+
+  /* ── Glass ── */
+  --glass-grad-1:
+    linear-gradient(180deg,
+      rgba(255,255,255,0.045) 0%,
+      rgba(255,255,255,0.012) 38%,
+      rgba(255,255,255,0)     62%,
+      rgba(0,0,0,0.10)        100%);
+  --glass-grad-2:
+    linear-gradient(180deg,
+      rgba(255,255,255,0.06) 0%,
+      rgba(255,255,255,0.02) 36%,
+      rgba(255,255,255,0)    62%,
+      rgba(0,0,0,0.18)       100%);
+  --glass-grad-3:
+    linear-gradient(180deg,
+      rgba(255,255,255,0.085) 0%,
+      rgba(255,255,255,0.030) 32%,
+      rgba(255,255,255,0.005) 60%,
+      rgba(0,0,0,0.22)        100%);
+  --glass-shine:
+    linear-gradient(135deg,
+      rgba(255,255,255,0.10) 0%,
+      rgba(255,255,255,0.025) 26%,
+      transparent 55%);
+
+  --bevel-soft:
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    inset 0 -1px 0 rgba(0,0,0,0.25);
+  --bevel-full:
+    inset 0 1px 0 rgba(255,255,255,0.10),
+    inset 0 -1px 0 rgba(0,0,0,0.32),
+    inset 1px 0 0 rgba(255,255,255,0.035),
+    inset -1px 0 0 rgba(0,0,0,0.18);
+  --bevel-strong:
+    inset 0 1px 0 rgba(255,255,255,0.16),
+    inset 0 -1px 0 rgba(0,0,0,0.45),
+    inset 1px 0 0 rgba(255,255,255,0.05),
+    inset -1px 0 0 rgba(0,0,0,0.22);
+  --shadow-card:      0 1px 2px rgba(0,0,0,0.35), 0 6px 18px rgba(0,0,0,0.30);
+  --shadow-card-deep: 0 2px 4px rgba(0,0,0,0.4), 0 16px 48px rgba(0,0,0,0.55);
+  --shadow-tab:       0 -3px 8px rgba(0,0,0,0.40);
+
+  --blur-glass:    blur(20px) saturate(160%) brightness(1.06) contrast(1.04);
+  --blur-strong:   blur(28px) saturate(180%) brightness(1.08) contrast(1.05);
+  --blur-soft:     blur(12px) saturate(140%) brightness(1.04) contrast(1.03);
+
+  --card-bg:       rgba(15, 15, 15, 0.62);
+  --card-bg-2:     rgba(20, 20, 20, 0.60);
+  --card-bg-elev:  rgba(28, 28, 28, 0.55);
+  --card-border:   rgba(255, 255, 255, 0.06);
+  --card-border-h: rgba(255, 255, 255, 0.12);
+  --edge-glass-top:    inset 0 1px 0 rgba(255,255,255,0.18);
+  --edge-glass-bottom: inset 0 -1px 0 rgba(0,0,0,0.40);
+
+  --iridescent-1: linear-gradient(135deg,
+    #FF6A2C 0%, #c4b5fd 25%, #fdba74 50%, #f9a8d4 75%, #FF6A2C 100%);
+
+  /* ── Radii ── */
+  --r:        12px;
+  --r-sm:     8px;
+  --r-md:     16px;
+  --r-lg:     22px;
+  --r-card:   22px;
+  --r-pill:   999px;
+
+  /* ── Tipografía ── */
+  --font-ui:   'Geist','Söhne',system-ui,-apple-system,sans-serif;
+  --font-mono: 'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+
+  /* ── Easings ── */
+  --ease:    cubic-bezier(0.4, 0, 0.2, 1);
+  --t-fast:  140ms var(--ease);
+  --t-base:  220ms var(--ease);
+  --t-slow:  420ms var(--ease);
+
+  /* ── Espaciado ── */
+  --gap-1: 4px;
+  --gap-2: 8px;
+  --gap-3: 12px;
+  --gap-4: 16px;
+  --gap-5: 24px;
+  --gap-6: 32px;
+  --gap-7: 48px;
+
+  /* ── Layout ── */
+  --topbar-h:  100px;
+  --footer-h:  56px;
+  --rail-w:    96px;
+}
+
+/* ============================================================
+   RESET
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+html { background: var(--bg); }
+body {
+  min-height: 100vh;
+  background:
+    radial-gradient(ellipse 900px 600px at 92% -8%, rgba(255,140,80,0.05) 0%, rgba(255,140,80,0.012) 45%, transparent 75%),
+    radial-gradient(ellipse 600px 450px at 4% 94%, rgba(255,106,44,0.035) 0%, transparent 65%),
+    var(--bg);
+  color: var(--t-100);
+  font-family: var(--font-ui);
+  font-weight: 400;
+  font-size: 13px;
+  line-height: 1.45;
+  font-feature-settings: 'ss01','ss02','cv01','cv11';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  overflow-x: hidden;
+}
+button { font-family: inherit; color: inherit; background: transparent; border: none; padding: 0; cursor: pointer; }
+input, select { font-family: inherit; color: inherit; }
+::selection { background: var(--accent-glow); color: var(--bg); }
+
+.mono, .num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* ── Atmospheric noise ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.55;
+  background-image: radial-gradient(rgba(255,255,255,0.045) 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-position: 0 0;
+  mask-image: radial-gradient(ellipse 90% 80% at 50% 50%, #000 30%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 50%, #000 30%, transparent 100%);
+}
+body::after {
+  content: '';
+  position: fixed;
+  inset: -50%;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.07;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg viewBox='0 0 240 240' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.6' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1   0 0 0 0 1   0 0 0 0 1   0 0 0 0.55 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-size: 240px 240px;
+  animation: grain-breathe 14s steps(8) infinite;
+}
+@keyframes grain-breathe {
+  0%   { transform: translate(0, 0); }
+  20%  { transform: translate(-3%, 2%); }
+  40%  { transform: translate(2%, -3%); }
+  60%  { transform: translate(-2%, -2%); }
+  80%  { transform: translate(3%, 2%); }
+  100% { transform: translate(0, 0); }
+}
+
+/* ============================================================
+   HEALTH LINE (top 1px) — heredado del Cockpit
+   ============================================================ */
+.health-line {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%, var(--accent) 12%, var(--accent) 50%,
+    var(--accent-deep) 70%, transparent 100%);
+  z-index: 100;
+  opacity: 0.5;
+  animation: pulse-health 6s var(--ease) infinite;
+}
+@keyframes pulse-health {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 0.85; }
+}
+
+/* ============================================================
+   APP SHELL — 3 rows (sin apibar)
+   ============================================================ */
+.app {
+  display: grid;
+  grid-template-rows: var(--topbar-h) 1fr var(--footer-h);
+  min-height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
+/* ============================================================
+   TOP BAR
+   ============================================================ */
+.topbar {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: end;
+  padding: 0 var(--gap-6) 0;
+  background:
+    var(--glass-grad-2),
+    linear-gradient(180deg, rgba(13,15,18,0.92) 0%, rgba(8,9,11,0.85) 100%);
+  backdrop-filter: var(--blur-strong);
+  -webkit-backdrop-filter: var(--blur-strong);
+  border-bottom: 1px solid var(--card-border);
+  box-shadow: var(--edge-glass-top), var(--edge-glass-bottom);
+}
+
+.topbar__brand {
+  align-self: center;
+  display: flex;
+  align-items: center;
+  padding-bottom: 4px;
+}
+.brand__text { display: flex; flex-direction: column; gap: 2px; line-height: 1; }
+.brand__name {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--t-100);
+  text-transform: uppercase;
+}
+.brand__sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  color: var(--t-38);
+  text-transform: uppercase;
+}
+
+.topbar__nav {
+  align-self: end;
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 0;
+}
+.tab {
+  position: relative;
+  padding: 14px 26px 16px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--t-55);
+  background: linear-gradient(180deg, rgba(255,255,255,0.015) 0%, transparent 80%);
+  border: 1px solid var(--hair);
+  border-bottom: none;
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  margin-right: -1px;
+  transition: color var(--t-fast), background var(--t-fast);
+  font-weight: 500;
+}
+.tab:hover {
+  color: var(--t-90);
+  background: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 80%);
+}
+.tab.is-active {
+  color: var(--t-100);
+  background:
+    var(--glass-grad-3),
+    linear-gradient(180deg, var(--bg-elev-3) 0%, var(--bg-elev-2) 100%);
+  border-color: var(--hair-3);
+  box-shadow: var(--shadow-tab), inset 0 1px 0 rgba(255,255,255,0.10);
+  z-index: 2;
+}
+.tab.is-active::after {
+  content: '';
+  position: absolute;
+  left: -1px; right: -1px;
+  bottom: -1px;
+  height: 2px;
+  background: linear-gradient(180deg, var(--bg-elev-2) 0%, var(--bg) 100%);
+  z-index: 3;
+}
+.tab.is-active::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 1px;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow);
+}
+
+.topbar__meta {
+  align-self: center;
+  justify-self: end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  padding-bottom: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t-55);
+  text-align: right;
+}
+.topbar__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ok);
+  font-family: var(--font-ui);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.topbar__live::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--ok);
+  box-shadow: 0 0 8px rgba(34,197,94,0.55);
+  animation: pulse-dot 2.4s var(--ease) infinite;
+}
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 1;    transform: scale(1.18); }
+}
+.topbar__clock { letter-spacing: 0.02em; }
+.topbar__date { font-size: 10px; color: var(--t-38); letter-spacing: 0.04em; }
+
+/* ============================================================
+   FOOTER (sin scan/auto · solo status + bearer)
+   ============================================================ */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--gap-6);
+  background:
+    var(--glass-grad-1),
+    linear-gradient(180deg, rgba(13,15,18,0.78) 0%, rgba(8,9,11,0.65) 100%);
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  border-top: 1px solid var(--card-border);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
+}
+.footer__left, .footer__right {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-4);
+}
+.footer__status {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t-55);
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+}
+.footer__status .ok::before {
+  content: '';
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--ok);
+  margin-right: 6px;
+  box-shadow: 0 0 6px rgba(34,197,94,0.5);
+}
+.bearer-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--hair-3);
+  border-radius: var(--r);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t-75);
+}
+.bearer-input__label {
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--t-38);
+}
+.bearer-input__value { color: var(--t-90); }
+.bearer-input__chev { color: var(--t-38); font-size: 10px; }
+
+/* ============================================================
+   PAGE BODY · CONFIGURACIÓN
+   ============================================================ */
+.page {
+  position: relative;
+  padding: var(--gap-6) var(--gap-7) calc(var(--footer-h) + var(--gap-7));
+  max-width: 1640px;
+  margin: 0 auto;
+  width: 100%;
+}
+.page__header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--gap-5);
+  margin-bottom: var(--gap-6);
+  padding-bottom: var(--gap-4);
+  border-bottom: 1px solid var(--hair);
+}
+.page__title {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--t-100);
+  margin: 0;
+}
+.page__title em {
+  color: var(--accent);
+  font-style: normal;
+  margin-left: 8px;
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+.page__sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t-55);
+  letter-spacing: 0.04em;
+  margin-top: 4px;
+}
+.page__overall {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--hair-3);
+  border-radius: var(--r);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t-75);
+  box-shadow: var(--bevel-soft);
+}
+.page__overall .ratio { color: var(--t-100); font-weight: 600; }
+.page__overall .lab {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--t-38);
+}
+
+.config-layout {
+  position: relative;
+}
+
+/* ============================================================
+   FRAME — contenedor de los 6 boxes con rail integrado.
+   Layout grid 2-col: dot del box (col 1) + contenido (col 2).
+   La línea vertical se dibuja como ::before continua, los dots
+   viven al lado de su box-head correspondiente y se desplazan
+   con la altura real de cada box (subgrid).
+   ============================================================ */
+.frame {
+  display: grid;
+  grid-template-columns: var(--rail-w) 1fr;
+  position: relative;
+  background:
+    var(--glass-grad-2),
+    linear-gradient(180deg, var(--card-bg) 0%, var(--card-bg-2) 100%);
+  border: 1px solid var(--card-border);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-card-deep), var(--bevel-full);
+  overflow: hidden;
+  backdrop-filter: var(--blur-soft);
+  -webkit-backdrop-filter: var(--blur-soft);
+}
+.frame::before {
+  /* línea vertical continua del rail */
+  content: '';
+  position: absolute;
+  top: 36px;
+  bottom: 36px;
+  left: calc(var(--rail-w) / 2);
+  width: 1px;
+  background: linear-gradient(180deg,
+    transparent 0%,
+    var(--hair-3) 8%,
+    var(--hair-3) 92%,
+    transparent 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ============================================================
+   BOX (paso plegable · grid 2-col con subgrid)
+   ============================================================ */
+.box {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  position: relative;
+  border-bottom: 1px solid var(--hair);
+}
+.box:last-child { border-bottom: none; }
+
+/* Dot del box · vive en col 1, alineado al centro del box-head */
+.box__dot {
+  grid-column: 1;
+  grid-row: 1;
+  position: relative;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  margin-top: var(--gap-5);
+  margin-left: auto;
+  margin-right: auto;
+  border-radius: 50%;
+  background:
+    var(--glass-grad-3),
+    linear-gradient(180deg, var(--bg-elev-3) 0%, var(--bg-elev-2) 100%);
+  border: 1px solid var(--hair-3);
+  box-shadow: var(--bevel-full);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--t-55);
+  align-self: start;
+  justify-self: center;
+  transition: all var(--t-fast);
+  cursor: pointer;
+  user-select: none;
+}
+.box__dot::before {
+  /* halo del estado */
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--t-fast);
+}
+.box.is-ok    .box__dot { color: var(--ok);   border-color: rgba(34,197,94,0.55); }
+.box.is-ok    .box__dot::before { opacity: 1; box-shadow: 0 0 14px rgba(34,197,94,0.30); }
+.box.is-warn  .box__dot { color: var(--warn); border-color: rgba(245,158,11,0.55); }
+.box.is-warn  .box__dot::before { opacity: 1; box-shadow: 0 0 14px rgba(245,158,11,0.30); }
+.box.is-err   .box__dot { color: var(--err);  border-color: rgba(239,68,68,0.55); }
+.box.is-err   .box__dot::before { opacity: 1; box-shadow: 0 0 14px rgba(239,68,68,0.30); }
+.box.is-pend  .box__dot { color: var(--t-38); border-color: var(--hair-2); }
+
+/* Head + body en col 2 */
+.box__head {
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--gap-4);
+  padding: var(--gap-5) var(--gap-6) var(--gap-5) var(--gap-3);
+  cursor: pointer;
+  transition: background var(--t-fast);
+}
+.box__head:hover { background: rgba(255,255,255,0.018); }
+.box__title-wrap { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.box__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--t-100);
+  letter-spacing: -0.01em;
+}
+.box__sub {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t-55);
+  letter-spacing: 0.02em;
+  line-height: 1.5;
+}
+.box__sub .ref { color: var(--accent); }
+.box__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-4);
+}
+.box__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: var(--r-pill);
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--hair-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--t-75);
+}
+.box.is-ok   .box__status { color: var(--ok);   border-color: rgba(34,197,94,0.32); background: rgba(34,197,94,0.06); }
+.box.is-warn .box__status { color: var(--warn); border-color: rgba(245,158,11,0.36); background: rgba(245,158,11,0.06); }
+.box.is-err  .box__status { color: var(--err);  border-color: rgba(239,68,68,0.36); background: rgba(239,68,68,0.06); }
+.box.is-pend .box__status { color: var(--t-55); }
+.box__chev {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--r-sm);
+  color: var(--t-38);
+  font-size: 10px;
+  transition: transform var(--t-base), color var(--t-fast);
+  border: 1px solid var(--hair);
+  background: rgba(0,0,0,0.2);
+}
+.box__head:hover .box__chev { color: var(--t-90); }
+.box.is-collapsed .box__chev { transform: rotate(-90deg); }
+
+.box__body {
+  grid-column: 2;
+  grid-row: 2;
+  padding: 4px var(--gap-6) var(--gap-6) var(--gap-3);
+  overflow: hidden;
+}
+.box.is-collapsed .box__body { display: none; }
+
+/* ============================================================
+   PILOT (dot ok/warn/err/pend)
+   ============================================================ */
+.pilot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-pill);
+  background: var(--ok);
+  box-shadow: 0 0 6px rgba(34,197,94,0.5);
+  flex-shrink: 0;
+}
+.pilot.is-warn { background: var(--warn); box-shadow: 0 0 6px rgba(245,158,11,0.55); }
+.pilot.is-err  { background: var(--err);  box-shadow: 0 0 6px rgba(239,68,68,0.55); }
+.pilot.is-pend { background: var(--t-22); box-shadow: none; }
+
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 16px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--t-90);
+  background:
+    var(--glass-grad-1),
+    linear-gradient(180deg, var(--bg-elev-2) 0%, var(--bg-elev-1) 100%);
+  border: 1px solid var(--hair-3);
+  border-radius: var(--r-sm);
+  transition: all var(--t-fast);
+  box-shadow: var(--bevel-soft);
+  font-family: var(--font-ui);
+}
+.btn:hover {
+  border-color: var(--hair-vivid);
+  color: var(--t-100);
+  background:
+    var(--glass-grad-2),
+    linear-gradient(180deg, var(--bg-elev-3) 0%, var(--bg-elev-2) 100%);
+}
+.btn.is-primary {
+  color: var(--accent);
+  border-color: rgba(255,106,44,0.45);
+  background:
+    var(--glass-grad-1),
+    linear-gradient(180deg, rgba(255,106,44,0.10) 0%, rgba(255,106,44,0.04) 100%);
+  box-shadow: 0 0 10px var(--accent-glow-2), var(--bevel-soft);
+}
+.btn.is-primary:hover {
+  border-color: var(--accent);
+  background:
+    var(--glass-grad-2),
+    linear-gradient(180deg, rgba(255,106,44,0.16) 0%, rgba(255,106,44,0.06) 100%);
+  box-shadow: 0 0 14px var(--accent-glow), var(--bevel-soft);
+}
+.btn.is-ghost {
+  background: transparent;
+  border-color: var(--hair-2);
+  color: var(--t-75);
+  box-shadow: none;
+}
+.btn.is-ghost:hover { color: var(--t-100); border-color: var(--hair-3); background: rgba(255,255,255,0.025); }
+.btn.is-danger {
+  color: var(--err);
+  border-color: rgba(239,68,68,0.36);
+  background:
+    var(--glass-grad-1),
+    linear-gradient(180deg, rgba(239,68,68,0.06) 0%, rgba(239,68,68,0.02) 100%);
+}
+.btn.is-danger:hover {
+  border-color: rgba(239,68,68,0.55);
+  background:
+    var(--glass-grad-2),
+    linear-gradient(180deg, rgba(239,68,68,0.10) 0%, rgba(239,68,68,0.04) 100%);
+}
+.btn.sm { padding: 6px 11px; font-size: 10px; letter-spacing: 0.10em; }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
+.btn svg { width: 12px; height: 12px; stroke-width: 2; }
+
+/* ============================================================
+   FIELDS · INPUTS · LABELS
+   ============================================================ */
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field > label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--t-38);
+  font-weight: 500;
+}
+.inp {
+  display: block;
+  padding: 7px 10px;
+  background: rgba(0,0,0,0.36);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t-90);
+  box-shadow: inset 0 1px 0 rgba(0,0,0,0.4);
+  transition: border-color var(--t-fast);
+}
+.inp:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: inset 0 1px 0 rgba(0,0,0,0.4), 0 0 0 3px var(--accent-soft);
+}
+.inp.is-masked { letter-spacing: 0.14em; color: var(--t-55); }
+.inp[readonly] { color: var(--t-75); }
+
+input.inp { width: 100%; }
+
+/* ============================================================
+   BADGES
+   ============================================================ */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--r-pill);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 600;
+  border: 1px solid var(--hair-2);
+  background: rgba(0,0,0,0.32);
+  color: var(--t-75);
+}
+.badge.is-ok    { color: var(--ok);   border-color: rgba(34,197,94,0.45);  background: rgba(34,197,94,0.10); }
+.badge.is-warn  { color: var(--warn); border-color: rgba(245,158,11,0.45); background: rgba(245,158,11,0.10); }
+.badge.is-err   { color: var(--err);  border-color: rgba(239,68,68,0.45);  background: rgba(239,68,68,0.10); }
+.badge.is-run   { color: var(--accent); border-color: rgba(255,106,44,0.45); background: rgba(255,106,44,0.08); }
+.badge.is-pend  { color: var(--t-38); }
+
+/* ============================================================
+   TOGGLES (slot enable/disable)
+   ============================================================ */
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.toggle__sw {
+  position: relative;
+  width: 32px;
+  height: 16px;
+  border-radius: var(--r-pill);
+  background:
+    linear-gradient(180deg, rgba(0,0,0,0.4), rgba(0,0,0,0.15)),
+    var(--bg-elev-3);
+  border: 1px solid var(--hair-3);
+  box-shadow:
+    inset 0 1px 1px rgba(0,0,0,0.5),
+    inset 0 -1px 0 rgba(255,255,255,0.05);
+  transition: all var(--t-fast);
+}
+.toggle__sw::after {
+  content: '';
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--r-pill);
+  top: 50%;
+  left: 3px;
+  transform: translateY(-50%);
+  background: linear-gradient(180deg, #4a4f5b 0%, #2a2d35 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.10), inset 0 -1px 0 rgba(0,0,0,0.30);
+  transition: all var(--t-base);
+}
+.toggle__lbl {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--t-38);
+  font-weight: 600;
+}
+.toggle.is-on .toggle__sw {
+  background: linear-gradient(180deg, rgba(255,106,44,0.20) 0%, rgba(255,106,44,0.06) 100%);
+  border-color: var(--accent-deep);
+}
+.toggle.is-on .toggle__sw::after {
+  left: calc(100% - 13px);
+  background: linear-gradient(180deg, var(--accent) 0%, var(--accent-deep) 100%);
+  box-shadow:
+    0 0 8px var(--accent-glow),
+    inset 0 1px 0 rgba(255,255,255,0.45),
+    inset 0 -1px 0 rgba(0,0,0,0.30);
+}
+.toggle.is-on .toggle__lbl { color: var(--accent); }
+
+/* ============================================================
+   PROGRESS BAR (uso minuto/día, validator progress)
+   ============================================================ */
+.pg {
+  height: 4px;
+  background: rgba(0,0,0,0.5);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  position: relative;
+}
+.pg > i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--ok) 0%, rgba(34,197,94,0.6) 100%);
+  border-radius: var(--r-pill);
+  transition: width var(--t-base);
+}
+.pg.is-warn > i {
+  background: linear-gradient(90deg, var(--warn) 0%, rgba(245,158,11,0.6) 100%);
+}
+.pg.is-err > i {
+  background: linear-gradient(90deg, var(--err) 0%, rgba(239,68,68,0.6) 100%);
+}
+.pg.is-accent > i {
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-deep) 100%);
+  box-shadow: 0 0 8px var(--accent-glow-2);
+}
+
+/* ============================================================
+   GENERIC CARD (usado dentro de los boxes)
+   ============================================================ */
+.card {
+  background:
+    var(--glass-grad-1),
+    var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--r);
+  box-shadow: var(--bevel-soft), var(--shadow-card);
+  padding: var(--gap-4) var(--gap-5);
+  position: relative;
+}
+.card__title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--t-100);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin: 0 0 4px;
+}
+.card__sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--t-55);
+  letter-spacing: 0.04em;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-4);
+  padding-bottom: var(--gap-3);
+  margin-bottom: var(--gap-4);
+  border-bottom: 1px dashed var(--hair-2);
+}
+.toolbar__left {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--t-55);
+  letter-spacing: 0.04em;
+}
+.toolbar__left .ref { color: var(--accent); }
+.toolbar__right { display: inline-flex; gap: 8px; }
+
+/* ============================================================
+   DROPZONE
+   ============================================================ */
+.dropzone {
+  border: 1.2px dashed var(--hair-3);
+  border-radius: var(--r);
+  padding: 22px 16px;
+  text-align: center;
+  background: rgba(0,0,0,0.18);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  transition: all var(--t-fast);
+}
+.dropzone:hover { border-color: var(--accent-deep); background: var(--accent-soft); }
+.dropzone__icon {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--hair-3);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--t-55);
+  font-size: 14px;
+}
+.dropzone__main {
+  font-size: 12px;
+  color: var(--t-90);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+.dropzone__main .accent { color: var(--accent); font-family: var(--font-mono); padding: 1px 5px; background: var(--accent-soft); border-radius: 4px; }
+.dropzone__sub {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--t-38);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+}
+
+/* ============================================================
+   BOX 1 — MOTORES (5 cards + flow diagram)
+   ============================================================ */
+.eng-cards {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--gap-3);
+  margin-bottom: var(--gap-4);
+}
+.eng-card {
+  background:
+    var(--glass-grad-1),
+    var(--card-bg-2);
+  border: 1px solid var(--card-border);
+  border-radius: var(--r);
+  box-shadow: var(--bevel-soft);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 180px;
+  position: relative;
+}
+.eng-card::before {
+  /* halo accent en la parte superior */
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.18;
+}
+.eng-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.eng-card__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--t-100);
+  letter-spacing: 0.02em;
+}
+.eng-card__role {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--t-38);
+  margin-top: -4px;
+}
+.eng-card__body {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.65;
+  color: var(--t-75);
+}
+.eng-card__body .num { color: var(--t-100); font-weight: 600; }
+.eng-card__deps {
+  margin-top: auto;
+  border-top: 1px dashed var(--hair-2);
+  padding-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--t-38);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.eng-card__deps .ref { color: var(--t-75); text-transform: none; letter-spacing: 0.02em; }
+.eng-card.is-warn { border-color: rgba(245,158,11,0.36); }
+.eng-card.is-warn::before { background: linear-gradient(90deg, transparent, var(--warn), transparent); opacity: 0.28; }
+.eng-card.is-err  { border-color: rgba(239,68,68,0.36); }
+.eng-card.is-err::before  { background: linear-gradient(90deg, transparent, var(--err), transparent); opacity: 0.28; }
+
+.eng-flow {
+  background:
+    var(--glass-grad-1),
+    var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--r);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--t-55);
+}
+.eng-flow__lbl {
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--t-38);
+  margin-right: 4px;
+}
+.eng-flow__node {
+  padding: 3px 9px;
+  background: var(--bg-elev-1);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-pill);
+  color: var(--t-90);
+  font-weight: 500;
+}
+.eng-flow__arr { color: var(--accent); font-weight: 600; }
+
+.note {
+  margin-top: var(--gap-3);
+  padding: 10px 14px;
+  background: rgba(255,106,44,0.04);
+  border: 1px solid rgba(255,106,44,0.16);
+  border-radius: var(--r-sm);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--t-75);
+  line-height: 1.55;
+  letter-spacing: 0.02em;
+}
+.note .accent { color: var(--accent); font-weight: 600; }
+
+/* ============================================================
+   BOX 2 — CONFIG (load/save · 2 cards)
+   ============================================================ */
+.cfg-wrap {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: var(--gap-4);
+}
+.cfg-active {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(0,0,0,0.32);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm);
+  margin-bottom: var(--gap-3);
+}
+.cfg-active__name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--t-100);
+  letter-spacing: 0.02em;
+}
+.cfg-active__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  background: rgba(239,68,68,0.10);
+  border: 1px solid rgba(239,68,68,0.45);
+  border-radius: var(--r-pill);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--err);
+  font-weight: 600;
+}
+.cfg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: var(--gap-3);
+}
+.cfg-state {
+  background: rgba(0,0,0,0.32);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm);
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.cfg-state__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.cfg-state__row .lbl { color: var(--t-55); }
+.cfg-state__row .val { color: var(--t-90); }
+.cfg-state__row .val.is-ok    { color: var(--ok); }
+.cfg-state__row .val.is-warn  { color: var(--warn); }
+.cfg-state__row .val.is-pend  { color: var(--t-38); }
+.cfg-state__divider {
+  border-top: 1px dashed var(--hair-2);
+  margin: 4px 0;
+}
+
+/* ============================================================
+   BOX 3 — TD KEYS (5 cards)
+   ============================================================ */
+.keys-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--gap-3);
+}
+.key-card {
+  background:
+    var(--glass-grad-1),
+    var(--card-bg-2);
+  border: 1px solid var(--card-border);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+  box-shadow: var(--bevel-soft);
+}
+.key-card.is-warn { border-color: rgba(245,158,11,0.36); }
+.key-card.is-err  { border-color: rgba(239,68,68,0.36); }
+.key-card.is-empty {
+  border-style: dashed;
+  border-color: var(--hair-2);
+  background: transparent;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  cursor: pointer;
+  text-align: center;
+  gap: 8px;
+}
+.key-card.is-empty:hover { border-color: var(--accent-deep); background: var(--accent-soft); }
+.key-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.key-card__alias {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--t-100);
+}
+.key-card__rmv {
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  color: var(--t-38);
+  font-size: 14px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  transition: all var(--t-fast);
+}
+.key-card__rmv:hover { color: var(--err); background: rgba(239,68,68,0.10); }
+.key-card__cred {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.key-card__live {
+  border-top: 1px dashed var(--hair-2);
+  padding-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--t-55);
+}
+.key-card__live .row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.key-card__live .row .num { color: var(--t-90); }
+.key-card__live .err-msg {
+  color: var(--err);
+  text-align: center;
+  padding: 6px 0;
+  font-size: 10px;
+}
+.key-card__empty-icon {
+  width: 36px; height: 36px;
+  border: 1px dashed var(--hair-3);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--t-38);
+  font-size: 18px;
+}
+.key-card__empty-text {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--t-55);
+}
+
+/* ============================================================
+   BOX 4 — SLOTS (table + library + upload)
+   ============================================================ */
+.slots-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: rgba(0,0,0,0.28);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+.slots-table th {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--t-38);
+  font-weight: 500;
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--hair-3);
+  background: rgba(255,255,255,0.018);
+}
+.slots-table td {
+  padding: 10px 12px;
+  border-bottom: 1px dashed var(--hair-2);
+  vertical-align: middle;
+  color: var(--t-90);
+}
+.slots-table tr:last-child td { border-bottom: none; }
+.slots-table tr.is-disabled td { opacity: 0.5; }
+.slots-table .col-id  { width: 48px; font-weight: 600; color: var(--t-55); text-align: center; font-size: 13px; }
+.slots-table .col-tk  { width: 110px; }
+.slots-table .col-fix { width: 290px; position: relative; }
+.slots-table .col-en  { width: 84px; }
+.slots-table .col-st  { width: 200px; }
+.slots-table .col-act { width: 150px; text-align: right; }
+.slots-table .col-tk input.inp { padding: 5px 8px; font-size: 11px; }
+
+.fix-select {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 28px 5px 10px;
+  background: rgba(0,0,0,0.36);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  transition: border-color var(--t-fast);
+}
+.fix-select:hover { border-color: var(--hair-3); }
+.fix-select::after {
+  content: '▾';
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--t-38);
+  font-size: 9px;
+}
+.fix-select__name { font-weight: 600; color: var(--t-100); }
+.fix-select__ver  { font-size: 9.5px; color: var(--t-55); margin-left: auto; padding-right: 8px; }
+.fix-select.is-empty { font-style: italic; color: var(--t-38); }
+.fix-select.is-empty .fix-select__name { color: var(--t-38); font-weight: 400; }
+
+.fix-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  z-index: 20;
+  background:
+    var(--glass-grad-2),
+    var(--card-bg-elev);
+  border: 1px solid var(--hair-3);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-card-deep), var(--bevel-soft);
+  max-height: 240px;
+  overflow-y: auto;
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+}
+.fix-dropdown__opt {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px dashed var(--hair-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background var(--t-fast);
+}
+.fix-dropdown__opt:last-child { border-bottom: none; }
+.fix-dropdown__opt:hover { background: rgba(255,255,255,0.025); }
+.fix-dropdown__opt.is-selected { background: var(--accent-soft); }
+.fix-dropdown__opt .nm    { font-weight: 600; color: var(--t-100); }
+.fix-dropdown__opt .nm.is-bad { color: var(--err); }
+.fix-dropdown__opt .bench { font-size: 9px; color: var(--t-55); letter-spacing: 0.06em; }
+.fix-dropdown__opt .ver   { font-size: 9.5px; color: var(--t-55); }
+.fix-dropdown__opt .ver.is-bad { color: var(--err); }
+
+.runtime-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--ok);
+}
+.runtime-status.is-warn { color: var(--warn); }
+.runtime-status.is-err  { color: var(--err); }
+.runtime-status.is-pend { color: var(--t-38); }
+
+.lib-wrap {
+  margin-top: var(--gap-4);
+  background:
+    var(--glass-grad-1),
+    var(--card-bg);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.lib-head {
+  padding: 10px 16px;
+  background: rgba(255,255,255,0.018);
+  border-bottom: 1px solid var(--hair-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--t-55);
+}
+.lib-head .count { color: var(--t-100); text-transform: none; letter-spacing: 0.02em; }
+.lib-row {
+  display: grid;
+  grid-template-columns: 220px 80px 130px 120px 1fr 110px;
+  gap: 12px;
+  padding: 9px 16px;
+  border-bottom: 1px dashed var(--hair-2);
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t-90);
+}
+.lib-row:last-child { border-bottom: none; }
+.lib-row .nm { font-weight: 600; color: var(--t-100); }
+.lib-row .bench { color: var(--t-75); }
+.lib-row .bench-lab {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--t-38);
+  margin-right: 6px;
+}
+.lib-row .compat { color: var(--t-55); font-size: 10.5px; }
+.lib-row .hash    { font-size: 10.5px; }
+.lib-row .hash.is-ok  { color: var(--ok); }
+.lib-row .hash.is-bad { color: var(--err); }
+.lib-row .used    { color: var(--t-55); font-size: 10px; letter-spacing: 0.06em; }
+
+.upload-wrap {
+  margin-top: var(--gap-4);
+  background:
+    var(--glass-grad-1),
+    rgba(255,106,44,0.025);
+  border: 1px solid rgba(255,106,44,0.18);
+  border-radius: var(--r);
+  padding: 16px 18px 14px;
+  position: relative;
+}
+.upload-wrap__sticker {
+  position: absolute;
+  top: -10px;
+  left: 16px;
+  background: var(--bg-elev-2);
+  border: 1px solid rgba(255,106,44,0.45);
+  border-radius: var(--r-sm);
+  padding: 2px 9px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+  box-shadow: var(--bevel-soft);
+}
+.upload-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap-4);
+  margin-top: 6px;
+}
+.preview {
+  background: rgba(0,0,0,0.36);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm);
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t-90);
+}
+.preview__head {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--t-38);
+  margin-bottom: 8px;
+}
+.preview__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 10.5px;
+}
+.preview__row .ok  { color: var(--ok); font-weight: 700; width: 14px; }
+.preview__row .bad { color: var(--err); font-weight: 700; width: 14px; }
+.preview__actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+/* ============================================================
+   BOX 5 — VALIDATOR (grid + reports + engines)
+   ============================================================ */
+.p5-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: var(--gap-4);
+}
+.val-block {
+  background:
+    var(--glass-grad-1),
+    var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--r);
+  box-shadow: var(--bevel-soft);
+  padding: var(--gap-4) var(--gap-5);
+}
+.val-block__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: var(--gap-3);
+}
+.val-block__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--t-100);
+  letter-spacing: 0.02em;
+}
+.val-block__sub {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--t-55);
+  margin-top: 4px;
+  letter-spacing: 0.04em;
+}
+.val-bar {
+  height: 8px;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  position: relative;
+  margin-bottom: 8px;
+  margin-top: 14px;
+}
+.val-bar > i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent-deep) 100%);
+  border-radius: var(--r-pill);
+  box-shadow: 0 0 8px var(--accent-glow-2);
+}
+.val-bar.is-ok   > i { background: linear-gradient(90deg, var(--ok) 0%, rgba(34,197,94,0.6) 100%); box-shadow: 0 0 8px rgba(34,197,94,0.30); }
+.val-bar.is-warn > i { background: linear-gradient(90deg, var(--warn) 0%, rgba(245,158,11,0.6) 100%); box-shadow: 0 0 8px rgba(245,158,11,0.30); }
+.val-bar__lbl {
+  display: block;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--t-55);
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+}
+
+.val-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 8px;
+  margin-top: 10px;
+}
+.vg-cell {
+  background:
+    var(--glass-grad-1),
+    var(--card-bg-2);
+  border: 1px solid var(--card-border);
+  border-radius: var(--r-sm);
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-height: 92px;
+  position: relative;
+  transition: all var(--t-fast);
+}
+.vg-cell__l {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--t-100);
+  letter-spacing: -0.02em;
+  font-family: var(--font-mono);
+}
+.vg-cell__n {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.10em;
+  color: var(--t-55);
+  text-transform: uppercase;
+  line-height: 1.3;
+  text-align: center;
+}
+.vg-cell__stat {
+  margin-top: auto;
+  width: 100%;
+  height: 4px;
+  background: rgba(0,0,0,0.4);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+.vg-cell__stat > i {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: var(--r-pill);
+  transition: width var(--t-base);
+}
+.vg-cell.is-ok .vg-cell__stat > i { width: 100%; background: var(--ok); box-shadow: 0 0 4px rgba(34,197,94,0.45); }
+.vg-cell.is-ok::after {
+  content: '✓';
+  position: absolute;
+  top: 6px; right: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ok);
+}
+.vg-cell.is-run .vg-cell__stat > i { width: 55%; background: var(--accent); box-shadow: 0 0 6px var(--accent-glow); animation: pg-running 1.4s var(--ease) infinite; }
+.vg-cell.is-run::after {
+  content: '⟳';
+  position: absolute;
+  top: 6px; right: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  animation: spin 1.6s linear infinite;
+}
+.vg-cell.is-warn .vg-cell__stat > i { width: 100%; background: var(--warn); box-shadow: 0 0 4px rgba(245,158,11,0.45); }
+.vg-cell.is-warn::after {
+  content: '!';
+  position: absolute;
+  top: 6px; right: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--warn);
+}
+.vg-cell.is-fail .vg-cell__stat > i { width: 100%; background: var(--err); box-shadow: 0 0 4px rgba(239,68,68,0.45); }
+.vg-cell.is-fail::after {
+  content: '✕';
+  position: absolute;
+  top: 6px; right: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--err);
+}
+.vg-cell.is-pend { opacity: 0.40; }
+@keyframes pg-running {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+@keyframes spin {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.val-msg {
+  margin-top: var(--gap-4);
+  padding-top: var(--gap-3);
+  border-top: 1px dashed var(--hair-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--t-75);
+}
+
+.reports {
+  margin-top: var(--gap-4);
+  background:
+    var(--glass-grad-1),
+    var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.reports__head {
+  padding: 10px 16px;
+  background: rgba(255,255,255,0.018);
+  border-bottom: 1px solid var(--hair-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--t-55);
+}
+.rep-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  padding: 11px 16px;
+  border-bottom: 1px dashed var(--hair-2);
+  align-items: center;
+  cursor: pointer;
+  transition: background var(--t-fast);
+}
+.rep-row:last-child { border-bottom: none; }
+.rep-row:hover { background: rgba(255,255,255,0.018); }
+.rep-row__when {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t-100);
+  font-weight: 600;
+}
+.rep-row__when .dur { color: var(--t-55); font-weight: 400; margin-left: 8px; }
+.rep-row__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--t-55);
+  margin-top: 4px;
+}
+.rep-row__trig {
+  padding: 1px 7px;
+  background: rgba(0,0,0,0.32);
+  border: 1px solid var(--hair-3);
+  border-radius: var(--r-pill);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--t-90);
+  font-weight: 500;
+}
+.rep-row__mini {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+.rep-row__mini i {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  background: var(--ok);
+  display: inline-block;
+  box-shadow: 0 0 4px rgba(34,197,94,0.45);
+}
+.rep-row__mini i.is-warn { background: var(--warn); box-shadow: 0 0 4px rgba(245,158,11,0.45); }
+.rep-row__mini i.is-fail { background: var(--err);  box-shadow: 0 0 4px rgba(239,68,68,0.45); }
+.rep-row__mini i.is-pend { background: var(--t-22); box-shadow: none; }
+
+.engines-mini {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.engine-row {
+  background: rgba(0,0,0,0.28);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm);
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.engine-row__nm {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--t-100);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 110px;
+  letter-spacing: 0.02em;
+}
+.engine-row__ms {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--t-55);
+  flex: 1;
+  line-height: 1.5;
+}
+
+/* ============================================================
+   BOX 6 — S3 (form + backups list)
+   ============================================================ */
+.s3-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--gap-4);
+}
+.s3-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 12px;
+  margin-top: 12px;
+}
+.s3-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: var(--gap-3);
+}
+.s3-status {
+  margin-top: var(--gap-3);
+  padding-top: var(--gap-3);
+  border-top: 1px dashed var(--hair-2);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--t-75);
+}
+.s3-status .ok  { color: var(--ok); font-weight: 700; }
+.s3-status .err { color: var(--err); font-weight: 700; }
+.s3-status__hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--t-55);
+  letter-spacing: 0.02em;
+}
+
+.backups-list {
+  background: rgba(0,0,0,0.28);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm);
+  margin-top: 12px;
+}
+.backups-head {
+  padding: 8px 14px;
+  background: rgba(255,255,255,0.018);
+  border-bottom: 1px solid var(--hair-2);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--t-38);
+  border-radius: var(--r-sm) var(--r-sm) 0 0;
+}
+.backup-row {
+  display: grid;
+  grid-template-columns: 1fr 80px 100px 100px;
+  gap: 10px;
+  padding: 9px 14px;
+  border-bottom: 1px dashed var(--hair-2);
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t-90);
+}
+.backup-row:last-child { border-bottom: none; }
+.backup-row .key  { font-weight: 600; color: var(--t-100); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.backup-row .size { color: var(--t-55); }
+.backup-row .ts   { color: var(--t-55); font-size: 10px; }
+.backup-row .actions-cell { text-align: right; }
+
+.s3-empty {
+  padding: 32px 20px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t-55);
+  border: 1px dashed var(--hair-2);
+  border-radius: var(--r);
+  background: rgba(0,0,0,0.18);
+}
+.s3-empty__icon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 12px;
+  border: 1px dashed var(--hair-3);
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 24px;
+  color: var(--t-38);
+}
+.s3-empty__txt { color: var(--t-75); font-size: 12px; margin-bottom: 4px; }
+.s3-empty__sub { font-size: 10px; color: var(--t-38); letter-spacing: 0.06em; }
+
+/* ============================================================
+   TWEAKS PANEL DEV
+   ============================================================ */
+.tweaks-fab {
+  position: fixed;
+  right: 22px;
+  bottom: calc(var(--footer-h) + 22px);
+  z-index: 80;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background:
+    var(--glass-grad-3),
+    linear-gradient(180deg, var(--bg-elev-3) 0%, var(--bg-elev-2) 100%);
+  border: 1px solid var(--hair-3);
+  box-shadow: var(--bevel-full), var(--shadow-card);
+  display: grid;
+  place-items: center;
+  color: var(--t-75);
+  cursor: pointer;
+  transition: all var(--t-fast);
+  backdrop-filter: var(--blur-soft);
+  -webkit-backdrop-filter: var(--blur-soft);
+}
+.tweaks-fab:hover {
+  color: var(--accent);
+  border-color: var(--accent-deep);
+  box-shadow: 0 0 14px var(--accent-glow-2), var(--bevel-full);
+}
+.tweaks-fab svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
+  transition: transform var(--t-base);
+}
+.tweaks-fab.is-open { color: var(--accent); border-color: var(--accent); }
+.tweaks-fab.is-open svg { transform: rotate(90deg); }
+
+.tweaks-panel {
+  position: fixed;
+  right: 22px;
+  bottom: calc(var(--footer-h) + 78px);
+  z-index: 79;
+  width: 320px;
+  background:
+    var(--glass-grad-2),
+    var(--card-bg-elev);
+  border: 1px solid var(--hair-3);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-card-deep), var(--bevel-full);
+  padding: 14px 16px 16px;
+  backdrop-filter: var(--blur-glass);
+  -webkit-backdrop-filter: var(--blur-glass);
+  opacity: 0;
+  transform: translateY(8px) scale(0.96);
+  pointer-events: none;
+  transition: all var(--t-base);
+}
+.tweaks-panel.is-open {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: all;
+}
+.tweaks-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px dashed var(--hair-2);
+}
+.tweaks-panel__title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--t-100);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.tweaks-panel__tag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+  padding: 2px 7px;
+  background: var(--accent-soft);
+  border: 1px solid rgba(255,106,44,0.32);
+  border-radius: var(--r-pill);
+}
+.tweaks-panel__row {
+  margin-bottom: 12px;
+}
+.tweaks-panel__row:last-child { margin-bottom: 0; }
+.tweaks-panel__lbl {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--t-38);
+  margin-bottom: 6px;
+}
+.tweaks-panel__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.pill {
+  padding: 5px 10px;
+  background: rgba(0,0,0,0.36);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-pill);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  color: var(--t-75);
+  cursor: pointer;
+  transition: all var(--t-fast);
+}
+.pill:hover { color: var(--t-100); border-color: var(--hair-3); }
+.pill.is-on {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 10px var(--accent-glow-2);
+}
+.tweaks-panel__hint {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--hair-2);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--t-38);
+  line-height: 1.55;
+  letter-spacing: 0.02em;
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media (max-width: 1500px) {
+  .keys-grid     { grid-template-columns: repeat(3, 1fr); }
+  .eng-cards     { grid-template-columns: repeat(3, 1fr); }
+  .p5-grid       { grid-template-columns: 1fr; }
+  .cfg-wrap      { grid-template-columns: 1fr; }
+  .s3-grid       { grid-template-columns: 1fr; }
+}
+@media (max-width: 1200px) {
+  :root { --rail-w: 64px; }
+  .keys-grid { grid-template-columns: repeat(2, 1fr); }
+  .eng-cards { grid-template-columns: repeat(2, 1fr); }
+}
+
+</style>
+</head>
+<body>
+
+<div class="health-line"></div>
+
+<div class="app">
+
+  <!-- ============================================================
+       TOP BAR
+       ============================================================ -->
+  <header class="topbar">
+    <div class="topbar__brand">
+      <span class="brand__text">
+        <span class="brand__name">scanner</span>
+        <span class="brand__sub">v5.0.0-dev</span>
+      </span>
+    </div>
+
+    <nav class="topbar__nav" aria-label="pestañas">
+      <button class="tab">cockpit</button>
+      <button class="tab">dashboard</button>
+      <button class="tab">memento</button>
+      <button class="tab is-active">configuración</button>
+    </nav>
+
+    <div class="topbar__meta">
+      <span class="topbar__live">live</span>
+      <span class="topbar__clock mono">14:30:04 ET</span>
+      <span class="topbar__date">vie 25 abr 2026</span>
+    </div>
+  </header>
+
+  <!-- ============================================================
+       PAGE CONTENT
+       ============================================================ -->
+  <main class="page">
+
+    <header class="page__header">
+      <div>
+        <h1 class="page__title">Configuración del Scanner <em>v5.2.0</em></h1>
+        <div class="page__sub">5 pasos verticales · cada paso es independiente · auto-collapse al quedar OK</div>
+      </div>
+      <div class="page__overall">
+        <span class="lab">overall</span>
+        <span class="ratio">3 ok · 2 warn · 1 pend</span>
+        <span class="pilot is-warn"></span>
+      </div>
+    </header>
+
+    <div class="config-layout">
+
+      <!-- ===== FRAME (rail integrado vía subgrid) ===== -->
+      <section class="frame">
+
+        <!-- ============================================================
+             BOX 1 — Motores (observabilidad pura · sin arranque manual)
+             ============================================================ -->
+        <article class="box is-ok is-collapsed" id="box-1" data-box="1">
+          <span class="box__dot">1</span>
+          <header class="box__head">
+            <div class="box__title-wrap">
+              <div class="box__title">Motores del backend</div>
+              <div class="box__sub">5 motores arrancan con el lifespan FastAPI · esta vista es <span class="ref">sólo observabilidad</span> · no hay arranque manual desde la UI</div>
+            </div>
+            <div class="box__meta">
+              <span class="box__status"><span class="pilot"></span>5 / 5 operativos</span>
+              <span class="box__chev">▾</span>
+            </div>
+          </header>
+          <div class="box__body">
+
+            <div class="eng-cards">
+
+              <div class="eng-card">
+                <div class="eng-card__head">
+                  <div>
+                    <div class="eng-card__name">database</div>
+                    <div class="eng-card__role">engine · persistencia</div>
+                  </div>
+                  <span class="pilot"></span>
+                </div>
+                <div class="eng-card__body">
+                  SQLite operativa + archive<br>
+                  heartbeat hace <span class="num">8s</span><br>
+                  <span class="num">342 MB</span> op · <span class="num">1.2 GB</span> archive
+                </div>
+                <div class="eng-card__deps">deps · <span class="ref">—</span></div>
+              </div>
+
+              <div class="eng-card">
+                <div class="eng-card__head">
+                  <div>
+                    <div class="eng-card__name">data engine</div>
+                    <div class="eng-card__role">engine · provider + fetch</div>
+                  </div>
+                  <span class="pilot"></span>
+                </div>
+                <div class="eng-card__body">
+                  KeyPool <span class="num">5</span> keys · <span class="num">3</span> ok<br>
+                  último ciclo hace <span class="num">2m</span><br>
+                  cache hit <span class="num">87%</span>
+                </div>
+                <div class="eng-card__deps">deps · <span class="ref">database</span></div>
+              </div>
+
+              <div class="eng-card">
+                <div class="eng-card__head">
+                  <div>
+                    <div class="eng-card__name">slot registry</div>
+                    <div class="eng-card__role">module · runtime registry</div>
+                  </div>
+                  <span class="pilot"></span>
+                </div>
+                <div class="eng-card__body">
+                  <span class="num">5</span> slots activos · <span class="num">1</span> vacío<br>
+                  <span class="num">1</span> warming up<br>
+                  hot-reload via PATCH
+                </div>
+                <div class="eng-card__deps">deps · <span class="ref">database · data engine</span></div>
+              </div>
+
+              <div class="eng-card">
+                <div class="eng-card__head">
+                  <div>
+                    <div class="eng-card__name">scoring</div>
+                    <div class="eng-card__role">engine · análisis</div>
+                  </div>
+                  <span class="pilot"></span>
+                </div>
+                <div class="eng-card__body">
+                  <span class="num">v5.2.0</span> · parity <span class="num">245/245</span><br>
+                  healthcheck cada <span class="num">120s</span><br>
+                  último OK
+                </div>
+                <div class="eng-card__deps">deps · <span class="ref">slot registry</span></div>
+              </div>
+
+              <div class="eng-card">
+                <div class="eng-card__head">
+                  <div>
+                    <div class="eng-card__name">validator</div>
+                    <div class="eng-card__role">module · diagnóstico A–G</div>
+                  </div>
+                  <span class="pilot"></span>
+                </div>
+                <div class="eng-card__body">
+                  último run hace <span class="num">8m</span><br>
+                  <span class="num">7/7</span> pass · <span class="num">42s</span><br>
+                  parity check <span class="num">245/245</span>
+                </div>
+                <div class="eng-card__deps">deps · <span class="ref">scoring</span></div>
+              </div>
+
+            </div>
+
+            <div class="eng-flow">
+              <span class="eng-flow__lbl">flujo de arranque · lifespan FastAPI</span>
+              <span class="eng-flow__node">database</span>
+              <span class="eng-flow__arr">→</span>
+              <span class="eng-flow__node">data engine</span>
+              <span class="eng-flow__arr">→</span>
+              <span class="eng-flow__node">slot registry</span>
+              <span class="eng-flow__arr">→</span>
+              <span class="eng-flow__node">scoring</span>
+              <span class="eng-flow__arr">→</span>
+              <span class="eng-flow__node">validator</span>
+            </div>
+
+            <div class="note">
+              cards leen <span class="accent">/api/v1/engine/health</span> + WS <span class="accent">engine.status</span> · si un motor cae, su card se pone amarilla/roja y el rail-dot del Box 1 también — sin acción manual desde acá
+            </div>
+
+          </div>
+        </article>
+
+        <!-- ============================================================
+             BOX 2 — Archivo de configuración (.config)
+             ============================================================ -->
+        <article class="box is-ok is-collapsed" id="box-2" data-box="2">
+          <span class="box__dot">2</span>
+          <header class="box__head">
+            <div class="box__title-wrap">
+              <div class="box__title">Archivo de configuración</div>
+              <div class="box__sub">cargar · guardar · descargar · contiene TD keys + fixtures asignadas + preferencias · plaintext (sin encripción)</div>
+            </div>
+            <div class="box__meta">
+              <span class="box__status"><span class="pilot"></span>cargado · 2 cambios sin guardar</span>
+              <span class="box__chev">▾</span>
+            </div>
+          </header>
+          <div class="box__body">
+
+            <div class="cfg-wrap">
+
+              <div class="card">
+                <div class="card__title">Archivo activo</div>
+                <div class="card__sub">en runtime los secretos viven en memoria · al cerrar la app no persisten</div>
+
+                <div class="cfg-active">
+                  <span class="cfg-active__name">qqq_spy_base_v3.json</span>
+                  <span class="cfg-active__pill"><span class="pilot is-err"></span>2 cambios</span>
+                </div>
+
+                <div class="dropzone">
+                  <div class="dropzone__icon">↓</div>
+                  <div class="dropzone__main">arrastrá un <span class="accent">.json</span> de configuración acá</div>
+                  <div class="dropzone__sub">o usá los botones de abajo</div>
+                </div>
+
+                <div class="cfg-actions">
+                  <button class="btn is-primary">guardar</button>
+                  <button class="btn">descargar</button>
+                  <button class="btn">cargar otro…</button>
+                  <button class="btn is-ghost is-danger">descartar cambios</button>
+                </div>
+
+                <div class="note" style="margin-top:14px">
+                  <span class="accent">guardar</span> sobrescribe el archivo activo · <span class="accent">descargar</span> exporta el estado actual a un .json nuevo
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card__title">Contenido del archivo</div>
+                <div class="card__sub">qué entra al guardar · qué sale al cargar</div>
+
+                <div class="cfg-state" style="margin-top:12px">
+                  <div class="cfg-state__row">
+                    <span class="lbl">twelvedata keys</span>
+                    <span class="val">3 / 5 keys</span>
+                  </div>
+                  <div class="cfg-state__row">
+                    <span class="lbl">tickers asignados</span>
+                    <span class="val">SPY · QQQ · IWM · AAPL · NVDA</span>
+                  </div>
+                  <div class="cfg-state__row">
+                    <span class="lbl">fixtures por slot</span>
+                    <span class="val">5 fixtures</span>
+                  </div>
+                  <div class="cfg-state__row">
+                    <span class="lbl">preferencias</span>
+                    <span class="val">ui · scanner · dashboard</span>
+                  </div>
+                  <div class="cfg-state__row">
+                    <span class="lbl">backup S3</span>
+                    <span class="val is-pend">no configurado</span>
+                  </div>
+                  <div class="cfg-state__divider"></div>
+                  <div class="cfg-state__row">
+                    <span class="lbl is-warn" style="color:var(--warn)">no se persiste</span>
+                    <span class="val is-warn">bearer token (vive sólo en localStorage)</span>
+                  </div>
+                </div>
+
+                <div class="note" style="margin-top:14px">
+                  el backend lee el archivo al iniciar si lo apuntás con <span class="accent">data/last_config_path.json</span> · sin él arranca con defaults
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </article>
+
+        <!-- ============================================================
+             BOX 3 — TwelveData keys (5 keys round-robin)
+             ============================================================ -->
+        <article class="box is-warn is-collapsed" id="box-3" data-box="3">
+          <span class="box__dot">3</span>
+          <header class="box__head">
+            <div class="box__title-wrap">
+              <div class="box__title">Proveedor de datos · TwelveData</div>
+              <div class="box__sub">5 keys round-robin · KeyPool · probe individual + agregado · estado en vivo via WS <span class="ref">api_usage.tick</span></div>
+            </div>
+            <div class="box__meta">
+              <span class="box__status"><span class="pilot is-warn"></span>3 / 5 · 1 falló · 1 vacío</span>
+              <span class="box__chev">▾</span>
+            </div>
+          </header>
+          <div class="box__body">
+
+            <div class="toolbar">
+              <span class="toolbar__left"><span class="ref">probar todas</span> usa <span class="ref">/validator/connectivity</span> · check G del Validator</span>
+              <div class="toolbar__right">
+                <button class="btn is-ghost">probar todas</button>
+                <button class="btn is-primary">guardar</button>
+              </div>
+            </div>
+
+            <div class="keys-grid">
+
+              <!-- KEY 1 OK -->
+              <div class="key-card">
+                <div class="key-card__head">
+                  <div class="key-card__alias">key 1</div>
+                  <div style="display:inline-flex;align-items:center;gap:6px">
+                    <span class="badge is-ok"><span class="pilot"></span>ok</span>
+                    <span class="key-card__rmv" title="eliminar">×</span>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>secret</label>
+                  <div class="inp is-masked">••••••••••••••••</div>
+                </div>
+                <div class="key-card__cred">
+                  <div class="field"><label>cred / min</label><div class="inp">8</div></div>
+                  <div class="field"><label>cred / día</label><div class="inp">800</div></div>
+                </div>
+                <button class="btn is-ghost sm">probar</button>
+                <div class="key-card__live">
+                  <div class="row"><span>uso minuto</span><span class="num">4 / 8</span></div>
+                  <div class="pg"><i style="width:50%"></i></div>
+                  <div class="row"><span>uso diario</span><span class="num">312 / 800</span></div>
+                  <div class="pg"><i style="width:39%"></i></div>
+                  <div class="row"><span>último call</span><span class="num">hace 3s</span></div>
+                </div>
+              </div>
+
+              <!-- KEY 2 OK -->
+              <div class="key-card">
+                <div class="key-card__head">
+                  <div class="key-card__alias">key 2</div>
+                  <div style="display:inline-flex;align-items:center;gap:6px">
+                    <span class="badge is-ok"><span class="pilot"></span>ok</span>
+                    <span class="key-card__rmv">×</span>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>secret</label>
+                  <div class="inp is-masked">••••••••••••••••</div>
+                </div>
+                <div class="key-card__cred">
+                  <div class="field"><label>cred / min</label><div class="inp">8</div></div>
+                  <div class="field"><label>cred / día</label><div class="inp">800</div></div>
+                </div>
+                <button class="btn is-ghost sm">probar</button>
+                <div class="key-card__live">
+                  <div class="row"><span>uso minuto</span><span class="num">6 / 8</span></div>
+                  <div class="pg"><i style="width:75%"></i></div>
+                  <div class="row"><span>uso diario</span><span class="num">287 / 800</span></div>
+                  <div class="pg"><i style="width:36%"></i></div>
+                  <div class="row"><span>último call</span><span class="num">hace 1s</span></div>
+                </div>
+              </div>
+
+              <!-- KEY 3 FAIL -->
+              <div class="key-card is-err">
+                <div class="key-card__head">
+                  <div class="key-card__alias">key 3</div>
+                  <div style="display:inline-flex;align-items:center;gap:6px">
+                    <span class="badge is-err"><span class="pilot is-err"></span>fail · 401</span>
+                    <span class="key-card__rmv">×</span>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>secret</label>
+                  <div class="inp is-masked">••••••••••••••••</div>
+                </div>
+                <div class="key-card__cred">
+                  <div class="field"><label>cred / min</label><div class="inp">8</div></div>
+                  <div class="field"><label>cred / día</label><div class="inp">800</div></div>
+                </div>
+                <button class="btn sm">reintentar</button>
+                <div class="key-card__live">
+                  <div class="row" style="color:var(--err)">
+                    <span>error</span>
+                    <span class="num">invalid_api_key</span>
+                  </div>
+                  <div class="row"><span>último call</span><span class="num">hace 2m</span></div>
+                </div>
+              </div>
+
+              <!-- KEY 4 OK -->
+              <div class="key-card">
+                <div class="key-card__head">
+                  <div class="key-card__alias">key 4</div>
+                  <div style="display:inline-flex;align-items:center;gap:6px">
+                    <span class="badge is-ok"><span class="pilot"></span>ok</span>
+                    <span class="key-card__rmv">×</span>
+                  </div>
+                </div>
+                <div class="field">
+                  <label>secret</label>
+                  <div class="inp is-masked">••••••••••••••••</div>
+                </div>
+                <div class="key-card__cred">
+                  <div class="field"><label>cred / min</label><div class="inp">8</div></div>
+                  <div class="field"><label>cred / día</label><div class="inp">800</div></div>
+                </div>
+                <button class="btn is-ghost sm">probar</button>
+                <div class="key-card__live">
+                  <div class="row"><span>uso minuto</span><span class="num">5 / 8</span></div>
+                  <div class="pg"><i style="width:62%"></i></div>
+                  <div class="row"><span>uso diario</span><span class="num">256 / 800</span></div>
+                  <div class="pg"><i style="width:32%"></i></div>
+                  <div class="row"><span>último call</span><span class="num">hace 4s</span></div>
+                </div>
+              </div>
+
+              <!-- SLOT 5 EMPTY -->
+              <div class="key-card is-empty">
+                <div class="key-card__empty-icon">+</div>
+                <div class="key-card__empty-text">slot 5</div>
+                <div class="dropzone__sub" style="font-size:9px;letter-spacing:.14em">agregar key</div>
+              </div>
+
+            </div>
+
+            <div class="note" style="margin-top:14px">
+              uso minuto/día llega por WS <span class="accent">api_usage.tick</span> · refresca a cada cierre de vela 15M · el ratio diario también se ve agregado en el apibar del Cockpit
+            </div>
+
+          </div>
+        </article>
+
+        <!-- ============================================================
+             BOX 4 — Slot Registry + fixtures (sin columna benchmark)
+             ============================================================ -->
+        <article class="box is-warn is-collapsed" id="box-4" data-box="4">
+          <span class="box__dot">4</span>
+          <header class="box__head">
+            <div class="box__title-wrap">
+              <div class="box__title">Slot Registry + fixtures</div>
+              <div class="box__sub">6 slots fijos · enable/disable dispara warmup + revalidación A/B/C · benchmark lo define el fixture</div>
+            </div>
+            <div class="box__meta">
+              <span class="box__status"><span class="pilot is-warn"></span>4 activos · 1 warming · 1 degraded</span>
+              <span class="box__chev">▾</span>
+            </div>
+          </header>
+          <div class="box__body">
+
+            <table class="slots-table">
+              <thead>
+                <tr>
+                  <th class="col-id">#</th>
+                  <th class="col-tk">ticker</th>
+                  <th class="col-fix">fixture</th>
+                  <th class="col-en">enabled</th>
+                  <th class="col-st">estado runtime</th>
+                  <th class="col-act"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="col-id">01</td>
+                  <td class="col-tk"><input class="inp" value="SPY"></td>
+                  <td class="col-fix">
+                    <div class="fix-select">
+                      <span class="fix-select__name">spy_v5_2_0</span>
+                      <span class="fix-select__ver">v5.2.0</span>
+                    </div>
+                  </td>
+                  <td class="col-en"><div class="toggle is-on"><span class="toggle__sw"></span><span class="toggle__lbl">on</span></div></td>
+                  <td class="col-st"><span class="runtime-status"><span class="pilot"></span>active</span></td>
+                  <td class="col-act"><button class="btn is-ghost sm">deshabilitar</button></td>
+                </tr>
+                <tr>
+                  <td class="col-id">02</td>
+                  <td class="col-tk"><input class="inp" value="QQQ"></td>
+                  <td class="col-fix">
+                    <div class="fix-select">
+                      <span class="fix-select__name">qqq_v5_2_0</span>
+                      <span class="fix-select__ver">v5.2.0</span>
+                    </div>
+                    <div class="fix-dropdown">
+                      <div class="fix-dropdown__opt">
+                        <span class="nm">qqq_v5_2_0</span>
+                        <span class="bench">bench: SPY</span>
+                        <span class="ver">v5.2.0 ✓</span>
+                      </div>
+                      <div class="fix-dropdown__opt is-selected">
+                        <span class="nm">qqq_v5_2_0</span>
+                        <span class="bench">bench: SPY</span>
+                        <span class="ver">v5.2.0 · activo</span>
+                      </div>
+                      <div class="fix-dropdown__opt">
+                        <span class="nm">qqq_v5_1_3</span>
+                        <span class="bench">bench: SPY</span>
+                        <span class="ver">v5.1.3 ✓</span>
+                      </div>
+                      <div class="fix-dropdown__opt">
+                        <span class="nm is-bad">qqq_test_v0</span>
+                        <span class="bench">bench: SPY</span>
+                        <span class="ver is-bad">⚠ canonical mismatch</span>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="col-en"><div class="toggle is-on"><span class="toggle__sw"></span><span class="toggle__lbl">on</span></div></td>
+                  <td class="col-st"><span class="runtime-status"><span class="pilot"></span>active</span></td>
+                  <td class="col-act"><button class="btn is-ghost sm">deshabilitar</button></td>
+                </tr>
+                <tr>
+                  <td class="col-id">03</td>
+                  <td class="col-tk"><input class="inp" value="IWM"></td>
+                  <td class="col-fix">
+                    <div class="fix-select">
+                      <span class="fix-select__name">iwm_v5_1_1</span>
+                      <span class="fix-select__ver">v5.1.1</span>
+                    </div>
+                  </td>
+                  <td class="col-en"><div class="toggle is-on"><span class="toggle__sw"></span><span class="toggle__lbl">on</span></div></td>
+                  <td class="col-st"><span class="runtime-status is-warn"><span class="pilot is-warn"></span>warming up · 62%</span></td>
+                  <td class="col-act"><button class="btn is-ghost sm" disabled>warmup en curso</button></td>
+                </tr>
+                <tr>
+                  <td class="col-id">04</td>
+                  <td class="col-tk"><input class="inp" value="AAPL"></td>
+                  <td class="col-fix">
+                    <div class="fix-select">
+                      <span class="fix-select__name">aapl_v5_0_3</span>
+                      <span class="fix-select__ver">v5.0.3</span>
+                    </div>
+                  </td>
+                  <td class="col-en"><div class="toggle is-on"><span class="toggle__sw"></span><span class="toggle__lbl">on</span></div></td>
+                  <td class="col-st"><span class="runtime-status"><span class="pilot"></span>active</span></td>
+                  <td class="col-act"><button class="btn is-ghost sm">deshabilitar</button></td>
+                </tr>
+                <tr>
+                  <td class="col-id">05</td>
+                  <td class="col-tk"><input class="inp" value="NVDA"></td>
+                  <td class="col-fix">
+                    <div class="fix-select">
+                      <span class="fix-select__name">nvda_v5_2_0</span>
+                      <span class="fix-select__ver">v5.2.0</span>
+                    </div>
+                  </td>
+                  <td class="col-en"><div class="toggle is-on"><span class="toggle__sw"></span><span class="toggle__lbl">on</span></div></td>
+                  <td class="col-st"><span class="runtime-status is-err"><span class="pilot is-err"></span>ENG-060 · 3 fallos</span></td>
+                  <td class="col-act"><button class="btn sm">reintentar</button></td>
+                </tr>
+                <tr class="is-disabled">
+                  <td class="col-id">06</td>
+                  <td class="col-tk"><input class="inp" value="" placeholder="—"></td>
+                  <td class="col-fix">
+                    <div class="fix-select is-empty">
+                      <span class="fix-select__name">— elegir fixture —</span>
+                    </div>
+                  </td>
+                  <td class="col-en"><div class="toggle"><span class="toggle__sw"></span><span class="toggle__lbl">off</span></div></td>
+                  <td class="col-st"><span class="runtime-status is-pend"><span class="pilot is-pend"></span>vacío</span></td>
+                  <td class="col-act"><button class="btn sm">habilitar</button></td>
+                </tr>
+              </tbody>
+            </table>
+
+            <!-- 4.2 Biblioteca de fixtures -->
+            <div class="lib-wrap">
+              <div class="lib-head">
+                <span>biblioteca de fixtures · backend/fixtures/</span>
+                <span class="count">5 archivos · click para ver detalle</span>
+              </div>
+              <div class="lib-row">
+                <span class="nm">qqq_v5_2_0</span>
+                <span>v5.2.0</span>
+                <span class="bench"><span class="bench-lab">bench</span>SPY</span>
+                <span class="compat">≥ 5.2.0</span>
+                <span class="hash is-ok">✓ hash ok</span>
+                <span class="used">slot 02</span>
+              </div>
+              <div class="lib-row">
+                <span class="nm">spy_v5_2_0</span>
+                <span>v5.2.0</span>
+                <span class="bench"><span class="bench-lab">bench</span>QQQ</span>
+                <span class="compat">≥ 5.2.0</span>
+                <span class="hash is-ok">✓ hash ok</span>
+                <span class="used">slot 01</span>
+              </div>
+              <div class="lib-row">
+                <span class="nm">iwm_v5_1_1</span>
+                <span>v5.1.1</span>
+                <span class="bench"><span class="bench-lab">bench</span>SPY</span>
+                <span class="compat">≥ 5.1.0</span>
+                <span class="hash is-ok">✓ hash ok</span>
+                <span class="used">slot 03</span>
+              </div>
+              <div class="lib-row">
+                <span class="nm">aapl_v5_0_3</span>
+                <span>v5.0.3</span>
+                <span class="bench"><span class="bench-lab">bench</span>SPY</span>
+                <span class="compat">≥ 5.0.0</span>
+                <span class="hash is-bad">✕ mismatch</span>
+                <span class="used">slot 04</span>
+              </div>
+              <div class="lib-row">
+                <span class="nm">nvda_v5_2_0</span>
+                <span>v5.2.0</span>
+                <span class="bench"><span class="bench-lab">bench</span>SPY</span>
+                <span class="compat">≥ 5.2.0</span>
+                <span class="hash is-ok">✓ hash ok</span>
+                <span class="used">slot 05</span>
+              </div>
+            </div>
+
+            <!-- 4.3 Upload de fixture -->
+            <div class="upload-wrap">
+              <div class="upload-wrap__sticker">cargar fixture nuevo</div>
+              <div class="upload-body">
+                <div class="dropzone">
+                  <div class="dropzone__icon">↓</div>
+                  <div class="dropzone__main">arrastrá <span class="accent">.json</span> acá</div>
+                  <div class="dropzone__sub">+ <span class="mono" style="text-transform:none">.sha256</span> opcional · valida estructura + hash + engine_compat</div>
+                  <button class="btn sm" style="margin-top:6px">o explorar…</button>
+                </div>
+                <div class="preview">
+                  <div class="preview__head">preview · validación</div>
+                  <div class="preview__row"><span class="ok">✓</span><span>schema Pydantic válido</span></div>
+                  <div class="preview__row"><span class="ok">✓</span><span>ticker = TSLA · benchmark = SPY</span></div>
+                  <div class="preview__row"><span class="ok">✓</span><span>engine_compat_range ≥ 5.2.0 (actual 5.2.0)</span></div>
+                  <div class="preview__row"><span class="bad">✕</span><span>hash SHA-256 no provisto · se generará uno</span></div>
+                  <div class="preview__actions">
+                    <button class="btn is-primary sm">aplicar</button>
+                    <button class="btn is-ghost sm">descartar</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </article>
+
+        <!-- ============================================================
+             BOX 5 — Validator + diagnóstico
+             ============================================================ -->
+        <article class="box is-ok is-collapsed" id="box-5" data-box="5">
+          <span class="box__dot">5</span>
+          <header class="box__head">
+            <div class="box__title-wrap">
+              <div class="box__title">Validator + diagnóstico</div>
+              <div class="box__sub">batería D / A / B / C / E / F / G · histórico de reportes en DB · TXT en LOG/ · 5 días retention</div>
+            </div>
+            <div class="box__meta">
+              <span class="box__status"><span class="pilot"></span>último · pass · 7 / 7</span>
+              <span class="box__chev">▾</span>
+            </div>
+          </header>
+          <div class="box__body">
+
+            <div class="toolbar">
+              <span class="toolbar__left">corre la batería on-demand · histórico persiste en DB <span class="ref">/validator/reports</span></span>
+              <div class="toolbar__right">
+                <button class="btn is-ghost">solo conectividad</button>
+                <button class="btn is-primary">correr validator</button>
+              </div>
+            </div>
+
+            <div class="p5-grid">
+
+              <!-- IZQ — grid del Validator + histórico -->
+              <div>
+                <div class="val-block">
+                  <div class="val-block__head">
+                    <div>
+                      <div class="val-block__title">Batería D / A / B / C / E / F / G</div>
+                      <div class="val-block__sub">grid 7 celdas · alimentado por WS <span class="ref">validator.progress</span> (start + end por test)</div>
+                    </div>
+                    <span class="badge is-ok">trigger · manual</span>
+                  </div>
+
+                  <div class="val-bar is-ok"><i style="width:100%"></i></div>
+                  <div class="val-bar__lbl">7 / 7 · pass · 42s</div>
+
+                  <div class="val-grid">
+                    <div class="vg-cell is-ok"><div class="vg-cell__l">D</div><div class="vg-cell__n">infra</div><div class="vg-cell__stat"><i></i></div></div>
+                    <div class="vg-cell is-ok"><div class="vg-cell__l">A</div><div class="vg-cell__n">fixtures</div><div class="vg-cell__stat"><i></i></div></div>
+                    <div class="vg-cell is-ok"><div class="vg-cell__l">B</div><div class="vg-cell__n">canonicals</div><div class="vg-cell__stat"><i></i></div></div>
+                    <div class="vg-cell is-ok"><div class="vg-cell__l">C</div><div class="vg-cell__n">registry</div><div class="vg-cell__stat"><i></i></div></div>
+                    <div class="vg-cell is-ok"><div class="vg-cell__l">E</div><div class="vg-cell__n">end-to-end</div><div class="vg-cell__stat"><i></i></div></div>
+                    <div class="vg-cell is-ok"><div class="vg-cell__l">F</div><div class="vg-cell__n">parity</div><div class="vg-cell__stat"><i></i></div></div>
+                    <div class="vg-cell is-ok"><div class="vg-cell__l">G</div><div class="vg-cell__n">conectividad</div><div class="vg-cell__stat"><i></i></div></div>
+                  </div>
+
+                  <div class="val-msg">
+                    <span>último run · hace 8m · 7/7 pass · parity <span class="num">245/245</span></span>
+                    <button class="btn is-ghost sm">ver TXT</button>
+                  </div>
+                </div>
+
+                <div class="reports">
+                  <div class="reports__head">
+                    <span>histórico · /validator/reports</span>
+                    <div style="display:flex;gap:6px">
+                      <button class="btn is-ghost sm">filtros…</button>
+                      <button class="btn is-ghost sm">exportar</button>
+                    </div>
+                  </div>
+                  <div class="rep-row">
+                    <div>
+                      <div class="rep-row__when">2026-04-29 09:14 ET <span class="dur">· 42s</span></div>
+                      <div class="rep-row__meta">
+                        <span class="rep-row__trig">manual</span>
+                        <span>7/7 pass · parity 245/245</span>
+                      </div>
+                    </div>
+                    <div class="rep-row__mini"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                  </div>
+                  <div class="rep-row">
+                    <div>
+                      <div class="rep-row__when">2026-04-29 08:00 ET <span class="dur">· 38s</span></div>
+                      <div class="rep-row__meta">
+                        <span class="rep-row__trig">startup</span>
+                        <span>7/7 pass · parity 245/245</span>
+                      </div>
+                    </div>
+                    <div class="rep-row__mini"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                  </div>
+                  <div class="rep-row">
+                    <div>
+                      <div class="rep-row__when">2026-04-28 18:42 ET <span class="dur">· 12s</span></div>
+                      <div class="rep-row__meta">
+                        <span class="rep-row__trig">hot_reload</span>
+                        <span>3/3 pass (A · B · C) · slot 03 IWM</span>
+                      </div>
+                    </div>
+                    <div class="rep-row__mini"><i></i><i></i><i></i><i class="is-pend"></i><i class="is-pend"></i><i class="is-pend"></i><i class="is-pend"></i></div>
+                  </div>
+                  <div class="rep-row">
+                    <div>
+                      <div class="rep-row__when">2026-04-28 14:00 ET <span class="dur">· 5s</span></div>
+                      <div class="rep-row__meta">
+                        <span class="rep-row__trig">connectivity</span>
+                        <span>1/1 pass (G) · 5 keys ok</span>
+                      </div>
+                    </div>
+                    <div class="rep-row__mini"><i class="is-pend"></i><i class="is-pend"></i><i class="is-pend"></i><i class="is-pend"></i><i class="is-pend"></i><i class="is-pend"></i><i></i></div>
+                  </div>
+                  <div class="rep-row">
+                    <div>
+                      <div class="rep-row__when">2026-04-28 09:00 ET <span class="dur">· 41s</span></div>
+                      <div class="rep-row__meta">
+                        <span class="rep-row__trig">startup</span>
+                        <span>7/7 warning · parity 243/245</span>
+                      </div>
+                    </div>
+                    <div class="rep-row__mini"><i></i><i></i><i></i><i></i><i></i><i class="is-warn"></i><i></i></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- DER — Estado motores compacto -->
+              <div>
+                <div class="val-block">
+                  <div class="val-block__head">
+                    <div>
+                      <div class="val-block__title">Estado de motores</div>
+                      <div class="val-block__sub">resumen · detalle full en Dashboard</div>
+                    </div>
+                  </div>
+
+                  <div class="engines-mini">
+                    <div class="engine-row">
+                      <div class="engine-row__nm">data engine <span class="pilot"></span></div>
+                      <div class="engine-row__ms">heartbeat hace 8s · 5 keys / 3 ok</div>
+                    </div>
+                    <div class="engine-row">
+                      <div class="engine-row__nm">scoring <span class="pilot"></span></div>
+                      <div class="engine-row__ms">healthcheck OK · v5.2.0 · parity 245/245</div>
+                    </div>
+                    <div class="engine-row">
+                      <div class="engine-row__nm">database <span class="pilot"></span></div>
+                      <div class="engine-row__ms">342 MB op · 1.2 GB archive · última rot. hace 6h</div>
+                    </div>
+                  </div>
+
+                  <div style="margin-top:14px">
+                    <button class="btn is-ghost sm" style="width:100%">ver último healthcheck (JSON)</button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </article>
+
+        <!-- ============================================================
+             BOX 6 — Backup S3 (último de la cadena · pendiente)
+             ============================================================ -->
+        <article class="box is-pend is-collapsed" id="box-6" data-box="6">
+          <span class="box__dot">6</span>
+          <header class="box__head">
+            <div class="box__title-wrap">
+              <div class="box__title">Backup remoto · S3-compatible</div>
+              <div class="box__sub">AWS · Backblaze B2 · Cloudflare R2 · MinIO · respaldo offsite del archivo Config + DB · opcional, no bloquea</div>
+            </div>
+            <div class="box__meta">
+              <span class="box__status"><span class="pilot is-pend"></span>sin configurar</span>
+              <span class="box__chev">▾</span>
+            </div>
+          </header>
+          <div class="box__body">
+
+            <div class="s3-grid">
+
+              <div class="card">
+                <div class="card__title">Configuración del bucket</div>
+                <div class="card__sub">cualquier provider con endpoint URL · multi-region · sin credenciales no se persiste</div>
+
+                <div class="s3-fields">
+                  <div class="field"><label>endpoint URL</label><input class="inp" placeholder="https://s3.amazonaws.com"></div>
+                  <div class="field"><label>region</label><input class="inp" placeholder="us-east-1"></div>
+                  <div class="field"><label>bucket</label><input class="inp" placeholder="scanner-v5-backups"></div>
+                  <div class="field"><label>prefix</label><input class="inp" placeholder="backups/"></div>
+                  <div class="field"><label>access key</label><input class="inp" placeholder="AKIAxxx…"></div>
+                  <div class="field"><label>secret key</label><input class="inp" type="password" placeholder="••••••••"></div>
+                </div>
+
+                <div class="s3-actions">
+                  <button class="btn">probar conexión</button>
+                  <button class="btn is-primary" disabled>backup ahora</button>
+                  <button class="btn is-ghost" disabled>listar backups</button>
+                  <button class="btn is-ghost is-danger" disabled>restaurar…</button>
+                </div>
+
+                <div class="s3-status">
+                  <span class="pend" style="color:var(--t-55)">— sin probar —</span>
+                  <span class="s3-status__hint">completá los 6 campos y presioná <span class="ref">probar conexión</span> · si falla, el backup local sigue funcionando · el sistema NO depende de S3</span>
+                </div>
+              </div>
+
+              <div class="card">
+                <div class="card__title">Backups disponibles</div>
+                <div class="card__sub">orden descendente por fecha · click <span class="ref">restaurar</span> abre confirmación doble</div>
+
+                <div class="s3-empty" style="margin-top:12px">
+                  <div class="s3-empty__icon">⊘</div>
+                  <div class="s3-empty__txt">no hay backups remotos para listar</div>
+                  <div class="s3-empty__sub">configurá el bucket en el panel de la izquierda</div>
+                </div>
+
+                <div class="note" style="margin-top:14px">
+                  <span class="accent">restaurar</span> siempre crea un sibling del archivo de DB · nunca pisa la viva · doble confirmación obligatoria · el backup automático periódico se decide en el Dashboard, no acá
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </article>
+
+      </section>
+      <!-- /frame -->
+
+    </div>
+    <!-- /config-layout -->
+
+  </main>
+
+  <!-- ============================================================
+       FOOTER (sin scan / sin auto · solo status + bearer)
+       ============================================================ -->
+  <footer class="footer">
+    <div class="footer__left">
+      <span class="footer__status">
+        <span class="ok mono">backend ok</span>
+        <span class="mono">·</span>
+        <span class="mono" style="color:var(--t-55)">3 motores green · 1 warming · 1 degraded</span>
+      </span>
+    </div>
+    <div class="footer__right">
+      <div class="bearer-input">
+        <span class="bearer-input__label">bearer</span>
+        <span class="bearer-input__value mono">sk-•••••••••3a47</span>
+        <span class="bearer-input__chev">›</span>
+      </div>
+    </div>
+  </footer>
+
+</div>
+<!-- /app -->
+
+<!-- ============================================================
+     TWEAKS PANEL DEV (engranaje · solo iteración de diseño)
+     ============================================================ -->
+<button class="tweaks-fab" id="tweaksFab" aria-label="abrir panel dev">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="3"/>
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+  </svg>
+</button>
+
+<aside class="tweaks-panel" id="tweaksPanel" aria-hidden="true">
+  <header class="tweaks-panel__head">
+    <span class="tweaks-panel__title">tweaks · dev</span>
+    <span class="tweaks-panel__tag">v1 · iteración</span>
+  </header>
+
+  <div class="tweaks-panel__row">
+    <span class="tweaks-panel__lbl">Estado del default</span>
+    <div class="tweaks-panel__pills">
+      <button class="pill is-on">mixto</button>
+      <button class="pill" disabled>todo ok</button>
+      <button class="pill" disabled>todo pend</button>
+      <button class="pill" disabled>error fatal</button>
+    </div>
+  </div>
+
+  <div class="tweaks-panel__row">
+    <span class="tweaks-panel__lbl">Box 3 · TD keys</span>
+    <div class="tweaks-panel__pills">
+      <button class="pill" disabled>5/5 ok</button>
+      <button class="pill is-on">3/5 + 1 fail</button>
+      <button class="pill" disabled>0 keys</button>
+      <button class="pill" disabled>probando</button>
+    </div>
+  </div>
+
+  <div class="tweaks-panel__row">
+    <span class="tweaks-panel__lbl">Box 5 · Validator</span>
+    <div class="tweaks-panel__pills">
+      <button class="pill is-on">idle · pass</button>
+      <button class="pill" disabled>running</button>
+      <button class="pill" disabled>warning F</button>
+      <button class="pill" disabled>fatal</button>
+    </div>
+  </div>
+
+  <div class="tweaks-panel__row">
+    <span class="tweaks-panel__lbl">Box 6 · S3</span>
+    <div class="tweaks-panel__pills">
+      <button class="pill" disabled>configurado</button>
+      <button class="pill is-on">pendiente</button>
+      <button class="pill" disabled>fail</button>
+    </div>
+  </div>
+
+  <div class="tweaks-panel__hint">
+    En v1 se diseña 1 sólo estado (los pills disabled marcan los que se cierran en iteraciones siguientes una vez aprobado el lenguaje visual). El icono engranaje colapsa este panel.
+  </div>
+</aside>
+
+<script>
+  /* ============================================================
+     SCRIPT — tweaks panel toggle + acordeones
+     ============================================================ */
+
+  // Tweaks: toggle del panel via engranaje
+  const fab   = document.getElementById('tweaksFab');
+  const panel = document.getElementById('tweaksPanel');
+  fab.addEventListener('click', () => {
+    fab.classList.toggle('is-open');
+    panel.classList.toggle('is-open');
+    panel.setAttribute(
+      'aria-hidden',
+      panel.classList.contains('is-open') ? 'false' : 'true',
+    );
+  });
+
+  // Acordeones: click en .box__head expande/colapsa el .box
+  document.querySelectorAll('.box .box__head').forEach(h => {
+    h.addEventListener('click', e => {
+      // ignorar clicks en controles internos
+      if (e.target.closest('button, input, .toggle, .fix-select, .fix-dropdown')) return;
+      const box = h.closest('.box');
+      box.classList.toggle('is-collapsed');
+    });
+  });
+</script>
+
+</body>
+</html>
+
+
