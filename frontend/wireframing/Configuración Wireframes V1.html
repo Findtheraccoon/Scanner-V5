@@ -1,0 +1,925 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<title>Scanner v5 · Configuración · Wireframes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=Kalam:wght@300;400;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#1b1b1b;
+    --ink-2:#2a2a2a;
+    --muted:#6b6b6b;
+    --paper:#f4f1ea;
+    --paper-2:#ece8de;
+    --accent:#9cc80a;
+    --warn:#c8910a;
+    --err:#c22b2b;
+    --ok:#4a8a26;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:'Inter',system-ui,sans-serif;}
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.35;
+    background-image:
+      radial-gradient(#00000010 1px, transparent 1px),
+      radial-gradient(#00000008 1px, transparent 1px);
+    background-size: 22px 22px, 13px 13px;
+    background-position: 0 0, 11px 7px;
+    mix-blend-mode:multiply;
+  }
+  .wrap{position:relative;z-index:1;padding:28px 36px 120px;max-width:1680px;margin:0 auto;}
+
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:18px;border-bottom:1.5px solid var(--ink);padding-bottom:14px;}
+  .title{font-family:'Kalam',cursive;font-weight:700;font-size:30px;line-height:1;}
+  .title small{font-family:'Inter',sans-serif;font-weight:400;font-size:13px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-left:10px;}
+  .meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);display:flex;gap:18px;}
+  .meta b{color:var(--ink);font-weight:500;}
+  .cap{font-family:'Caveat',cursive;font-size:16px;color:var(--muted);}
+
+  /* TWEAKS */
+  .tweaks{
+    position:fixed;right:22px;top:22px;z-index:30;
+    background:var(--paper);border:1.5px solid var(--ink);
+    padding:12px 14px;min-width:240px;
+    box-shadow:3px 4px 0 var(--ink);
+    font-size:12px; transform:rotate(-.4deg);
+  }
+  .tweaks h4{margin:0 0 8px;font-family:'Kalam',cursive;font-size:16px;font-weight:700;}
+  .tweaks .row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+  .tweaks label{display:block;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;width:100%}
+  .pill{font-family:'Inter',sans-serif;font-size:11px;border:1.2px solid var(--ink);background:transparent;padding:4px 9px;cursor:pointer;color:var(--ink);font-weight:500;letter-spacing:.04em;}
+  .pill.on{background:var(--ink);color:var(--paper);}
+  .tweaks .hint{font-family:'Caveat',cursive;font-size:13px;color:var(--muted);margin-top:8px;}
+
+  /* Annotations */
+  .ann{position:absolute;font-family:'Caveat',cursive;font-size:15px;color:var(--ink);line-height:1.15;pointer-events:none;z-index:5;max-width:200px;}
+  .ann .num{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:1.5px solid var(--ink);border-radius:50%;font-family:'Kalam',cursive;font-size:12px;font-weight:700;margin-right:4px;background:var(--paper);transform:rotate(-3deg);}
+  body[data-ann="off"] .ann{display:none;}
+  .variation:not(.show) .ann{display:none;}
+
+  .variation{display:none;position:relative;}
+  .variation.show{display:block;}
+  .vhead{display:flex;align-items:baseline;gap:14px;margin:8px 0 16px;}
+  .vhead .tag{font-family:'Kalam',cursive;font-weight:700;font-size:22px;background:var(--ink);color:var(--paper);padding:2px 10px;transform:rotate(-1deg);}
+
+  /* tabs */
+  .tabs-global{
+    display:flex;gap:0;border-bottom:1.5px solid var(--ink);margin-bottom:0;
+    font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+  }
+  .tabs-global span{padding:8px 14px;color:var(--muted);}
+  .tabs-global .sel{color:var(--ink);border-bottom:3px solid var(--ink);font-weight:600;margin-bottom:-1.5px;}
+
+  /* Frame */
+  .frame{border:2px solid var(--ink);background:var(--paper);box-shadow:5px 6px 0 rgba(0,0,0,.08);}
+
+  /* Step */
+  .step{border-bottom:1.5px solid var(--ink);padding:18px 22px 22px;position:relative;}
+  .step:last-child{border-bottom:none;}
+  .step-head{display:flex;align-items:baseline;gap:14px;margin-bottom:14px;}
+  .step-num{
+    font-family:'Kalam',cursive;font-weight:700;font-size:26px;
+    width:42px;height:42px;border:2px solid var(--ink);border-radius:50%;
+    display:flex;align-items:center;justify-content:center;background:var(--paper);
+    transform:rotate(-2deg);
+  }
+  .step-title{font-family:'Kalam',cursive;font-size:22px;font-weight:700;letter-spacing:.5px;}
+  .step-sub{font-family:'Caveat',cursive;font-size:15px;color:var(--muted);}
+  .step-actions{margin-left:auto;display:flex;gap:8px;}
+
+  .btn{border:1.2px solid var(--ink);background:transparent;padding:5px 12px;font-family:'Inter',sans-serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;cursor:pointer;}
+  .btn.primary{background:var(--accent);}
+  .btn.ghost{border-style:dashed;color:var(--muted);}
+  .btn.sm{padding:3px 8px;font-size:10px;}
+
+  .mono{font-family:'JetBrains Mono',monospace;}
+
+  /* ============ PASO 1 ============ */
+  .p1-head{display:flex;align-items:center;gap:18px;margin-bottom:10px;}
+  .config-name{
+    font-family:'Kalam',cursive;font-size:26px;font-weight:700;
+    border:1.5px solid var(--ink);padding:4px 14px;background:var(--paper-2);
+    display:inline-flex;align-items:center;gap:10px;
+  }
+  .config-name .dot-unsaved{width:9px;height:9px;background:var(--err);border-radius:50%;border:1px solid var(--ink);}
+  .p1-bar{display:flex;gap:8px;flex-wrap:wrap;}
+  .backup-acc{margin-top:14px;border:1.2px dashed var(--ink);padding:10px 14px;background:var(--paper);}
+  .acc-head{display:flex;align-items:center;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.15em;text-transform:uppercase;cursor:pointer;}
+  .acc-head .chev{font-family:'Kalam',cursive;}
+  .acc-body{display:none;margin-top:12px;}
+  .acc-body.open, .backup-acc.open .acc-body{display:grid;grid-template-columns:repeat(3,1fr);gap:12px 18px;}
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);}
+  .field .inp{border:1px solid var(--ink);background:var(--paper);padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:12px;min-height:26px;}
+  .field .inp.masked{letter-spacing:.3em;}
+  .field .inp.sel-ish{background:var(--paper-2);}
+
+  /* ============ PASO 2 ============ */
+  .keys-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;}
+  .key-card{border:1.5px solid var(--ink);padding:10px 12px;background:var(--paper);display:flex;flex-direction:column;gap:8px;position:relative;}
+  .key-card.empty{border-style:dashed;opacity:.55;background:transparent;align-items:center;justify-content:center;min-height:180px;}
+  .key-card .head{display:flex;align-items:center;justify-content:space-between;}
+  .key-card .alias{font-family:'Kalam',cursive;font-size:16px;font-weight:700;}
+  .key-card .pilot{width:10px;height:10px;border:1px solid var(--ink);border-radius:50%;background:var(--ok);}
+  .key-card .pilot.warn{background:var(--warn);}
+  .key-card .pilot.err{background:var(--err);}
+  .key-card .pilot.off{background:transparent;}
+  .toggle{display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;}
+  .toggle .sw{width:28px;height:14px;border:1.2px solid var(--ink);position:relative;background:var(--paper);}
+  .toggle .sw i{position:absolute;top:1px;left:1px;width:10px;height:10px;background:var(--ink);transition:.2s;}
+  .toggle.on .sw{background:var(--accent);}
+  .toggle.on .sw i{left:15px;}
+
+  /* ============ PASO 3 — canvas slots ============ */
+  .canvas{
+    border:1.5px dashed var(--ink);background:
+      repeating-linear-gradient(0deg, transparent 0 39px, #00000008 39px 40px),
+      repeating-linear-gradient(90deg, transparent 0 39px, #00000008 39px 40px);
+    padding:18px;position:relative;min-height:420px;
+  }
+  .slot-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px 24px;}
+  .slot{
+    border:1.5px solid var(--ink);background:var(--paper);padding:12px 14px;
+    position:relative;display:flex;flex-direction:column;gap:8px;
+  }
+  .slot .n{
+    position:absolute;top:-14px;left:-14px;width:30px;height:30px;border-radius:50%;
+    background:var(--ink);color:var(--paper);display:flex;align-items:center;justify-content:center;
+    font-family:'Kalam',cursive;font-weight:700;font-size:16px;
+  }
+  .slot .hd{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-left:20px;}
+  .slot .tk{font-family:'Kalam',cursive;font-size:20px;font-weight:700;}
+  .slot .pilot{width:10px;height:10px;border:1px solid var(--ink);border-radius:50%;background:var(--ok);}
+  .slot .row{display:flex;gap:8px;align-items:center;justify-content:space-between;}
+  .slot .lab{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);min-width:60px;}
+  .slot .val{font-family:'JetBrains Mono',monospace;font-size:11px;border:1px solid var(--ink);padding:3px 6px;background:var(--paper-2);flex:1;display:flex;align-items:center;justify-content:space-between;}
+  .slot .val .chev{color:var(--muted);font-size:10px;}
+  .slot .foot{display:flex;align-items:center;justify-content:space-between;margin-top:2px;}
+  .slot .state{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.05em;color:var(--muted);}
+  .slot.ghost{border-style:dashed;opacity:.55;background:transparent;min-height:170px;align-items:center;justify-content:center;}
+  .slot.ghost .n{background:transparent;color:var(--ink);border:1.5px dashed var(--ink);}
+  .slot.ghost .hint{font-family:'Caveat',cursive;font-size:18px;color:var(--muted);}
+
+  /* slot state variants */
+  .slot.warming .pilot{background:var(--warn);}
+  .slot.warming .state{color:var(--warn);}
+  .slot.revalidando .pilot{background:var(--warn);}
+  .slot.revalidando .state{color:var(--warn);}
+  .slot.degraded .pilot{background:var(--warn);}
+  .slot.degraded .state{color:var(--warn);}
+  .slot.errorf .pilot{background:var(--err);}
+  .slot.errorf .state{color:var(--err);}
+  .slot.inact{opacity:.6;}
+
+  /* progress mini in slot */
+  .pg{height:5px;border:1px solid var(--ink);position:relative;background:var(--paper);flex:1;}
+  .pg i{display:block;height:100%;background:var(--ink);}
+
+  /* Fixture modal mini */
+  .fx-modal{
+    margin-top:14px;border:1.5px solid var(--ink);background:var(--paper-2);padding:14px 16px;
+    position:relative;
+  }
+  .fx-modal .sticker{
+    position:absolute;top:-12px;left:14px;background:var(--paper);border:1.2px solid var(--ink);padding:2px 8px;
+    font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;
+  }
+  .fx-body{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .dropzone{
+    border:1.5px dashed var(--ink);padding:22px;text-align:center;background:var(--paper);
+    font-family:'Caveat',cursive;font-size:18px;color:var(--muted);display:flex;flex-direction:column;gap:6px;align-items:center;
+  }
+  .dropzone .types{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.1em;}
+  .fx-preview{font-family:'JetBrains Mono',monospace;font-size:11px;border:1px solid var(--ink);background:var(--paper);padding:10px;}
+  .fx-preview .h{font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);}
+  .fx-preview .ok{color:var(--ok);}
+  .fx-preview .bad{color:var(--err);}
+
+  /* ============ PASO 4 ============ */
+  .p4{display:grid;grid-template-columns:1fr 1fr;gap:22px;}
+
+  /* Variant A — list */
+  .eng-list{border:1.5px solid var(--ink);background:var(--paper);}
+  .eng-list .global-bar{
+    display:flex;align-items:center;justify-content:space-between;padding:10px 14px;
+    border-bottom:1.5px solid var(--ink);background:var(--paper-2);
+  }
+  .eng-row{display:grid;grid-template-columns:28px 1fr 140px 120px 90px;gap:12px;align-items:center;padding:10px 14px;border-bottom:1px dashed var(--ink);}
+  .eng-row:last-child{border-bottom:none;}
+  .eng-row .idx{font-family:'Kalam',cursive;font-weight:700;font-size:18px;color:var(--muted);}
+  .eng-row .nm{font-family:'Inter',sans-serif;font-weight:600;letter-spacing:.06em;}
+  .eng-row .nm small{display:block;font-family:'JetBrains Mono',monospace;font-weight:400;font-size:10px;color:var(--muted);letter-spacing:.06em;margin-top:2px;}
+  .eng-row .st{font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--muted);display:flex;align-items:center;gap:6px;}
+  .eng-row .st .pilot{width:9px;height:9px;border-radius:50%;border:1px solid var(--ink);background:var(--ok);}
+  .eng-row .st.pend .pilot{background:transparent;}
+  .eng-row .st.run .pilot{background:var(--warn);}
+  .eng-row .st.err .pilot{background:var(--err);}
+
+  /* Variant B — dependency graph */
+  .dep-graph{
+    border:1.5px solid var(--ink);background:var(--paper);padding:18px;position:relative;min-height:360px;
+    background-image:
+      repeating-linear-gradient(0deg, transparent 0 39px, #00000008 39px 40px),
+      repeating-linear-gradient(90deg, transparent 0 39px, #00000008 39px 40px);
+  }
+  .dep-svg{position:absolute;inset:0;pointer-events:none;}
+  .dep-node{
+    position:absolute;border:1.5px solid var(--ink);background:var(--paper);padding:8px 12px;
+    width:150px;z-index:2;
+  }
+  .dep-node .nn{font-family:'Kalam',cursive;font-weight:700;font-size:15px;display:flex;justify-content:space-between;align-items:center;gap:8px;}
+  .dep-node .nn .pilot{width:9px;height:9px;border-radius:50%;border:1px solid var(--ink);background:var(--ok);}
+  .dep-node.pend .pilot{background:transparent;}
+  .dep-node.run .pilot{background:var(--warn);}
+  .dep-node .ns{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.08em;margin-top:2px;}
+  .dep-node .nb{margin-top:5px;}
+
+  /* ============ VALIDATOR ============ */
+  .validator-wrap{border:1.5px solid var(--ink);background:var(--paper);padding:14px 16px;margin-top:14px;}
+  .val-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;}
+  .val-title{font-family:'Kalam',cursive;font-size:18px;font-weight:700;}
+  .val-badge{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;border:1px solid var(--ink);padding:2px 8px;text-transform:uppercase;}
+
+  /* Variant A — checklist */
+  .val-checklist{display:flex;flex-direction:column;}
+  .val-bar-global{
+    height:10px;border:1.2px solid var(--ink);background:var(--paper);position:relative;margin-bottom:14px;
+  }
+  .val-bar-global i{display:block;height:100%;background:var(--ink);width:43%;}
+  .val-bar-global .lbl{position:absolute;right:-2px;top:-18px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);}
+  .check-row{display:grid;grid-template-columns:30px 40px 1fr 110px;gap:10px;align-items:center;padding:7px 6px;border-bottom:1px dashed var(--ink);}
+  .check-row:last-child{border-bottom:none;}
+  .check-row .cb{
+    width:20px;height:20px;border:1.4px solid var(--ink);background:var(--paper);
+    display:flex;align-items:center;justify-content:center;font-family:'Kalam',cursive;font-weight:700;font-size:16px;
+  }
+  .check-row.ok .cb{background:var(--accent);}
+  .check-row.run .cb{background:var(--paper-2);}
+  .check-row.fail .cb{background:var(--err);color:var(--paper);}
+  .check-row.pend{opacity:.55;}
+  .check-row .code{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;letter-spacing:.1em;}
+  .check-row .name{font-family:'Inter',sans-serif;font-size:12.5px;}
+  .check-row .result{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);text-align:right;}
+
+  /* Variant B — grid */
+  .val-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;}
+  .vg-cell{border:1.5px solid var(--ink);padding:10px 8px;background:var(--paper);display:flex;flex-direction:column;gap:4px;min-height:100px;position:relative;}
+  .vg-cell .l{font-family:'Kalam',cursive;font-size:20px;font-weight:700;text-align:center;}
+  .vg-cell .n{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.08em;text-align:center;color:var(--muted);line-height:1.2;}
+  .vg-cell .stat{
+    margin-top:auto;height:8px;border:1px solid var(--ink);background:var(--paper);position:relative;
+  }
+  .vg-cell .stat i{display:block;height:100%;}
+  .vg-cell.ok .stat i{width:100%;background:var(--accent);}
+  .vg-cell.ok::after{content:"✓";position:absolute;top:6px;right:8px;font-family:'Kalam',cursive;font-weight:700;font-size:14px;color:var(--ok);}
+  .vg-cell.run .stat i{width:55%;background:var(--warn);}
+  .vg-cell.run::after{content:"⟳";position:absolute;top:6px;right:8px;font-family:'Kalam',cursive;font-weight:700;font-size:14px;color:var(--warn);}
+  .vg-cell.fail .stat i{width:100%;background:var(--err);}
+  .vg-cell.fail::after{content:"✕";position:absolute;top:6px;right:8px;font-family:'Kalam',cursive;font-weight:700;font-size:14px;color:var(--err);}
+  .vg-cell.pend{opacity:.45;}
+
+  .val-foot{display:flex;align-items:center;justify-content:space-between;margin-top:12px;padding-top:10px;border-top:1.5px dashed var(--ink);font-family:'JetBrains Mono',monospace;font-size:11px;}
+  .val-foot .msg{letter-spacing:.06em;}
+
+  /* splash (Auto-LAST) */
+  .splash{display:none;border:1.5px solid var(--ink);background:var(--paper-2);padding:40px;text-align:center;}
+  body[data-state="loading"] .splash{display:block;}
+  body[data-state="loading"] .step:not(.splash-parent){display:none;}
+  .splash h2{font-family:'Kalam',cursive;font-size:30px;margin:0 0 6px;}
+  .splash p{font-family:'Caveat',cursive;font-size:18px;color:var(--muted);margin:0 0 20px;}
+  .splash .progress{max-width:540px;margin:0 auto;display:flex;flex-direction:column;gap:8px;}
+  .splash .line{display:grid;grid-template-columns:1fr 80px;gap:10px;align-items:center;font-family:'JetBrains Mono',monospace;font-size:11px;}
+  .splash .pg{height:8px;}
+
+  /* cap for hand-sketch scribbles */
+  .scribble{position:absolute;font-family:'Caveat',cursive;font-size:15px;color:var(--muted);}
+
+  /* mini list styling */
+  ul.tight{margin:0;padding-left:16px;font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.6;}
+</style>
+</head>
+<body data-state="normal" data-ann="on">
+
+<div class="wrap">
+
+  <div class="top">
+    <div>
+      <div class="title">scanner v5 — configuración <small>wireframe · mid-fi</small></div>
+      <div class="cap" style="margin-top:4px">4 pasos apilados con scroll · dos direcciones para paso 4 + validator</div>
+    </div>
+    <div class="meta">
+      <span><b>config activo</b> qqq_spy_base_v3</span>
+      <span><b>sin guardar</b> 2 cambios</span>
+      <span><b>scanner</b> v5.2.0</span>
+    </div>
+  </div>
+
+  <!-- TWEAKS -->
+  <div class="tweaks">
+    <h4>tweaks</h4>
+    <label>variación · paso 4 + validator</label>
+    <div class="row" data-group="var">
+      <button class="pill on" data-var="a">A · list + checklist</button>
+      <button class="pill" data-var="b">B · grafo + grid</button>
+    </div>
+    <label>estado</label>
+    <div class="row" data-group="state">
+      <button class="pill on" data-state="normal">normal</button>
+      <button class="pill" data-state="warmup">slot warmup</button>
+      <button class="pill" data-state="degraded">slot degraded</button>
+      <button class="pill" data-state="running">validator corriendo</button>
+      <button class="pill" data-state="error">error fatal</button>
+      <button class="pill" data-state="loading">auto-LAST splash</button>
+    </div>
+    <label>anotaciones</label>
+    <div class="row" data-group="ann">
+      <button class="pill on" data-ann="on">on</button>
+      <button class="pill" data-ann="off">off</button>
+    </div>
+    <div class="hint">tweaks solo afectan paso 4/validator; paso 1-3 son iguales en A y B</div>
+  </div>
+
+  <!-- global tabs -->
+  <div class="tabs-global">
+    <span class="sel">configuración</span>
+    <span>dashboard</span>
+    <span>cockpit</span>
+    <span>memento</span>
+  </div>
+
+  <!-- ================= VARIATION A ================= -->
+  <section class="variation show" data-var="a">
+    <div class="vhead" style="margin-top:14px">
+      <span class="tag">A</span>
+      <span class="cap">paso 4 como lista secuencial + validator como checklist con barra global</span>
+    </div>
+
+    <div class="frame">
+
+      <!-- splash when auto-LAST loading -->
+      <div class="splash step splash-parent">
+        <h2>auto-LAST · arrancando</h2>
+        <p>último config válido detectado · iniciando motores en secuencia</p>
+        <div class="progress">
+          <div class="line"><span>Database Engine</span><div class="pg"><i style="width:100%"></i></div></div>
+          <div class="line"><span>Data Engine</span><div class="pg"><i style="width:100%"></i></div></div>
+          <div class="line"><span>Slot Registry</span><div class="pg"><i style="width:70%"></i></div></div>
+          <div class="line" style="opacity:.5"><span>Scoring Engine</span><div class="pg"><i style="width:0%"></i></div></div>
+          <div class="line" style="opacity:.5"><span>Validator (A–G)</span><div class="pg"><i style="width:0%"></i></div></div>
+        </div>
+      </div>
+
+      <!-- ========== PASO 1 ========== -->
+      <div class="step">
+        <div class="step-head">
+          <div class="step-num">1</div>
+          <div>
+            <div class="step-title">config del usuario</div>
+            <div class="step-sub">cargar · guardar · respaldo opcional en cloud</div>
+          </div>
+          <div class="step-actions">
+            <button class="btn">cargar LAST</button>
+          </div>
+        </div>
+
+        <div class="p1-head">
+          <div class="config-name">
+            <span>qqq_spy_base_v3</span>
+            <span class="dot-unsaved" title="sin guardar"></span>
+          </div>
+          <div class="p1-bar">
+            <button class="btn">cargar</button>
+            <button class="btn primary">guardar</button>
+            <button class="btn">guardar como…</button>
+            <button class="btn ghost">LAST</button>
+          </div>
+          <span class="cap" style="margin-left:auto">· 2 cambios sin guardar ·</span>
+        </div>
+
+        <div class="backup-acc open">
+          <div class="acc-head">
+            <span>▾ online backup (opcional)</span>
+            <span class="cap" style="font-size:13px">último backup · 2026-04-22 18:04 ET · 12.4 MB</span>
+          </div>
+          <div class="acc-body">
+            <div class="field"><label>provider</label><div class="inp sel-ish">AWS S3 ▾</div></div>
+            <div class="field"><label>endpoint URL</label><div class="inp">https://s3.us-east-1.amazonaws.com</div></div>
+            <div class="field"><label>bucket</label><div class="inp">scanner-v5-backups</div></div>
+            <div class="field"><label>access key</label><div class="inp masked">••••••••••••••••</div></div>
+            <div class="field"><label>secret key</label><div class="inp masked">••••••••••••••••••••</div></div>
+            <div style="display:flex;align-items:flex-end;gap:6px">
+              <button class="btn">backup ahora</button>
+              <button class="btn ghost">restore…</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="ann" style="top:40px;right:-20px;width:190px;text-align:right;">
+          <span class="num">1</span>indicador de cambios sin guardar visible desde cualquier paso
+        </div>
+      </div>
+
+      <!-- ========== PASO 2 ========== -->
+      <div class="step">
+        <div class="step-head">
+          <div class="step-num">2</div>
+          <div>
+            <div class="step-title">api keys</div>
+            <div class="step-sub">proveedores de datos — hasta 5 keys</div>
+          </div>
+          <div class="step-actions">
+            <button class="btn ghost">testear todas</button>
+          </div>
+        </div>
+
+        <div class="keys-grid">
+          <div class="key-card">
+            <div class="head"><div class="alias">key principal</div><span class="pilot"></span></div>
+            <div class="field"><label>valor</label><div class="inp masked">••••••••••••••••</div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="field"><label>cred/min</label><div class="inp">8</div></div>
+              <div class="field"><label>cred/día</label><div class="inp">800</div></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div class="toggle on"><span class="sw"><i></i></span><span>activa</span></div>
+              <button class="btn sm">test</button>
+            </div>
+          </div>
+
+          <div class="key-card">
+            <div class="head"><div class="alias">backup</div><span class="pilot"></span></div>
+            <div class="field"><label>valor</label><div class="inp masked">••••••••••••••••</div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="field"><label>cred/min</label><div class="inp">8</div></div>
+              <div class="field"><label>cred/día</label><div class="inp">800</div></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div class="toggle on"><span class="sw"><i></i></span><span>activa</span></div>
+              <button class="btn sm">test</button>
+            </div>
+          </div>
+
+          <div class="key-card">
+            <div class="head"><div class="alias">reserva a</div><span class="pilot warn"></span></div>
+            <div class="field"><label>valor</label><div class="inp masked">••••••••••••••••</div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div class="field"><label>cred/min</label><div class="inp">8</div></div>
+              <div class="field"><label>cred/día</label><div class="inp">800</div></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div class="toggle"><span class="sw"><i></i></span><span>inactiva</span></div>
+              <button class="btn sm">test</button>
+            </div>
+            <div class="mono" style="font-size:9.5px;color:var(--warn);letter-spacing:.05em">⚠ cupo agotado · reintenta en 2m</div>
+          </div>
+
+          <div class="key-card empty">
+            <div class="mono" style="font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)">slot 4</div>
+            <div class="cap">+ agregar key</div>
+          </div>
+
+          <div class="key-card empty">
+            <div class="mono" style="font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)">slot 5</div>
+            <div class="cap">+ agregar key</div>
+          </div>
+        </div>
+
+        <div class="ann" style="bottom:-8px;left:0;">
+          <span class="num">2</span>piloto por key · warn si cupo agotado o auth falla
+        </div>
+      </div>
+
+      <!-- ========== PASO 3 ========== -->
+      <div class="step">
+        <div class="step-head">
+          <div class="step-num">3</div>
+          <div>
+            <div class="step-title">fixtures + slot registry</div>
+            <div class="step-sub">6 slots · canvas tipo runpod · cambios disparan revalidación automática</div>
+          </div>
+          <div class="step-actions">
+            <button class="btn ghost">cargar fixture…</button>
+          </div>
+        </div>
+
+        <div class="canvas">
+          <div class="slot-grid">
+
+            <div class="slot">
+              <div class="n">1</div>
+              <div class="hd"><div class="tk">QQQ</div><span class="pilot"></span></div>
+              <div class="row"><span class="lab">ticker</span><span class="val">QQQ <span class="chev">▾</span></span></div>
+              <div class="row"><span class="lab">fixture</span><span class="val">qqq_v5_2_0 <span class="chev">▾</span></span></div>
+              <div class="row"><span class="lab">bench</span><span class="val" style="background:transparent">SPY (read-only)</span></div>
+              <div class="foot">
+                <div class="toggle on"><span class="sw"><i></i></span><span>activo</span></div>
+                <span class="state">operativo</span>
+              </div>
+            </div>
+
+            <div class="slot">
+              <div class="n">2</div>
+              <div class="hd"><div class="tk">SPY</div><span class="pilot"></span></div>
+              <div class="row"><span class="lab">ticker</span><span class="val">SPY <span class="chev">▾</span></span></div>
+              <div class="row"><span class="lab">fixture</span><span class="val">spy_v5_2_0 <span class="chev">▾</span></span></div>
+              <div class="row"><span class="lab">bench</span><span class="val" style="background:transparent">IWM (read-only)</span></div>
+              <div class="foot">
+                <div class="toggle on"><span class="sw"><i></i></span><span>activo</span></div>
+                <span class="state">operativo</span>
+              </div>
+            </div>
+
+            <div class="slot warming">
+              <div class="n">3</div>
+              <div class="hd"><div class="tk">NVDA</div><span class="pilot"></span></div>
+              <div class="row"><span class="lab">ticker</span><span class="val">NVDA <span class="chev">▾</span></span></div>
+              <div class="row"><span class="lab">fixture</span><span class="val">nvda_v5_2_0 <span class="chev">▾</span></span></div>
+              <div class="row"><span class="lab">warmup</span><div class="pg"><i style="width:62%"></i></div></div>
+              <div class="foot">
+                <div class="toggle on"><span class="sw"><i></i></span><span>activo</span></div>
+                <span class="state">⟳ warming up · 62%</span>
+              </div>
+            </div>
+
+            <div class="slot revalidando">
+              <div class="n">4</div>
+              <div class="hd"><div class="tk">IWM</div><span class="pilot"></span></div>
+              <div class="row"><span class="lab">ticker</span><span class="val">IWM <span class="chev">▾</span></span></div>
+              <div class="row"><span class="lab">fixture</span><span class="val">iwm_v5_1_1 <span class="chev">▾</span></span></div>
+              <div class="row"><span class="lab">bench</span><span class="val" style="background:transparent">SPY</span></div>
+              <div class="foot">
+                <div class="toggle on"><span class="sw"><i></i></span><span>activo</span></div>
+                <span class="state">⟳ revalidando…</span>
+              </div>
+            </div>
+
+            <div class="slot degraded">
+              <div class="n">5</div>
+              <div class="hd"><div class="tk">AAPL</div><span class="pilot"></span></div>
+              <div class="row"><span class="lab">ticker</span><span class="val">AAPL <span class="chev">▾</span></span></div>
+              <div class="row"><span class="lab">fixture</span><span class="val">aapl_v5_0_3 <span class="chev">▾</span></span></div>
+              <div class="row"><span class="lab">bench</span><span class="val" style="background:transparent">QQQ</span></div>
+              <div class="foot">
+                <div class="toggle on"><span class="sw"><i></i></span><span>activo</span></div>
+                <span class="state mono" style="font-size:9.5px">⚠ ENG-060 · 3 fallos fetch</span>
+              </div>
+            </div>
+
+            <div class="slot ghost">
+              <div class="n">6</div>
+              <div class="hint">+ asignar ticker</div>
+              <div class="mono" style="font-size:10px;color:var(--muted);letter-spacing:.08em">slot libre</div>
+            </div>
+
+          </div>
+
+          <div class="scribble" style="top:6px;right:10px;">← drag & drop · conexiones opcionales estilo runpod</div>
+        </div>
+
+        <!-- fixture modal mini -->
+        <div class="fx-modal">
+          <div class="sticker">modal · cargar fixture</div>
+          <div class="fx-body">
+            <div class="dropzone">
+              <div>arrastrá archivos acá</div>
+              <div class="types">.json · .metrics.json · .zip</div>
+              <button class="btn sm" style="margin-top:6px">o explorar…</button>
+            </div>
+            <div class="fx-preview">
+              <div class="h">preview · validación</div>
+              <div style="margin-top:6px">
+                <div><span class="ok">✓</span> schema v5.x válido</div>
+                <div><span class="ok">✓</span> ticker = QQQ · benchmark = SPY</div>
+                <div><span class="ok">✓</span> canonical hash match</div>
+                <div><span class="bad">✕</span> REG-013 · benchmark inválido (SPX)</div>
+              </div>
+              <div style="margin-top:8px;display:flex;gap:8px">
+                <button class="btn primary sm">aplicar</button>
+                <button class="btn ghost sm">descartar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ann" style="top:110px;right:-20px;width:190px;text-align:right;">
+          <span class="num">3</span>estados: vacío · inact · warmup · revalidando · operativo · degraded · error
+        </div>
+      </div>
+
+      <!-- ========== PASO 4 — Variant A (LIST + CHECKLIST) ========== -->
+      <div class="step">
+        <div class="step-head">
+          <div class="step-num">4</div>
+          <div>
+            <div class="step-title">arranque de motores</div>
+            <div class="step-sub">lista secuencial · respeta dependencias</div>
+          </div>
+          <div class="step-actions">
+            <button class="btn primary">▶ arrancar todos</button>
+            <button class="btn ghost">detener</button>
+          </div>
+        </div>
+
+        <div class="p4">
+          <!-- list -->
+          <div class="eng-list">
+            <div class="global-bar">
+              <span class="mono" style="font-size:10px;letter-spacing:.2em;text-transform:uppercase">secuencia de arranque</span>
+              <span class="mono" style="font-size:10px;color:var(--muted)">3/5 completados</span>
+            </div>
+
+            <div class="eng-row">
+              <div class="idx">1</div>
+              <div class="nm">Database Engine<small>persistencia · rotación · archive</small></div>
+              <div class="st"><span class="pilot"></span><span>operativo · 2.4s</span></div>
+              <div class="mono" style="font-size:10px;color:var(--muted)">— sin deps —</div>
+              <button class="btn sm ghost">iniciar</button>
+            </div>
+            <div class="eng-row">
+              <div class="idx">2</div>
+              <div class="nm">Data Engine<small>twelve data · fetch · healthcheck</small></div>
+              <div class="st"><span class="pilot"></span><span>operativo · 3.1s</span></div>
+              <div class="mono" style="font-size:10px;color:var(--muted)">dep: DB</div>
+              <button class="btn sm ghost">iniciar</button>
+            </div>
+            <div class="eng-row">
+              <div class="idx">3</div>
+              <div class="nm">Slot Registry<small>fixtures · benchmarks · validación</small></div>
+              <div class="st"><span class="pilot"></span><span>operativo · 1.8s</span></div>
+              <div class="mono" style="font-size:10px;color:var(--muted)">dep: Data</div>
+              <button class="btn sm ghost">iniciar</button>
+            </div>
+            <div class="eng-row">
+              <div class="idx">4</div>
+              <div class="nm">Scoring Engine<small>triggers · confirms · parity test</small></div>
+              <div class="st run"><span class="pilot"></span><span>⟳ arrancando…</span></div>
+              <div class="mono" style="font-size:10px;color:var(--muted)">dep: Registry</div>
+              <button class="btn sm">iniciar</button>
+            </div>
+            <div class="eng-row">
+              <div class="idx">5</div>
+              <div class="nm">Validator<small>batería inicial A–G</small></div>
+              <div class="st pend"><span class="pilot"></span><span>pendiente</span></div>
+              <div class="mono" style="font-size:10px;color:var(--muted)">dep: Scoring</div>
+              <button class="btn sm ghost">iniciar</button>
+            </div>
+          </div>
+
+          <!-- validator checklist (variant A) -->
+          <div class="validator-wrap">
+            <div class="val-head">
+              <div>
+                <div class="val-title">validator · batería A–G</div>
+                <div class="cap">checklist · 7 tests</div>
+              </div>
+              <div class="val-badge">trigger · startup</div>
+            </div>
+
+            <div class="val-bar-global">
+              <i></i>
+              <span class="lbl">3/7 · 43%</span>
+            </div>
+
+            <div class="val-checklist">
+              <div class="check-row ok"><div class="cb">✓</div><div class="code">D</div><div class="name">infraestructura</div><div class="result">0.4s · pass</div></div>
+              <div class="check-row ok"><div class="cb">✓</div><div class="code">A</div><div class="name">fixtures</div><div class="result">1.2s · pass</div></div>
+              <div class="check-row ok"><div class="cb">✓</div><div class="code">B</div><div class="name">canonicals (hash)</div><div class="result">0.8s · pass</div></div>
+              <div class="check-row run"><div class="cb">⟳</div><div class="code">C</div><div class="name">slot registry</div><div class="result">running…</div></div>
+              <div class="check-row pend"><div class="cb"></div><div class="code">E</div><div class="name">end-to-end</div><div class="result">—</div></div>
+              <div class="check-row pend"><div class="cb"></div><div class="code">F</div><div class="name">parity test</div><div class="result">—</div></div>
+              <div class="check-row pend"><div class="cb"></div><div class="code">G</div><div class="name">conectividad externa</div><div class="result">—</div></div>
+            </div>
+
+            <div class="val-foot">
+              <span class="msg">esperando finalización…</span>
+              <button class="btn sm ghost">ver log</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="ann" style="top:40px;left:-10px;width:190px;">
+          <span class="num">4</span>lista = orden explícito de dependencias; fácil de leer y accionar individualmente
+        </div>
+        <div class="ann" style="bottom:200px;right:-16px;width:180px;text-align:right;">
+          <span class="num">5</span>checklist = eventos discretos con resultado legible post-mortem
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ================= VARIATION B ================= -->
+  <section class="variation" data-var="b">
+    <div class="vhead" style="margin-top:14px">
+      <span class="tag">B</span>
+      <span class="cap">paso 4 como grafo de dependencias + validator en grid 7-celdas</span>
+    </div>
+
+    <div class="frame">
+
+      <!-- Splash is shared — re-render stripped (A's version already shows when state=loading).
+           We render a smaller copy here so toggling variation doesn't break layout. -->
+      <div class="splash step splash-parent">
+        <h2>auto-LAST · arrancando</h2>
+        <p>grafo: los nodos en verde ya arrancaron · los amarillos en curso</p>
+      </div>
+
+      <!-- PASO 1 -->
+      <div class="step">
+        <div class="step-head">
+          <div class="step-num">1</div>
+          <div>
+            <div class="step-title">config del usuario</div>
+            <div class="step-sub">idéntico a variación A · no se explora acá</div>
+          </div>
+        </div>
+        <div class="p1-head">
+          <div class="config-name"><span>qqq_spy_base_v3</span><span class="dot-unsaved"></span></div>
+          <div class="p1-bar">
+            <button class="btn">cargar</button>
+            <button class="btn primary">guardar</button>
+            <button class="btn">guardar como…</button>
+            <button class="btn ghost">LAST</button>
+          </div>
+        </div>
+        <div class="backup-acc">
+          <div class="acc-head">
+            <span>▸ online backup (opcional · cerrado)</span>
+            <span class="cap" style="font-size:13px">último backup · hace 18h · 12.4 MB</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- PASO 2 compact -->
+      <div class="step">
+        <div class="step-head">
+          <div class="step-num">2</div>
+          <div>
+            <div class="step-title">api keys</div>
+            <div class="step-sub">idéntico a variación A</div>
+          </div>
+        </div>
+        <div class="keys-grid" style="grid-template-columns:repeat(5,1fr)">
+          <div class="key-card" style="min-height:110px"><div class="head"><div class="alias">principal</div><span class="pilot"></span></div><div class="mono" style="font-size:10px;color:var(--muted)">8/min · 800/día</div></div>
+          <div class="key-card" style="min-height:110px"><div class="head"><div class="alias">backup</div><span class="pilot"></span></div><div class="mono" style="font-size:10px;color:var(--muted)">8/min · 800/día</div></div>
+          <div class="key-card" style="min-height:110px"><div class="head"><div class="alias">reserva a</div><span class="pilot warn"></span></div><div class="mono" style="font-size:10px;color:var(--warn)">cupo agotado</div></div>
+          <div class="key-card empty" style="min-height:110px"><div class="cap">+ agregar key</div></div>
+          <div class="key-card empty" style="min-height:110px"><div class="cap">+ agregar key</div></div>
+        </div>
+      </div>
+
+      <!-- PASO 3 -->
+      <div class="step">
+        <div class="step-head">
+          <div class="step-num">3</div>
+          <div>
+            <div class="step-title">fixtures + slot registry</div>
+            <div class="step-sub">idéntico a variación A</div>
+          </div>
+        </div>
+        <div class="canvas" style="min-height:280px">
+          <div class="slot-grid">
+            <div class="slot"><div class="n">1</div><div class="hd"><div class="tk">QQQ</div><span class="pilot"></span></div><div class="row"><span class="lab">fixture</span><span class="val">qqq_v5_2_0</span></div><div class="foot"><div class="toggle on"><span class="sw"><i></i></span><span>activo</span></div><span class="state">operativo</span></div></div>
+            <div class="slot"><div class="n">2</div><div class="hd"><div class="tk">SPY</div><span class="pilot"></span></div><div class="row"><span class="lab">fixture</span><span class="val">spy_v5_2_0</span></div><div class="foot"><div class="toggle on"><span class="sw"><i></i></span><span>activo</span></div><span class="state">operativo</span></div></div>
+            <div class="slot warming"><div class="n">3</div><div class="hd"><div class="tk">NVDA</div><span class="pilot"></span></div><div class="row"><span class="lab">warmup</span><div class="pg"><i style="width:62%"></i></div></div><div class="foot"><div class="toggle on"><span class="sw"><i></i></span><span>activo</span></div><span class="state">⟳ warming · 62%</span></div></div>
+            <div class="slot"><div class="n">4</div><div class="hd"><div class="tk">IWM</div><span class="pilot"></span></div><div class="row"><span class="lab">fixture</span><span class="val">iwm_v5_1_1</span></div><div class="foot"><div class="toggle on"><span class="sw"><i></i></span><span>activo</span></div><span class="state">operativo</span></div></div>
+            <div class="slot degraded"><div class="n">5</div><div class="hd"><div class="tk">AAPL</div><span class="pilot"></span></div><div class="row"><span class="lab">fixture</span><span class="val">aapl_v5_0_3</span></div><div class="foot"><div class="toggle on"><span class="sw"><i></i></span><span>activo</span></div><span class="state mono" style="font-size:9.5px">ENG-060</span></div></div>
+            <div class="slot ghost"><div class="n">6</div><div class="hint">+ asignar ticker</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PASO 4 — GRAFO + GRID -->
+      <div class="step">
+        <div class="step-head">
+          <div class="step-num">4</div>
+          <div>
+            <div class="step-title">arranque de motores</div>
+            <div class="step-sub">grafo de dependencias · el orden sale del grafo, no de una lista</div>
+          </div>
+          <div class="step-actions">
+            <button class="btn primary">▶ arrancar todos</button>
+            <button class="btn ghost">detener</button>
+          </div>
+        </div>
+
+        <div class="dep-graph" style="min-height:320px">
+          <!-- SVG connections -->
+          <svg class="dep-svg" viewBox="0 0 900 320" preserveAspectRatio="none">
+            <defs>
+              <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+                <path d="M0,0 L10,5 L0,10 z" fill="#1b1b1b"/>
+              </marker>
+            </defs>
+            <!-- DB → Data -->
+            <path d="M 180 90 C 240 90, 260 90, 320 90" fill="none" stroke="#1b1b1b" stroke-width="1.4" marker-end="url(#ah)"/>
+            <!-- DB → Registry -->
+            <path d="M 180 90 C 240 90, 260 200, 320 200" fill="none" stroke="#1b1b1b" stroke-width="1.4" stroke-dasharray="3 3" marker-end="url(#ah)"/>
+            <!-- Data → Registry -->
+            <path d="M 470 90 C 520 90, 340 140, 320 200" fill="none" stroke="#1b1b1b" stroke-width="1.4" marker-end="url(#ah)"/>
+            <!-- Registry → Scoring -->
+            <path d="M 470 200 C 540 200, 560 90, 620 90" fill="none" stroke="#1b1b1b" stroke-width="1.4" marker-end="url(#ah)"/>
+            <!-- Scoring → Validator -->
+            <path d="M 770 90 C 810 90, 820 200, 770 200" fill="none" stroke="#1b1b1b" stroke-width="1.4" stroke-dasharray="3 3" marker-end="url(#ah)"/>
+          </svg>
+
+          <div class="dep-node" style="top:56px;left:28px">
+            <div class="nn">Database <span class="pilot"></span></div>
+            <div class="ns">ENGINE · sin deps</div>
+            <div class="nb mono" style="font-size:10px;color:var(--ok)">✓ 2.4s</div>
+          </div>
+          <div class="dep-node" style="top:56px;left:320px">
+            <div class="nn">Data <span class="pilot"></span></div>
+            <div class="ns">ENGINE · dep: DB</div>
+            <div class="nb mono" style="font-size:10px;color:var(--ok)">✓ 3.1s</div>
+          </div>
+          <div class="dep-node" style="top:166px;left:320px">
+            <div class="nn">Slot Registry <span class="pilot"></span></div>
+            <div class="ns">REGISTRY · deps: DB · Data</div>
+            <div class="nb mono" style="font-size:10px;color:var(--ok)">✓ 1.8s</div>
+          </div>
+          <div class="dep-node run" style="top:56px;left:620px">
+            <div class="nn">Scoring <span class="pilot"></span></div>
+            <div class="ns">ENGINE · dep: Registry</div>
+            <div class="nb mono" style="font-size:10px;color:var(--warn)">⟳ arrancando…</div>
+          </div>
+          <div class="dep-node pend" style="top:166px;left:620px">
+            <div class="nn">Validator <span class="pilot"></span></div>
+            <div class="ns">A–G · dep: Scoring</div>
+            <div class="nb mono" style="font-size:10px;color:var(--muted)">pendiente</div>
+          </div>
+
+          <div class="scribble" style="bottom:10px;left:14px">— líneas sólidas = dependencia bloqueante · punteadas = secuencia preferida —</div>
+        </div>
+
+        <!-- validator grid -->
+        <div class="validator-wrap" style="margin-top:18px">
+          <div class="val-head">
+            <div>
+              <div class="val-title">validator · batería A–G</div>
+              <div class="cap">grid · 7 celdas lado a lado</div>
+            </div>
+            <div class="val-badge">trigger · startup</div>
+          </div>
+
+          <div class="val-grid">
+            <div class="vg-cell ok"><div class="l">D</div><div class="n">infraestructura</div><div class="stat"><i></i></div></div>
+            <div class="vg-cell ok"><div class="l">A</div><div class="n">fixtures</div><div class="stat"><i></i></div></div>
+            <div class="vg-cell ok"><div class="l">B</div><div class="n">canonicals</div><div class="stat"><i></i></div></div>
+            <div class="vg-cell run"><div class="l">C</div><div class="n">slot registry</div><div class="stat"><i></i></div></div>
+            <div class="vg-cell pend"><div class="l">E</div><div class="n">end-to-end</div><div class="stat"><i style="width:0"></i></div></div>
+            <div class="vg-cell pend"><div class="l">F</div><div class="n">parity</div><div class="stat"><i style="width:0"></i></div></div>
+            <div class="vg-cell pend"><div class="l">G</div><div class="n">conectividad ext.</div><div class="stat"><i style="width:0"></i></div></div>
+          </div>
+
+          <div class="val-foot">
+            <span class="msg">3/7 · 43% · esperando C (slot registry)…</span>
+            <button class="btn sm ghost">ver log</button>
+          </div>
+        </div>
+
+        <div class="ann" style="top:40px;left:-10px;width:190px;">
+          <span class="num">4</span>grafo: el orden se lee del flujo, no hay que leer números
+        </div>
+        <div class="ann" style="bottom:110px;right:-16px;width:180px;text-align:right;">
+          <span class="num">5</span>grid = estado a la vista · menos profundidad que checklist pero más rápido de escanear
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+</div>
+
+<script>
+  function bindGroup(group, attr, apply){
+    document.querySelectorAll(`[data-group="${group}"] .pill`).forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.querySelectorAll(`[data-group="${group}"] .pill`).forEach(b=>b.classList.remove('on'));
+        btn.classList.add('on');
+        const val = btn.getAttribute(`data-${attr}`);
+        apply(val);
+        try{ localStorage.setItem('scv5cfg_'+attr, val); }catch{}
+      });
+    });
+  }
+  bindGroup('var','var',(v)=>{
+    document.querySelectorAll('.variation').forEach(s=>s.classList.toggle('show', s.dataset.var===v));
+  });
+  bindGroup('state','state',(v)=>{ document.body.dataset.state = v; });
+  bindGroup('ann','ann',(v)=>{ document.body.dataset.ann = v; });
+
+  (function restore(){
+    [['var','var'],['state','state'],['ann','ann']].forEach(([g,a])=>{
+      const v = localStorage.getItem('scv5cfg_'+a);
+      if(!v) return;
+      const btn = document.querySelector(`[data-group="${g}"] .pill[data-${a}="${v}"]`);
+      if(btn) btn.click();
+    });
+  })();
+</script>
+
+</body>
+</html>
