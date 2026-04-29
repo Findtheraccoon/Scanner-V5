@@ -87,4 +87,14 @@ describe("ConfigurationPage", () => {
       expect(screen.getByLabelText(new RegExp(`sección ${i}:`, "i"))).toBeInTheDocument();
     }
   });
+
+  it("los 6 boxes arrancan colapsados por default", () => {
+    renderAt("/configuracion");
+    // Cada box tiene un aria-label que dice "Expandir" cuando está colapsado.
+    // Si fuera al revés (expandido), diría "Colapsar".
+    for (const i of [1, 2, 3, 4, 5, 6]) {
+      const dot = screen.getByLabelText(new RegExp(`expandir sección ${i}:`, "i"));
+      expect(dot).toBeInTheDocument();
+    }
+  });
 });
