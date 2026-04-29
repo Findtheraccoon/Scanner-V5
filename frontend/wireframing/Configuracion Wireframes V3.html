@@ -1,0 +1,1354 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8"/>
+<title>Scanner v5 · Configuración · Wireframes V3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=Kalam:wght@300;400;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ============================================================
+     SCANNER V5 · CONFIGURACIÓN · WIREFRAMES V3
+     Mid-fi paper-style. Iteración sobre el V2 con los siguientes
+     cambios pedidos por el usuario:
+       · 6 boxes en lugar de 5; Box 1 = observabilidad de motores,
+         Box 6 = backup S3 al final de la cadena.
+       · Box 2 reemplaza el viejo "identidad y persistencia local"
+         por sólo carga/guardado del archivo Config (sin bearer ·
+         sin master key · sin paths del sistema).
+       · Box 4 (slot registry) sin columna benchmark — el bench se
+         ve en el detalle del fixture en la biblioteca. Fixture
+         como dropdown.
+       · Box 5 (validator) sin flags de arranque.
+       · Persistencia DB + retención movido al Dashboard
+         (descartado de Configuración).
+       · Línea-guía vertical a la izquierda con dots por box.
+       · Cada box puede expand/collapse independiente del estado;
+         auto-colapso al quedar OK.
+     ============================================================ */
+
+  :root{
+    --ink:#1b1b1b;
+    --ink-2:#2a2a2a;
+    --muted:#6b6b6b;
+    --paper:#f4f1ea;
+    --paper-2:#ece8de;
+    --accent:#9cc80a;
+    --warn:#c8910a;
+    --err:#c22b2b;
+    --ok:#4a8a26;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:'Inter',system-ui,sans-serif;}
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.35;
+    background-image:
+      radial-gradient(#00000010 1px, transparent 1px),
+      radial-gradient(#00000008 1px, transparent 1px);
+    background-size: 22px 22px, 13px 13px;
+    background-position: 0 0, 11px 7px;
+    mix-blend-mode:multiply;
+  }
+  .wrap{position:relative;z-index:1;padding:28px 36px 120px;max-width:1680px;margin:0 auto;}
+
+  .top{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:18px;border-bottom:1.5px solid var(--ink);padding-bottom:14px;}
+  .title{font-family:'Kalam',cursive;font-weight:700;font-size:30px;line-height:1;}
+  .title small{font-family:'Inter',sans-serif;font-weight:400;font-size:13px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-left:10px;}
+  .meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);display:flex;gap:18px;}
+  .meta b{color:var(--ink);font-weight:500;}
+  .cap{font-family:'Caveat',cursive;font-size:16px;color:var(--muted);}
+
+  /* Tweaks panel ─ dev only para previsualizar estados */
+  .tweaks{
+    position:fixed;right:22px;top:22px;z-index:30;
+    background:var(--paper);border:1.5px solid var(--ink);
+    padding:12px 14px;min-width:260px;
+    box-shadow:3px 4px 0 var(--ink);
+    font-size:12px; transform:rotate(-.4deg);
+  }
+  .tweaks h4{margin:0 0 8px;font-family:'Kalam',cursive;font-size:16px;font-weight:700;}
+  .tweaks .row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+  .tweaks label{display:block;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;width:100%}
+  .pill{font-family:'Inter',sans-serif;font-size:11px;border:1.2px solid var(--ink);background:transparent;padding:4px 9px;cursor:pointer;color:var(--ink);font-weight:500;letter-spacing:.04em;}
+  .pill.on{background:var(--ink);color:var(--paper);}
+  .tweaks .hint{font-family:'Caveat',cursive;font-size:13px;color:var(--muted);margin-top:8px;}
+
+  /* Anotaciones manuscritas */
+  .ann{position:absolute;font-family:'Caveat',cursive;font-size:15px;color:var(--ink);line-height:1.15;pointer-events:none;z-index:5;max-width:200px;}
+  .ann .num{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border:1.5px solid var(--ink);border-radius:50%;font-family:'Kalam',cursive;font-size:12px;font-weight:700;margin-right:4px;background:var(--paper);transform:rotate(-3deg);}
+  body[data-ann="off"] .ann{display:none;}
+  .scribble{position:absolute;font-family:'Caveat',cursive;font-size:15px;color:var(--muted);}
+
+  /* Tabs globales del shell */
+  .tabs-global{
+    display:flex;gap:0;border-bottom:1.5px solid var(--ink);margin-bottom:0;
+    font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+  }
+  .tabs-global span{padding:8px 14px;color:var(--muted);}
+  .tabs-global .sel{color:var(--ink);border-bottom:3px solid var(--ink);font-weight:600;margin-bottom:-1.5px;}
+
+  /* ============================================================
+     LAYOUT — guía vertical izquierda + frame con boxes
+     ============================================================ */
+  .config-layout{
+    display:grid;grid-template-columns:80px 1fr;gap:0;position:relative;
+  }
+
+  /* Línea-guía vertical izquierda con dots */
+  .rail{
+    position:relative;padding:20px 0 20px 20px;
+  }
+  .rail-line{
+    position:absolute;left:38px;top:30px;bottom:30px;width:0;
+    border-left:2px dashed var(--ink);
+    opacity:.65;
+  }
+  .rail-dot{
+    position:relative;display:flex;align-items:center;gap:14px;
+    margin-bottom:0;height:0;
+  }
+  .rail-dot .bullet{
+    width:18px;height:18px;border:2px solid var(--ink);border-radius:50%;
+    background:var(--paper);position:absolute;left:30px;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Kalam',cursive;font-size:11px;font-weight:700;
+    transform:rotate(-2deg);
+  }
+  .rail-dot .bullet.ok{background:var(--accent);}
+  .rail-dot .bullet.warn{background:var(--warn);color:var(--paper);}
+  .rail-dot .bullet.err{background:var(--err);color:var(--paper);}
+  .rail-dot .bullet.pend{background:var(--paper);color:var(--muted);}
+  .rail-dot .label{
+    position:absolute;left:60px;font-family:'JetBrains Mono',monospace;
+    font-size:9px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--muted);white-space:nowrap;
+  }
+
+  /* Frame contenedor de la pestaña */
+  .frame{border:2px solid var(--ink);background:var(--paper);box-shadow:5px 6px 0 rgba(0,0,0,.08);}
+
+  /* Box (paso vertical) — colapsable */
+  .box{border-bottom:1.5px solid var(--ink);position:relative;}
+  .box:last-child{border-bottom:none;}
+  .box-head{
+    display:flex;align-items:center;gap:14px;padding:14px 22px;cursor:pointer;
+    user-select:none;background:var(--paper);
+  }
+  .box-head:hover{background:var(--paper-2);}
+  .box-num{
+    font-family:'Kalam',cursive;font-weight:700;font-size:22px;
+    width:36px;height:36px;border:2px solid var(--ink);border-radius:50%;
+    display:flex;align-items:center;justify-content:center;background:var(--paper);
+    transform:rotate(-2deg);flex-shrink:0;
+  }
+  .box-title{font-family:'Kalam',cursive;font-size:20px;font-weight:700;letter-spacing:.5px;}
+  .box-sub{font-family:'Caveat',cursive;font-size:14px;color:var(--muted);}
+  .box-meta{margin-left:auto;display:flex;gap:8px;align-items:center;}
+  .box-status{
+    font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+    border:1px solid var(--ink);padding:3px 8px;display:inline-flex;align-items:center;gap:6px;
+  }
+  .box-status .pilot{width:8px;height:8px;border:1px solid var(--ink);border-radius:50%;background:var(--ok);}
+  .box-status.warn .pilot{background:var(--warn);}
+  .box-status.err .pilot{background:var(--err);}
+  .box-status.pend .pilot{background:transparent;}
+  .box-chev{
+    font-family:'Kalam',cursive;font-size:20px;color:var(--muted);transition:transform .15s;
+  }
+  .box.open .box-chev{transform:rotate(180deg);}
+  .box-body{display:none;padding:8px 24px 24px;}
+  .box.open .box-body{display:block;}
+
+  /* Botones / inputs base */
+  .btn{border:1.2px solid var(--ink);background:transparent;padding:5px 12px;font-family:'Inter',sans-serif;font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;cursor:pointer;}
+  .btn.primary{background:var(--accent);}
+  .btn.danger{background:transparent;color:var(--err);border-color:var(--err);}
+  .btn.ghost{border-style:dashed;color:var(--muted);}
+  .btn.sm{padding:3px 8px;font-size:10px;}
+  .mono{font-family:'JetBrains Mono',monospace;}
+
+  /* Field (label + input visual) */
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);}
+  .field .inp{border:1px solid var(--ink);background:var(--paper);padding:5px 8px;font-family:'JetBrains Mono',monospace;font-size:12px;min-height:26px;}
+  .field .inp.masked{letter-spacing:.3em;}
+  .field .inp.sel-ish{background:var(--paper-2);}
+  .field .inp.disabled{background:var(--paper-2);color:var(--muted);}
+  .field .helper{font-family:'Caveat',cursive;font-size:13px;color:var(--muted);}
+
+  /* Toggle visual on/off */
+  .toggle{display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;cursor:default;}
+  .toggle .sw{width:28px;height:14px;border:1.2px solid var(--ink);position:relative;background:var(--paper);}
+  .toggle .sw i{position:absolute;top:1px;left:1px;width:10px;height:10px;background:var(--ink);transition:.2s;}
+  .toggle.on .sw{background:var(--accent);}
+  .toggle.on .sw i{left:15px;}
+
+  /* Pilots */
+  .pilot{width:10px;height:10px;border:1px solid var(--ink);border-radius:50%;background:var(--ok);display:inline-block;}
+  .pilot.warn{background:var(--warn);}
+  .pilot.err{background:var(--err);}
+  .pilot.off{background:transparent;}
+
+  /* Mini progress bar */
+  .pg{height:6px;border:1px solid var(--ink);position:relative;background:var(--paper);}
+  .pg i{display:block;height:100%;background:var(--ink);}
+  .pg.warn i{background:var(--warn);}
+  .pg.err i{background:var(--err);}
+  .pg.ok i{background:var(--accent);}
+
+  /* Visibilidad por estado del tweaks panel */
+  body[data-st-p2="empty"]    .v-p2-empty{display:flex;}
+  body[data-st-p2="3keys"]    .v-p2-3keys{display:flex;}
+  body[data-st-p2="5keys"]    .v-p2-5keys{display:flex;}
+  body[data-st-p2]:not([data-st-p2="empty"]) .v-p2-empty,
+  body[data-st-p2]:not([data-st-p2="3keys"]) .v-p2-3keys,
+  body[data-st-p2]:not([data-st-p2="5keys"]) .v-p2-5keys{display:none !important;}
+
+  body[data-st-p5="idle"]    .v-p5-idle{display:block;}
+  body[data-st-p5="running"] .v-p5-running{display:block;}
+  body[data-st-p5="failed"]  .v-p5-failed{display:block;}
+  body[data-st-p5]:not([data-st-p5="idle"])    .v-p5-idle,
+  body[data-st-p5]:not([data-st-p5="running"]) .v-p5-running,
+  body[data-st-p5]:not([data-st-p5="failed"])  .v-p5-failed{display:none !important;}
+
+  body[data-st-p6="ok"]      .v-p6-ok{display:block;}
+  body[data-st-p6="s3-fail"] .v-p6-s3-fail{display:block;}
+  body[data-st-p6]:not([data-st-p6="ok"])      .v-p6-ok,
+  body[data-st-p6]:not([data-st-p6="s3-fail"]) .v-p6-s3-fail{display:none !important;}
+</style>
+</head>
+<body data-ann="on" data-st-p2="3keys" data-st-p5="idle" data-st-p6="ok">
+
+<div class="wrap">
+
+  <div class="top">
+    <div>
+      <div class="title">scanner v5 — configuración <small>wireframe v3 · mid-fi · paper-style</small></div>
+      <div class="cap" style="margin-top:4px">6 boxes verticales · línea-guía a la izquierda · auto-colapso al quedar OK</div>
+    </div>
+    <div class="meta">
+      <span><b>scanner</b> v5.2.0</span>
+      <span><b>backend</b> http://127.0.0.1:8000</span>
+      <span><b>último healthcheck</b> hace 12s</span>
+    </div>
+  </div>
+
+  <!-- ───── TWEAKS PANEL ───── -->
+  <div class="tweaks">
+    <h4>tweaks · preview</h4>
+
+    <label>box 3 · proveedor de datos</label>
+    <div class="row" data-group="p2">
+      <button class="pill" data-p2="empty">0 keys</button>
+      <button class="pill on" data-p2="3keys">3 keys · probe</button>
+      <button class="pill" data-p2="5keys">5 keys ok</button>
+    </div>
+
+    <label>box 5 · validator</label>
+    <div class="row" data-group="p5">
+      <button class="pill on" data-p5="idle">idle · último OK</button>
+      <button class="pill" data-p5="running">corriendo · 3/7</button>
+      <button class="pill" data-p5="failed">warning · F parity</button>
+    </div>
+
+    <label>box 6 · backup S3</label>
+    <div class="row" data-group="p6">
+      <button class="pill on" data-p6="ok">conectado</button>
+      <button class="pill" data-p6="s3-fail">sin conexión</button>
+    </div>
+
+    <label>anotaciones</label>
+    <div class="row" data-group="ann">
+      <button class="pill on" data-ann="on">on</button>
+      <button class="pill" data-ann="off">off</button>
+    </div>
+
+    <div class="hint">tweaks sólo afectan la vista — no hay datos reales</div>
+  </div>
+
+  <!-- ───── TABS GLOBALES DEL SHELL ───── -->
+  <div class="tabs-global">
+    <span>cockpit</span>
+    <span>dashboard</span>
+    <span>memento</span>
+    <span class="sel">configuración</span>
+  </div>
+
+  <!-- ============================================================
+       LAYOUT: guía-rail vertical + frame con 6 boxes
+       ============================================================ -->
+  <div class="config-layout">
+
+    <!-- ───── RAIL ───── -->
+    <div class="rail">
+      <div class="rail-line"></div>
+      <div class="rail-dot" style="margin-top:38px"><span class="bullet ok">1</span><span class="label">motores</span></div>
+      <div class="rail-dot" style="margin-top:80px"><span class="bullet ok">2</span><span class="label">config</span></div>
+      <div class="rail-dot" style="margin-top:110px"><span class="bullet warn">3</span><span class="label">proveedor</span></div>
+      <div class="rail-dot" style="margin-top:120px"><span class="bullet warn">4</span><span class="label">slot registry</span></div>
+      <div class="rail-dot" style="margin-top:120px"><span class="bullet ok">5</span><span class="label">validator</span></div>
+      <div class="rail-dot" style="margin-top:120px"><span class="bullet pend">6</span><span class="label">backup S3</span></div>
+    </div>
+
+    <!-- ───── FRAME ───── -->
+    <div class="frame">
+
+      <!-- ============================================================
+           BOX 1 — Motores · observabilidad (sin arranque manual)
+           ============================================================ -->
+      <div class="box open" data-box="1">
+        <div class="box-head">
+          <div class="box-num">1</div>
+          <div>
+            <div class="box-title">motores del backend</div>
+            <div class="box-sub">diagrama de motores y módulos · piloto del healthcheck · arranque automático con el lifespan</div>
+          </div>
+          <div class="box-meta">
+            <span class="box-status"><span class="pilot"></span>5/5 operativos</span>
+            <span class="box-chev">▾</span>
+          </div>
+        </div>
+        <div class="box-body">
+
+          <style>
+            .eng-cards{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:12px;}
+            .eng-card{
+              border:1.5px solid var(--ink);background:var(--paper);padding:12px 14px;
+              display:flex;flex-direction:column;gap:8px;position:relative;min-height:170px;
+            }
+            .eng-card .hd{display:flex;align-items:center;justify-content:space-between;}
+            .eng-card .nm{font-family:'Kalam',cursive;font-size:17px;font-weight:700;}
+            .eng-card .role{
+              font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.12em;
+              text-transform:uppercase;color:var(--muted);
+            }
+            .eng-card .deps{
+              border-top:1px dashed var(--ink);padding-top:8px;margin-top:auto;
+              font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);
+            }
+            .eng-card .deps b{color:var(--ink);font-weight:500;}
+            .eng-card .ms{
+              font-family:'JetBrains Mono',monospace;font-size:10.5px;
+              line-height:1.5;color:var(--ink);
+            }
+            .eng-card.warn{border-color:var(--warn);}
+            .eng-card.warn .pilot{background:var(--warn);}
+            .eng-card.err{border-color:var(--err);}
+            .eng-card.err .pilot{background:var(--err);}
+            .eng-flow{
+              border:1.2px dashed var(--ink);padding:10px 14px;margin-top:6px;
+              font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--muted);
+              display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+            }
+            .eng-flow b{color:var(--ink);font-weight:500;}
+            .eng-flow .arr{color:var(--muted);}
+          </style>
+
+          <!-- 5 tarjetas alineadas con el orden de dependencias -->
+          <div class="eng-cards">
+
+            <div class="eng-card">
+              <div class="hd"><div class="nm">database</div><span class="pilot"></span></div>
+              <div class="role">engine · persistencia</div>
+              <div class="ms">SQLite op + archive<br>último heartbeat hace 8s<br>342 MB op · 1.2 GB archive</div>
+              <div class="deps">deps · <b>—</b></div>
+            </div>
+
+            <div class="eng-card">
+              <div class="hd"><div class="nm">data engine</div><span class="pilot"></span></div>
+              <div class="role">engine · provider + fetch</div>
+              <div class="ms">KeyPool 5 keys · 3 ok<br>último ciclo hace 2m<br>cache hit 87%</div>
+              <div class="deps">deps · <b>database</b></div>
+            </div>
+
+            <div class="eng-card">
+              <div class="hd"><div class="nm">slot registry</div><span class="pilot"></span></div>
+              <div class="role">module · runtime registry</div>
+              <div class="ms">5 slots activos · 1 vacío<br>1 warming up<br>slot_registry.json hot-reload</div>
+              <div class="deps">deps · <b>database</b> · <b>data engine</b></div>
+            </div>
+
+            <div class="eng-card">
+              <div class="hd"><div class="nm">scoring</div><span class="pilot"></span></div>
+              <div class="role">engine · análisis</div>
+              <div class="ms">v5.2.0 · parity 245/245<br>healthcheck cada 120s<br>último OK</div>
+              <div class="deps">deps · <b>slot registry</b></div>
+            </div>
+
+            <div class="eng-card">
+              <div class="hd"><div class="nm">validator</div><span class="pilot"></span></div>
+              <div class="role">module · diagnóstico A–G</div>
+              <div class="ms">último run · hace 8m<br>7/7 pass · 42s<br>parity check 245/245</div>
+              <div class="deps">deps · <b>scoring</b></div>
+            </div>
+
+          </div>
+
+          <div class="eng-flow">
+            <b>flujo de arranque automático (lifespan FastAPI):</b>
+            <span>database</span><span class="arr">→</span>
+            <span>data engine</span><span class="arr">→</span>
+            <span>slot registry</span><span class="arr">→</span>
+            <span>scoring</span><span class="arr">→</span>
+            <span>validator</span>
+          </div>
+
+          <div class="cap" style="margin-top:8px">
+            arranque y orden lo decide el backend al iniciar — esta vista es <b style="color:var(--ink)">sólo observabilidad</b>.
+            si un motor arranca en error, el card lo refleja y el rail-dot del box se pone rojo (no hay acción manual desde acá).
+          </div>
+
+          <div class="ann" style="top:14px;right:-14px;width:200px;text-align:right">
+            <span class="num">1</span>el flujo se lee de izquierda a derecha · matchea el orden interno del lifespan
+          </div>
+          <div class="ann" style="bottom:14px;left:-14px;width:200px">
+            <span class="num">2</span>cards leen <span class="mono">/engine/health</span> + WS <span class="mono">engine.status</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           BOX 2 — Cargar / guardar Config del usuario
+           ============================================================ -->
+      <div class="box open" data-box="2">
+        <div class="box-head">
+          <div class="box-num">2</div>
+          <div>
+            <div class="box-title">archivo de configuración</div>
+            <div class="box-sub">cargar · guardar · descargar · contiene TD keys + fixtures + tickers + preferencias</div>
+          </div>
+          <div class="box-meta">
+            <span class="box-status"><span class="pilot"></span>cargado · 2 cambios sin guardar</span>
+            <span class="box-chev">▾</span>
+          </div>
+        </div>
+        <div class="box-body">
+
+          <style>
+            .cfg-wrap{display:grid;grid-template-columns:1.4fr 1fr;gap:18px;}
+            .cfg-card{
+              border:1.5px solid var(--ink);background:var(--paper);padding:14px 16px;
+            }
+            .cfg-card .h{font-family:'Kalam',cursive;font-size:18px;font-weight:700;margin:0 0 4px;}
+            .cfg-card .s{font-family:'Caveat',cursive;font-size:14px;color:var(--muted);margin-bottom:10px;}
+            .cfg-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+            .cfg-state{
+              border:1px dashed var(--ink);padding:10px 12px;background:var(--paper-2);
+              font-family:'JetBrains Mono',monospace;font-size:11px;line-height:1.5;
+              display:flex;flex-direction:column;gap:4px;
+            }
+            .cfg-state b{font-weight:600;}
+            .cfg-state .row{display:flex;justify-content:space-between;}
+            .cfg-state .ok{color:var(--ok);}
+            .cfg-state .pend{color:var(--muted);}
+            .cfg-state .warn{color:var(--warn);}
+            .cfg-pill{
+              display:inline-block;font-family:'JetBrains Mono',monospace;font-size:9px;
+              letter-spacing:.1em;text-transform:uppercase;
+              border:1px solid var(--ink);padding:1px 5px;background:var(--paper);
+            }
+            .cfg-pill.dirty{background:var(--err);color:var(--paper);border-color:var(--err);}
+            .dropzone{
+              border:1.5px dashed var(--ink);padding:14px;text-align:center;background:var(--paper);
+              font-family:'Caveat',cursive;font-size:16px;color:var(--muted);
+              display:flex;flex-direction:column;gap:6px;align-items:center;
+            }
+            .dropzone .types{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.1em;}
+          </style>
+
+          <div class="cfg-wrap">
+
+            <!-- Carga / guardado -->
+            <div class="cfg-card">
+              <div class="h">archivo activo</div>
+              <div class="s">en runtime los secretos viven en memoria · al cerrar la app no persisten</div>
+
+              <div style="display:flex;align-items:center;gap:10px;margin:8px 0">
+                <span class="mono" style="font-size:13px;font-weight:600">qqq_spy_base_v3.json</span>
+                <span class="cfg-pill dirty">2 cambios</span>
+              </div>
+
+              <div class="dropzone" style="margin-top:8px">
+                <div>arrastrá un <span class="mono">.json</span> de configuración acá</div>
+                <div class="types">o usá los botones de abajo</div>
+              </div>
+
+              <div class="cfg-actions">
+                <button class="btn primary">guardar</button>
+                <button class="btn">descargar</button>
+                <button class="btn">cargar otro…</button>
+                <button class="btn ghost danger">descartar cambios</button>
+              </div>
+
+              <div class="helper" style="margin-top:8px;font-family:'Caveat',cursive;font-size:14px;color:var(--muted)">
+                "guardar" sobreescribe el archivo activo · "descargar" exporta el estado actual a un nuevo .json
+              </div>
+            </div>
+
+            <!-- Resumen del contenido del Config -->
+            <div class="cfg-card">
+              <div class="h">contenido del archivo</div>
+              <div class="s">qué entra al guardar · qué sale al cargar</div>
+
+              <div class="cfg-state">
+                <div class="row"><span><b>twelvedata keys</b></span><span>3 / 5 keys</span></div>
+                <div class="row"><span><b>tickers asignados</b></span><span>SPY · QQQ · IWM · AAPL · NVDA</span></div>
+                <div class="row"><span><b>fixtures por slot</b></span><span>5 fixtures</span></div>
+                <div class="row"><span><b>preferencias</b></span><span>ui · scanner · dashboard</span></div>
+                <div class="row"><span><b>backup S3</b></span><span class="ok">configurado</span></div>
+                <div class="row" style="border-top:1px dashed var(--ink);padding-top:6px;margin-top:6px"><span class="warn">no se persiste</span><span class="warn">bearer token (vive sólo en localStorage)</span></div>
+              </div>
+
+              <div class="helper" style="margin-top:8px;font-family:'Caveat',cursive;font-size:14px;color:var(--muted)">
+                el backend lee el archivo al iniciar si lo apuntás con <span class="mono">--config &lt;path&gt;</span> · sin él el backend arranca con defaults
+              </div>
+            </div>
+
+          </div>
+
+          <div class="ann" style="top:14px;right:-14px;width:200px;text-align:right">
+            <span class="num">3</span>sin encriptación en v1 · los secretos del archivo viajan en plano · responsabilidad del usuario protegerlo
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           BOX 3 — Proveedor de datos (TwelveData)
+           ============================================================ -->
+      <div class="box open" data-box="3">
+        <div class="box-head">
+          <div class="box-num">3</div>
+          <div>
+            <div class="box-title">proveedor de datos · twelvedata</div>
+            <div class="box-sub">5 keys round-robin · KeyPool · probe individual + agregado · estado en vivo via WS</div>
+          </div>
+          <div class="box-meta">
+            <span class="box-status warn v-p2-3keys"><span class="pilot"></span>3/5 · probe en curso</span>
+            <span class="box-status v-p2-5keys" style="display:none"><span class="pilot"></span>5/5 ok</span>
+            <span class="box-status err v-p2-empty" style="display:none"><span class="pilot"></span>0 keys</span>
+            <span class="box-chev">▾</span>
+          </div>
+        </div>
+        <div class="box-body">
+
+          <style>
+            .keys-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;}
+            .key-card{border:1.5px solid var(--ink);padding:10px 12px;background:var(--paper);display:flex;flex-direction:column;gap:8px;position:relative;}
+            .key-card.empty{border-style:dashed;opacity:.55;background:transparent;align-items:center;justify-content:center;min-height:200px;cursor:pointer;}
+            .key-card .head{display:flex;align-items:center;justify-content:space-between;gap:6px;}
+            .key-card .alias{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;font-weight:600;}
+            .key-card .rmv{font-family:'Caveat',cursive;font-size:14px;color:var(--muted);cursor:pointer;}
+            .key-card .live{
+              border-top:1px dashed var(--ink);padding-top:8px;margin-top:4px;
+              display:flex;flex-direction:column;gap:4px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);
+            }
+            .key-card .live .row{display:flex;justify-content:space-between;align-items:center;gap:6px;}
+            .key-card .badge{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--ink);padding:2px 6px;display:inline-flex;align-items:center;gap:4px;}
+            .key-card .badge.ok{background:var(--accent);}
+            .key-card .badge.run{background:var(--paper-2);}
+            .key-card .badge.fail{background:var(--err);color:var(--paper);}
+            .step-toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+            .step-toolbar .left{font-family:'Caveat',cursive;font-size:14px;color:var(--muted);}
+            .step-toolbar .right{display:flex;gap:6px;}
+          </style>
+
+          <div class="step-toolbar">
+            <span class="left">"probar todas" usa <span class="mono">/validator/connectivity</span> · check G del Validator</span>
+            <div class="right">
+              <button class="btn">probar todas</button>
+              <button class="btn primary">guardar</button>
+            </div>
+          </div>
+
+          <!-- estado: 3 keys con probe en curso -->
+          <div class="keys-grid v-p2-3keys">
+            <!-- KEY 1 OK -->
+            <div class="key-card">
+              <div class="head">
+                <div class="alias">key 1</div>
+                <div style="display:flex;gap:6px;align-items:center">
+                  <span class="badge ok">ok</span>
+                  <span class="rmv" title="eliminar">×</span>
+                </div>
+              </div>
+              <div class="field"><label>secret</label><div class="inp masked">••••••••••••••••</div></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                <div class="field"><label>cred/min</label><div class="inp">8</div></div>
+                <div class="field"><label>cred/día</label><div class="inp">800</div></div>
+              </div>
+              <button class="btn sm">probar</button>
+              <div class="live">
+                <div class="row"><span>uso minuto</span><span>4/8</span></div>
+                <div class="pg ok"><i style="width:50%"></i></div>
+                <div class="row"><span>uso diario</span><span>312/800</span></div>
+                <div class="pg ok"><i style="width:39%"></i></div>
+                <div class="row"><span>último call</span><span>hace 3s</span></div>
+              </div>
+            </div>
+
+            <!-- KEY 2 RUN -->
+            <div class="key-card">
+              <div class="head">
+                <div class="alias">key 2</div>
+                <div style="display:flex;gap:6px;align-items:center">
+                  <span class="badge run">⟳ probando</span>
+                  <span class="rmv">×</span>
+                </div>
+              </div>
+              <div class="field"><label>secret</label><div class="inp masked">••••••••••••••••</div></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                <div class="field"><label>cred/min</label><div class="inp">8</div></div>
+                <div class="field"><label>cred/día</label><div class="inp">800</div></div>
+              </div>
+              <button class="btn sm" disabled>probando…</button>
+              <div class="live"><div class="row"><span>esperando probe…</span></div></div>
+            </div>
+
+            <!-- KEY 3 FAIL -->
+            <div class="key-card">
+              <div class="head">
+                <div class="alias">key 3</div>
+                <div style="display:flex;gap:6px;align-items:center">
+                  <span class="badge fail">fail · 401</span>
+                  <span class="rmv">×</span>
+                </div>
+              </div>
+              <div class="field"><label>secret</label><div class="inp masked">••••••••••••••••</div></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+                <div class="field"><label>cred/min</label><div class="inp">8</div></div>
+                <div class="field"><label>cred/día</label><div class="inp">800</div></div>
+              </div>
+              <button class="btn sm">reintentar</button>
+              <div class="live">
+                <div class="row" style="color:var(--err)"><span>error</span><span>invalid_api_key</span></div>
+              </div>
+            </div>
+
+            <!-- SLOT 4 vacío -->
+            <div class="key-card empty">
+              <div class="mono" style="font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)">slot 4</div>
+              <div class="cap">+ agregar key</div>
+            </div>
+
+            <!-- SLOT 5 vacío -->
+            <div class="key-card empty">
+              <div class="mono" style="font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted)">slot 5</div>
+              <div class="cap">+ agregar key</div>
+            </div>
+          </div>
+
+          <!-- estado: 5 keys ok -->
+          <div class="keys-grid v-p2-5keys" style="display:none">
+            <div class="key-card"><div class="head"><div class="alias">key 1</div><span class="badge ok">ok</span></div><div class="field"><label>secret</label><div class="inp masked">••••••••••••••••</div></div><div class="live"><div class="row"><span>uso día</span><span>312/800</span></div><div class="pg ok"><i style="width:39%"></i></div></div></div>
+            <div class="key-card"><div class="head"><div class="alias">key 2</div><span class="badge ok">ok</span></div><div class="field"><label>secret</label><div class="inp masked">••••••••••••••••</div></div><div class="live"><div class="row"><span>uso día</span><span>287/800</span></div><div class="pg ok"><i style="width:36%"></i></div></div></div>
+            <div class="key-card"><div class="head"><div class="alias">key 3</div><span class="badge ok">ok</span></div><div class="field"><label>secret</label><div class="inp masked">••••••••••••••••</div></div><div class="live"><div class="row"><span>uso día</span><span>198/800</span></div><div class="pg ok"><i style="width:25%"></i></div></div></div>
+            <div class="key-card"><div class="head"><div class="alias">key 4</div><span class="badge ok">ok</span></div><div class="field"><label>secret</label><div class="inp masked">••••••••••••••••</div></div><div class="live"><div class="row"><span>uso día</span><span>256/800</span></div><div class="pg ok"><i style="width:32%"></i></div></div></div>
+            <div class="key-card"><div class="head"><div class="alias">key 5</div><span class="badge ok">ok</span></div><div class="field"><label>secret</label><div class="inp masked">••••••••••••••••</div></div><div class="live"><div class="row"><span>uso día</span><span>173/800</span></div><div class="pg ok"><i style="width:22%"></i></div></div></div>
+          </div>
+
+          <!-- estado: 0 keys -->
+          <div class="keys-grid v-p2-empty" style="display:none">
+            <div class="key-card empty" style="grid-column:span 5;min-height:120px"><div class="cap">+ agregar tu primera key — sin keys el data engine no arranca</div></div>
+          </div>
+
+          <div class="ann" style="top:10px;right:-14px;width:200px;text-align:right">
+            <span class="num">4</span>uso minuto/día llega por WS <span class="mono">api_usage.tick</span> · refresca cada cierre 15M
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           BOX 4 — Slot Registry + fixtures
+           (sin columna benchmark · fixture como dropdown)
+           ============================================================ -->
+      <div class="box open" data-box="4">
+        <div class="box-head">
+          <div class="box-num">4</div>
+          <div>
+            <div class="box-title">slot registry + fixtures</div>
+            <div class="box-sub">6 slots fijos · enable/disable dispara warmup + revalidación A/B/C · benchmark lo define el fixture</div>
+          </div>
+          <div class="box-meta">
+            <span class="box-status warn"><span class="pilot"></span>5 activos · 1 degraded</span>
+            <span class="box-chev">▾</span>
+          </div>
+        </div>
+        <div class="box-body">
+
+          <style>
+            .slots-table{width:100%;border-collapse:collapse;font-family:'JetBrains Mono',monospace;font-size:11px;}
+            .slots-table th{font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);font-weight:500;text-align:left;padding:6px 8px;border-bottom:1.5px solid var(--ink);background:var(--paper-2);}
+            .slots-table td{padding:7px 8px;border-bottom:1px dashed var(--ink);vertical-align:middle;}
+            .slots-table tr:last-child td{border-bottom:none;}
+            .slots-table .col-id{width:36px;font-family:'Kalam',cursive;font-size:16px;font-weight:700;color:var(--muted);text-align:center;}
+            .slots-table .col-tk input{
+              border:1px solid var(--ink);background:var(--paper);padding:3px 6px;font-family:'JetBrains Mono',monospace;font-size:11px;width:100%;
+            }
+            .slots-table .col-tk{width:90px;}
+            .slots-table .col-fix{width:280px;position:relative;}
+            .slots-table .col-en{width:80px;}
+            .slots-table .col-st{width:160px;}
+            .slots-table .col-act{width:140px;text-align:right;}
+
+            /* Dropdown del fixture */
+            .fix-select{
+              border:1px solid var(--ink);background:var(--paper);padding:4px 28px 4px 8px;
+              font-family:'JetBrains Mono',monospace;font-size:11px;width:100%;
+              display:flex;align-items:center;gap:6px;cursor:pointer;position:relative;
+              user-select:none;
+            }
+            .fix-select::after{
+              content:'▾';position:absolute;right:8px;top:50%;transform:translateY(-50%);
+              color:var(--muted);font-size:10px;
+            }
+            .fix-select .name{font-weight:600;}
+            .fix-select .ver{font-size:9.5px;color:var(--muted);margin-left:auto;padding-right:4px;}
+            .fix-select.empty{color:var(--muted);font-style:italic;}
+            .fix-dropdown{
+              position:absolute;top:calc(100% + 2px);left:0;right:0;z-index:10;
+              border:1.5px solid var(--ink);background:var(--paper);box-shadow:3px 4px 0 rgba(0,0,0,.15);
+              max-height:220px;overflow-y:auto;
+            }
+            .fix-dropdown .opt{
+              padding:6px 10px;border-bottom:1px dashed var(--ink);cursor:pointer;
+              display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;
+              font-family:'JetBrains Mono',monospace;font-size:11px;
+            }
+            .fix-dropdown .opt:last-child{border-bottom:none;}
+            .fix-dropdown .opt:hover{background:var(--paper-2);}
+            .fix-dropdown .opt.selected{background:var(--paper-2);}
+            .fix-dropdown .opt .nm{font-weight:600;}
+            .fix-dropdown .opt .ver{font-size:9px;color:var(--muted);}
+            .fix-dropdown .opt .bench{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
+            .fix-dropdown .opt .bad{color:var(--err);}
+
+            .runtime-status{display:inline-flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.05em;}
+            .runtime-status.warn{color:var(--warn);}
+            .runtime-status.err{color:var(--err);}
+            .runtime-status.muted{color:var(--muted);}
+            .row-warming .pilot{background:var(--warn);}
+            .row-degraded .pilot{background:var(--warn);}
+            .row-disabled{opacity:.55;}
+
+            .lib-wrap{margin-top:18px;border:1.5px solid var(--ink);background:var(--paper);}
+            .lib-head{padding:8px 12px;background:var(--paper-2);border-bottom:1.5px solid var(--ink);display:flex;align-items:center;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);}
+            .lib-row{display:grid;grid-template-columns:200px 70px 110px 110px 1fr 100px;gap:10px;padding:8px 12px;border-bottom:1px dashed var(--ink);align-items:center;font-family:'JetBrains Mono',monospace;font-size:11px;}
+            .lib-row:last-child{border-bottom:none;}
+            .lib-row .nm{font-weight:600;}
+            .lib-row .bench-lab{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-right:4px;}
+            .lib-row .hash{font-size:10px;}
+            .lib-row .hash.ok{color:var(--ok);}
+            .lib-row .hash.bad{color:var(--err);}
+            .lib-row .used{color:var(--muted);font-size:10px;}
+            .lib-row .actions-cell{display:flex;gap:6px;justify-content:flex-end;}
+
+            .upload-wrap{margin-top:14px;border:1.5px solid var(--ink);background:var(--paper-2);padding:14px 16px;position:relative;}
+            .upload-wrap .sticker{
+              position:absolute;top:-12px;left:14px;background:var(--paper);border:1.2px solid var(--ink);padding:2px 8px;
+              font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;
+            }
+            .upload-body{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:6px;}
+            .dropzone{border:1.5px dashed var(--ink);padding:22px;text-align:center;background:var(--paper);font-family:'Caveat',cursive;font-size:18px;color:var(--muted);display:flex;flex-direction:column;gap:6px;align-items:center;}
+            .dropzone .types{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.1em;}
+            .preview-wrap{font-family:'JetBrains Mono',monospace;font-size:11px;border:1px solid var(--ink);background:var(--paper);padding:10px;}
+            .preview-wrap .h{font-size:9px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);}
+            .preview-wrap .ok{color:var(--ok);}
+            .preview-wrap .bad{color:var(--err);}
+            .preview-wrap .actions{margin-top:10px;display:flex;gap:8px;}
+          </style>
+
+          <!-- 4.1 Tabla de slots (SIN columna benchmark) -->
+          <table class="slots-table">
+            <thead>
+              <tr>
+                <th class="col-id">#</th>
+                <th class="col-tk">ticker</th>
+                <th class="col-fix">fixture</th>
+                <th class="col-en">enabled</th>
+                <th class="col-st">estado runtime</th>
+                <th class="col-act"></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="col-id">01</td>
+                <td class="col-tk"><input value="SPY"></td>
+                <td class="col-fix">
+                  <div class="fix-select">
+                    <span class="name">spy_v5_2_0</span>
+                    <span class="ver">v5.2.0</span>
+                  </div>
+                </td>
+                <td class="col-en"><div class="toggle on"><span class="sw"><i></i></span><span>on</span></div></td>
+                <td class="col-st"><span class="runtime-status"><span class="pilot"></span>active</span></td>
+                <td class="col-act"><button class="btn sm ghost">deshabilitar</button></td>
+              </tr>
+              <tr>
+                <td class="col-id">02</td>
+                <td class="col-tk"><input value="QQQ"></td>
+                <td class="col-fix">
+                  <div class="fix-select">
+                    <span class="name">qqq_v5_2_0</span>
+                    <span class="ver">v5.2.0</span>
+                  </div>
+                  <!-- DROPDOWN ABIERTO (preview) -->
+                  <div class="fix-dropdown">
+                    <div class="opt"><span class="nm">qqq_v5_2_0</span><span class="bench">bench: SPY</span><span class="ver">v5.2.0 ✓</span></div>
+                    <div class="opt selected"><span class="nm">qqq_v5_2_0</span><span class="bench">bench: SPY</span><span class="ver">v5.2.0 · activo</span></div>
+                    <div class="opt"><span class="nm">qqq_v5_1_3</span><span class="bench">bench: SPY</span><span class="ver">v5.1.3 ✓</span></div>
+                    <div class="opt"><span class="nm bad">qqq_test_v0</span><span class="bench">bench: SPY</span><span class="ver bad">⚠ canonical mismatch</span></div>
+                  </div>
+                </td>
+                <td class="col-en"><div class="toggle on"><span class="sw"><i></i></span><span>on</span></div></td>
+                <td class="col-st"><span class="runtime-status"><span class="pilot"></span>active</span></td>
+                <td class="col-act"><button class="btn sm ghost">deshabilitar</button></td>
+              </tr>
+              <tr class="row-warming">
+                <td class="col-id">03</td>
+                <td class="col-tk"><input value="IWM"></td>
+                <td class="col-fix">
+                  <div class="fix-select">
+                    <span class="name">iwm_v5_1_1</span>
+                    <span class="ver">v5.1.1</span>
+                  </div>
+                </td>
+                <td class="col-en"><div class="toggle on"><span class="sw"><i></i></span><span>on</span></div></td>
+                <td class="col-st"><span class="runtime-status warn"><span class="pilot warn"></span>warming up · 62%</span></td>
+                <td class="col-act"><button class="btn sm ghost" disabled>warmup en curso</button></td>
+              </tr>
+              <tr>
+                <td class="col-id">04</td>
+                <td class="col-tk"><input value="AAPL"></td>
+                <td class="col-fix">
+                  <div class="fix-select">
+                    <span class="name">aapl_v5_0_3</span>
+                    <span class="ver">v5.0.3</span>
+                  </div>
+                </td>
+                <td class="col-en"><div class="toggle on"><span class="sw"><i></i></span><span>on</span></div></td>
+                <td class="col-st"><span class="runtime-status"><span class="pilot"></span>active</span></td>
+                <td class="col-act"><button class="btn sm ghost">deshabilitar</button></td>
+              </tr>
+              <tr class="row-degraded">
+                <td class="col-id">05</td>
+                <td class="col-tk"><input value="NVDA"></td>
+                <td class="col-fix">
+                  <div class="fix-select">
+                    <span class="name">nvda_v5_2_0</span>
+                    <span class="ver">v5.2.0</span>
+                  </div>
+                </td>
+                <td class="col-en"><div class="toggle on"><span class="sw"><i></i></span><span>on</span></div></td>
+                <td class="col-st"><span class="runtime-status err"><span class="pilot err"></span>ENG-060 · 3 fallos</span></td>
+                <td class="col-act"><button class="btn sm">reintentar</button></td>
+              </tr>
+              <tr class="row-disabled">
+                <td class="col-id">06</td>
+                <td class="col-tk"><input value="" placeholder="—"></td>
+                <td class="col-fix">
+                  <div class="fix-select empty">
+                    <span class="name">— elegir fixture —</span>
+                  </div>
+                </td>
+                <td class="col-en"><div class="toggle"><span class="sw"><i></i></span><span>off</span></div></td>
+                <td class="col-st"><span class="runtime-status muted"><span class="pilot off"></span>vacío</span></td>
+                <td class="col-act"><button class="btn sm">habilitar</button></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- 4.2 Biblioteca de fixtures (con benchmark visible en detalle) -->
+          <div class="lib-wrap">
+            <div class="lib-head">
+              <span>biblioteca de fixtures · backend/fixtures/</span>
+              <span class="cap" style="font-size:13px">5 archivos · click para ver detalle</span>
+            </div>
+            <div class="lib-row">
+              <span class="nm">qqq_v5_2_0</span>
+              <span>v5.2.0</span>
+              <span><span class="bench-lab">bench</span>SPY</span>
+              <span>≥5.2.0</span>
+              <span class="hash ok">✓ hash ok</span>
+              <span class="used">slot 02</span>
+            </div>
+            <div class="lib-row">
+              <span class="nm">spy_v5_2_0</span>
+              <span>v5.2.0</span>
+              <span><span class="bench-lab">bench</span>QQQ</span>
+              <span>≥5.2.0</span>
+              <span class="hash ok">✓ hash ok</span>
+              <span class="used">slot 01</span>
+            </div>
+            <div class="lib-row">
+              <span class="nm">iwm_v5_1_1</span>
+              <span>v5.1.1</span>
+              <span><span class="bench-lab">bench</span>SPY</span>
+              <span>≥5.1.0</span>
+              <span class="hash ok">✓ hash ok</span>
+              <span class="used">slot 03</span>
+            </div>
+            <div class="lib-row">
+              <span class="nm">aapl_v5_0_3</span>
+              <span>v5.0.3</span>
+              <span><span class="bench-lab">bench</span>SPY</span>
+              <span>≥5.0.0</span>
+              <span class="hash bad">✕ mismatch</span>
+              <span class="used">slot 04</span>
+            </div>
+            <div class="lib-row">
+              <span class="nm">nvda_v5_2_0</span>
+              <span>v5.2.0</span>
+              <span><span class="bench-lab">bench</span>SPY</span>
+              <span>≥5.2.0</span>
+              <span class="hash ok">✓ hash ok</span>
+              <span class="used">slot 05</span>
+            </div>
+          </div>
+
+          <!-- 4.3 Upload de fixture -->
+          <div class="upload-wrap">
+            <div class="sticker">cargar fixture nuevo</div>
+            <div class="upload-body">
+              <div class="dropzone">
+                <div>arrastrá <span class="mono">.json</span> acá</div>
+                <div class="types">+ <span class="mono">.sha256</span> opcional · valida estructura + hash + engine_compat</div>
+                <button class="btn sm" style="margin-top:6px">o explorar…</button>
+              </div>
+              <div class="preview-wrap">
+                <div class="h">preview · validación</div>
+                <div style="margin-top:6px">
+                  <div><span class="ok">✓</span> schema Pydantic válido</div>
+                  <div><span class="ok">✓</span> ticker = TSLA · benchmark = SPY</div>
+                  <div><span class="ok">✓</span> engine_compat_range ≥5.2.0 (actual 5.2.0)</div>
+                  <div><span class="bad">✕</span> hash SHA-256 no provisto · se generará uno</div>
+                </div>
+                <div class="actions">
+                  <button class="btn primary sm">aplicar</button>
+                  <button class="btn ghost sm">descartar</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ann" style="top:14px;right:-14px;width:210px;text-align:right">
+            <span class="num">5</span>columna benchmark removida · el fixture lo lleva incrustado (lib lo muestra · tabla no)
+          </div>
+          <div class="ann" style="top:200px;right:-14px;width:200px;text-align:right">
+            <span class="num">6</span>dropdown lista sólo fixtures con hash ok · los mismatch quedan visibles en la lib pero no se eligen
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           BOX 5 — Validator + diagnóstico (sin flags de arranque)
+           ============================================================ -->
+      <div class="box open" data-box="5">
+        <div class="box-head">
+          <div class="box-num">5</div>
+          <div>
+            <div class="box-title">validator + diagnóstico</div>
+            <div class="box-sub">batería D/A/B/C/E/F/G · histórico de reportes · estado de motores read-only</div>
+          </div>
+          <div class="box-meta">
+            <span class="box-status v-p5-idle"><span class="pilot"></span>último · pass · 7/7</span>
+            <span class="box-status warn v-p5-running" style="display:none"><span class="pilot"></span>corriendo · 3/7</span>
+            <span class="box-status warn v-p5-failed" style="display:none"><span class="pilot"></span>warning · F parity</span>
+            <span class="box-chev">▾</span>
+          </div>
+        </div>
+        <div class="box-body">
+
+          <style>
+            .p5-grid{display:grid;grid-template-columns:2fr 1fr;gap:18px;}
+            .val-block{border:1.5px solid var(--ink);background:var(--paper);padding:14px 16px;}
+            .val-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+            .val-title{font-family:'Kalam',cursive;font-size:18px;font-weight:700;}
+            .val-bar{height:10px;border:1.2px solid var(--ink);background:var(--paper);position:relative;margin-bottom:14px;}
+            .val-bar i{display:block;height:100%;background:var(--ink);}
+            .val-bar .lbl{position:absolute;right:-2px;top:-18px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);}
+            .val-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;}
+            .vg-cell{border:1.5px solid var(--ink);padding:8px 6px;background:var(--paper);display:flex;flex-direction:column;gap:4px;min-height:90px;position:relative;}
+            .vg-cell .l{font-family:'Kalam',cursive;font-size:18px;font-weight:700;text-align:center;}
+            .vg-cell .n{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.06em;text-align:center;color:var(--muted);line-height:1.2;}
+            .vg-cell .stat{margin-top:auto;height:6px;border:1px solid var(--ink);background:var(--paper);position:relative;}
+            .vg-cell .stat i{display:block;height:100%;}
+            .vg-cell.ok .stat i{width:100%;background:var(--accent);}
+            .vg-cell.ok::after{content:"✓";position:absolute;top:5px;right:6px;font-family:'Kalam',cursive;font-weight:700;font-size:13px;color:var(--ok);}
+            .vg-cell.run .stat i{width:55%;background:var(--warn);}
+            .vg-cell.run::after{content:"⟳";position:absolute;top:5px;right:6px;font-family:'Kalam',cursive;font-weight:700;font-size:13px;color:var(--warn);}
+            .vg-cell.warn .stat i{width:100%;background:var(--warn);}
+            .vg-cell.warn::after{content:"⚠";position:absolute;top:5px;right:6px;font-size:12px;color:var(--warn);}
+            .vg-cell.fail .stat i{width:100%;background:var(--err);}
+            .vg-cell.fail::after{content:"✕";position:absolute;top:5px;right:6px;font-family:'Kalam',cursive;font-weight:700;font-size:13px;color:var(--err);}
+            .vg-cell.pend{opacity:.45;}
+            .val-msg{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1.5px dashed var(--ink);display:flex;justify-content:space-between;align-items:center;gap:8px;}
+
+            .reports{border:1.5px solid var(--ink);background:var(--paper);padding:0;}
+            .reports .rh-head{padding:8px 12px;background:var(--paper-2);border-bottom:1.5px solid var(--ink);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between;align-items:center;}
+            .rep-row{padding:8px 12px;border-bottom:1px dashed var(--ink);font-family:'JetBrains Mono',monospace;font-size:10.5px;display:grid;grid-template-columns:1fr auto;gap:6px;cursor:pointer;}
+            .rep-row:hover{background:var(--paper-2);}
+            .rep-row:last-child{border-bottom:none;}
+            .rep-meta{display:flex;gap:10px;align-items:center;color:var(--muted);}
+            .rep-meta .trig{font-size:9px;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--ink);padding:1px 5px;color:var(--ink);}
+            .rep-mini{display:flex;gap:2px;align-items:center;}
+            .rep-mini i{width:7px;height:7px;background:var(--ok);border:1px solid var(--ink);display:inline-block;}
+            .rep-mini i.warn{background:var(--warn);}
+            .rep-mini i.fail{background:var(--err);}
+            .rep-mini i.pend{background:transparent;}
+
+            .engines{display:grid;grid-template-columns:1fr;gap:10px;margin-top:10px;}
+            .engine-row{
+              border:1px solid var(--ink);background:var(--paper);padding:8px 10px;
+              display:flex;align-items:center;gap:10px;
+            }
+            .engine-row .nm{font-family:'Kalam',cursive;font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px;min-width:120px;}
+            .engine-row .ms{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--muted);line-height:1.4;flex:1;}
+          </style>
+
+          <div class="step-toolbar">
+            <span class="left">corre la batería on-demand · histórico persiste en DB · TXT en LOG/</span>
+            <div class="right">
+              <button class="btn ghost">solo conectividad</button>
+              <button class="btn primary">correr validator</button>
+            </div>
+          </div>
+
+          <div class="p5-grid">
+
+            <!-- 5.1 Grid del Validator + 5.2 Histórico -->
+            <div>
+              <div class="val-block">
+                <div class="val-head">
+                  <div>
+                    <div class="val-title">batería D/A/B/C/E/F/G</div>
+                    <div class="cap">grid 7 celdas · alimentado por WS <span class="mono">validator.progress</span></div>
+                  </div>
+                  <span class="box-status">trigger · manual</span>
+                </div>
+
+                <!-- IDLE -->
+                <div class="v-p5-idle" style="display:block">
+                  <div class="val-bar"><i style="width:100%"></i><span class="lbl">7/7 · pass · 42s</span></div>
+                  <div class="val-grid">
+                    <div class="vg-cell ok"><div class="l">D</div><div class="n">infra</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">A</div><div class="n">fixtures</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">B</div><div class="n">canonicals</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">C</div><div class="n">registry</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">E</div><div class="n">end-to-end</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">F</div><div class="n">parity</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">G</div><div class="n">conectividad</div><div class="stat"><i></i></div></div>
+                  </div>
+                  <div class="val-msg">
+                    <span>último run · hace 8m · 7/7 pass · parity 245/245</span>
+                    <button class="btn sm ghost">ver TXT</button>
+                  </div>
+                </div>
+
+                <!-- RUNNING -->
+                <div class="v-p5-running" style="display:none">
+                  <div class="val-bar"><i style="width:43%;background:var(--warn)"></i><span class="lbl">3/7 · 43% · running</span></div>
+                  <div class="val-grid">
+                    <div class="vg-cell ok"><div class="l">D</div><div class="n">infra</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">A</div><div class="n">fixtures</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">B</div><div class="n">canonicals</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell run"><div class="l">C</div><div class="n">registry</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell pend"><div class="l">E</div><div class="n">end-to-end</div><div class="stat"><i style="width:0"></i></div></div>
+                    <div class="vg-cell pend"><div class="l">F</div><div class="n">parity</div><div class="stat"><i style="width:0"></i></div></div>
+                    <div class="vg-cell pend"><div class="l">G</div><div class="n">conectividad</div><div class="stat"><i style="width:0"></i></div></div>
+                  </div>
+                  <div class="val-msg">
+                    <span>check C · validando slot_registry.json (3/6 slots)…</span>
+                    <button class="btn sm ghost" disabled>cancelar</button>
+                  </div>
+                </div>
+
+                <!-- FAILED -->
+                <div class="v-p5-failed" style="display:none">
+                  <div class="val-bar"><i style="width:100%;background:var(--warn)"></i><span class="lbl">7/7 · warning · 38s</span></div>
+                  <div class="val-grid">
+                    <div class="vg-cell ok"><div class="l">D</div><div class="n">infra</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">A</div><div class="n">fixtures</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">B</div><div class="n">canonicals</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">C</div><div class="n">registry</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">E</div><div class="n">end-to-end</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell warn"><div class="l">F</div><div class="n">parity</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">G</div><div class="n">conectividad</div><div class="stat"><i></i></div></div>
+                  </div>
+                  <div class="val-msg">
+                    <span style="color:var(--warn)">check F · parity 243/245 (99.18%) · ENG-050 warning · &lt; min_match_rate 99%</span>
+                    <button class="btn sm ghost">ver detalle</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 5.2 Histórico de reportes -->
+              <div class="reports" style="margin-top:14px">
+                <div class="rh-head">
+                  <span>histórico · /validator/reports</span>
+                  <div style="display:flex;gap:6px">
+                    <button class="btn sm ghost">filtros…</button>
+                    <button class="btn sm ghost">exportar</button>
+                  </div>
+                </div>
+                <div class="rep-row">
+                  <div>
+                    <span style="font-weight:600">2026-04-29 09:14 ET</span> · 42s
+                    <div class="rep-meta"><span class="trig">manual</span><span>7/7 pass · parity 245/245</span></div>
+                  </div>
+                  <div class="rep-mini"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                </div>
+                <div class="rep-row">
+                  <div>
+                    <span style="font-weight:600">2026-04-29 08:00 ET</span> · 38s
+                    <div class="rep-meta"><span class="trig">startup</span><span>7/7 pass · parity 245/245</span></div>
+                  </div>
+                  <div class="rep-mini"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                </div>
+                <div class="rep-row">
+                  <div>
+                    <span style="font-weight:600">2026-04-28 18:42 ET</span> · 12s
+                    <div class="rep-meta"><span class="trig">hot_reload</span><span>3/3 pass (A·B·C) · slot 03 IWM</span></div>
+                  </div>
+                  <div class="rep-mini"><i></i><i></i><i></i><i class="pend"></i><i class="pend"></i><i class="pend"></i><i class="pend"></i></div>
+                </div>
+                <div class="rep-row">
+                  <div>
+                    <span style="font-weight:600">2026-04-28 14:00 ET</span> · 5s
+                    <div class="rep-meta"><span class="trig">connectivity</span><span>1/1 pass (G) · 5 keys ok</span></div>
+                  </div>
+                  <div class="rep-mini"><i class="pend"></i><i class="pend"></i><i class="pend"></i><i class="pend"></i><i class="pend"></i><i class="pend"></i><i></i></div>
+                </div>
+                <div class="rep-row">
+                  <div>
+                    <span style="font-weight:600">2026-04-28 09:00 ET</span> · 41s
+                    <div class="rep-meta"><span class="trig">startup</span><span>7/7 warning · parity 243/245</span></div>
+                  </div>
+                  <div class="rep-mini"><i></i><i></i><i></i><i></i><i></i><i class="warn"></i><i></i></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Estado de los 3 motores (espejo del Box 1 pero compacto) -->
+            <div>
+              <div class="val-block">
+                <div class="val-head">
+                  <div class="val-title">estado de motores</div>
+                  <div class="cap" style="font-size:13px">resumen · detalle full en Dashboard</div>
+                </div>
+                <div class="engines">
+                  <div class="engine-row">
+                    <div class="nm">data engine <span class="pilot"></span></div>
+                    <div class="ms">heartbeat hace 8s · 5 keys / 3 ok</div>
+                  </div>
+                  <div class="engine-row">
+                    <div class="nm">scoring <span class="pilot"></span></div>
+                    <div class="ms">healthcheck OK · v5.2.0 · parity 245/245</div>
+                  </div>
+                  <div class="engine-row">
+                    <div class="nm">database <span class="pilot"></span></div>
+                    <div class="ms">342 MB op · 1.2 GB archive · última rot. hace 6h</div>
+                  </div>
+                </div>
+                <div style="margin-top:8px">
+                  <button class="btn sm ghost">ver último healthcheck (JSON)</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="ann" style="top:10px;right:-14px;width:200px;text-align:right">
+            <span class="num">7</span>el grid de 7 celdas se alimenta del WS · 2 events por test (start + end)
+          </div>
+          <div class="ann" style="bottom:80px;left:-14px;width:200px">
+            <span class="num">8</span>histórico con cursor pagination · click → modal con detalle full + descarga TXT
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           BOX 6 — Backup remoto S3 (último de la cadena)
+           ============================================================ -->
+      <div class="box" data-box="6">
+        <div class="box-head">
+          <div class="box-num">6</div>
+          <div>
+            <div class="box-title">backup remoto · S3-compatible</div>
+            <div class="box-sub">AWS · Backblaze B2 · Cloudflare R2 · MinIO · respaldo offsite del archivo Config + DB</div>
+          </div>
+          <div class="box-meta">
+            <span class="box-status v-p6-ok"><span class="pilot"></span>conectado · último hace 18h</span>
+            <span class="box-status warn v-p6-s3-fail" style="display:none"><span class="pilot"></span>sin conexión</span>
+            <span class="box-chev">▾</span>
+          </div>
+        </div>
+        <div class="box-body">
+
+          <style>
+            .s3-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+            .s3-card{border:1.5px solid var(--ink);background:var(--paper);padding:14px 16px;}
+            .s3-card .h{font-family:'Kalam',cursive;font-size:18px;font-weight:700;margin:0 0 4px;}
+            .s3-card .s{font-family:'Caveat',cursive;font-size:14px;color:var(--muted);margin-bottom:10px;}
+            .s3-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;}
+            .s3-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+            .s3-status{
+              border-top:1px dashed var(--ink);padding-top:10px;margin-top:10px;
+              font-family:'JetBrains Mono',monospace;font-size:11px;
+            }
+            .s3-status .ok{color:var(--ok);}
+            .s3-status .err{color:var(--err);}
+
+            .backups-list{border:1.5px solid var(--ink);background:var(--paper);}
+            .backups-head{padding:8px 12px;background:var(--paper-2);border-bottom:1.5px solid var(--ink);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);}
+            .backup-row{display:grid;grid-template-columns:1fr 80px 110px 100px;gap:10px;padding:8px 12px;border-bottom:1px dashed var(--ink);align-items:center;font-family:'JetBrains Mono',monospace;font-size:11px;}
+            .backup-row:last-child{border-bottom:none;}
+            .backup-row .key{font-weight:600;}
+            .backup-row .size{color:var(--muted);}
+            .backup-row .ts{color:var(--muted);}
+            .backup-row .actions-cell{display:flex;gap:6px;justify-content:flex-end;}
+          </style>
+
+          <div class="s3-grid">
+
+            <!-- 6.1 Configuración del bucket -->
+            <div class="s3-card">
+              <div class="h">configuración del bucket</div>
+              <div class="s">cualquier provider con endpoint URL · multi-region</div>
+
+              <div class="s3-fields">
+                <div class="field"><label>endpoint URL</label><div class="inp">https://s3.us-east-1.amazonaws.com</div></div>
+                <div class="field"><label>region</label><div class="inp">us-east-1</div></div>
+                <div class="field"><label>bucket</label><div class="inp">scanner-v5-backups</div></div>
+                <div class="field"><label>prefix</label><div class="inp">backups/</div></div>
+                <div class="field"><label>access key</label><div class="inp masked">••••••••••••••••</div></div>
+                <div class="field"><label>secret key</label><div class="inp masked">••••••••••••••••••••</div></div>
+              </div>
+
+              <div class="s3-actions">
+                <button class="btn sm">probar conexión</button>
+                <button class="btn sm primary">backup ahora</button>
+                <button class="btn sm">listar backups</button>
+                <button class="btn sm danger">restaurar…</button>
+              </div>
+
+              <div class="s3-status v-p6-ok" style="display:block">
+                <div><span class="ok">✓</span> conexión OK · último backup hace 18h · 234 MB</div>
+                <div class="cap" style="margin-top:4px">"restaurar" siempre crea sibling de la DB · nunca pisa la viva — doble confirmación obligatoria</div>
+              </div>
+              <div class="s3-status v-p6-s3-fail" style="display:none">
+                <div><span class="err">✕</span> probe falló · timeout @ endpoint_url</div>
+                <div class="cap" style="margin-top:4px">verificar endpoint + credenciales · backup local sigue funcionando · el sistema NO depende de S3</div>
+              </div>
+            </div>
+
+            <!-- 6.2 Listado de backups -->
+            <div class="s3-card">
+              <div class="h">backups disponibles</div>
+              <div class="s">orden descendente por fecha · click "restaurar" abre confirmación</div>
+
+              <div class="backups-list">
+                <div class="backups-head">key · size · last_modified</div>
+                <div class="backup-row">
+                  <span class="key">backups/scanner_2026-04-29.gz</span>
+                  <span class="size">234 MB</span>
+                  <span class="ts">hace 18h</span>
+                  <div class="actions-cell"><button class="btn sm danger">restaurar</button></div>
+                </div>
+                <div class="backup-row">
+                  <span class="key">backups/scanner_2026-04-28.gz</span>
+                  <span class="size">231 MB</span>
+                  <span class="ts">hace 1d</span>
+                  <div class="actions-cell"><button class="btn sm danger">restaurar</button></div>
+                </div>
+                <div class="backup-row">
+                  <span class="key">backups/scanner_2026-04-27.gz</span>
+                  <span class="size">228 MB</span>
+                  <span class="ts">hace 2d</span>
+                  <div class="actions-cell"><button class="btn sm danger">restaurar</button></div>
+                </div>
+                <div class="backup-row">
+                  <span class="key">backups/scanner_2026-04-26.gz</span>
+                  <span class="size">225 MB</span>
+                  <span class="ts">hace 3d</span>
+                  <div class="actions-cell"><button class="btn sm danger">restaurar</button></div>
+                </div>
+                <div class="backup-row">
+                  <span class="key">backups/scanner_2026-04-22.gz</span>
+                  <span class="size">218 MB</span>
+                  <span class="ts">hace 7d</span>
+                  <div class="actions-cell"><button class="btn sm danger">restaurar</button></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="ann" style="top:14px;right:-14px;width:200px;text-align:right">
+            <span class="num">9</span>credenciales S3 hoy van por body al backend — encriptación con master key cuando se cierre la deuda técnica
+          </div>
+          <div class="ann" style="bottom:14px;left:-14px;width:200px">
+            <span class="num">10</span>backup automático periódico se decide en Dashboard (no acá) · acá es solo manual
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <!-- /frame -->
+  </div>
+  <!-- /config-layout -->
+
+  <!-- pie -->
+  <div class="cap" style="margin-top:18px;font-size:14px">
+    fuente funcional: <span class="mono">frontend/wireframing/Configuracion specs.md</span> · cualquier divergencia con el spec se resuelve a favor del spec
+    <br>
+    iteración v3 sobre v2 — cambios pedidos por el usuario: 6 boxes · box 1 observabilidad · box 2 sólo carga/guardado · box 4 sin benchmark · box 5 sin flags · persistencia DB → Dashboard · línea-guía izquierda
+  </div>
+
+</div>
+<!-- /wrap -->
+
+<script>
+  /* ============================================================
+     SCRIPT — tweaks panel + acordeones
+     ============================================================ */
+
+  // Tweaks: toggle de pills por grupo, persistido en localStorage
+  function bindGroup(group, attr, apply){
+    document.querySelectorAll(`[data-group="${group}"] .pill`).forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.querySelectorAll(`[data-group="${group}"] .pill`).forEach(b=>b.classList.remove('on'));
+        btn.classList.add('on');
+        const val = btn.getAttribute(`data-${attr}`);
+        apply(val);
+        try{ localStorage.setItem('scv5cfg3_'+attr, val); }catch{}
+      });
+    });
+  }
+  bindGroup('p2','p2',(v)=>{ document.body.dataset.stP2 = v; });
+  bindGroup('p5','p5',(v)=>{ document.body.dataset.stP5 = v; });
+  bindGroup('p6','p6',(v)=>{ document.body.dataset.stP6 = v; });
+  bindGroup('ann','ann',(v)=>{ document.body.dataset.ann = v; });
+
+  // Acordeones: click en .box-head expande/colapsa el .box
+  document.querySelectorAll('.box .box-head').forEach(h=>{
+    h.addEventListener('click', (e)=>{
+      // ignorar clicks en botones / inputs internos
+      if (e.target.closest('button, input, .toggle, .fix-select, .fix-dropdown')) return;
+      const box = h.closest('.box');
+      box.classList.toggle('open');
+    });
+  });
+
+  // Restore persisted tweaks
+  (function restore(){
+    [['p2','p2'],['p5','p5'],['p6','p6'],['ann','ann']].forEach(([g,a])=>{
+      const v = localStorage.getItem('scv5cfg3_'+a);
+      if(!v) return;
+      const btn = document.querySelector(`[data-group="${g}"] .pill[data-${a}="${v}"]`);
+      if(btn) btn.click();
+    });
+  })();
+</script>
+
+</body>
+</html>
