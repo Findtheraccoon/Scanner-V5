@@ -1,47 +1,33 @@
-"""Config del usuario con encripción inline de secretos.
+"""Config del usuario en plaintext.
 
 API pública mínima para cargar/guardar el Config del trader:
 
     from modules.config import (
-        UserConfig, TDKeyConfig, S3Config,
+        UserConfig, TDKeyConfig, S3Config, StartupFlags,
         load_config, save_config,
-        get_master_key,
     )
 
-**Flujo típico (post integración al frontend):**
+**Modelo del producto:**
 
-    # Al arranque del backend:
-    cfg = load_config("data/config_last.json")
+El `.config` es un **archivo portable** que el usuario maneja
+explícitamente. El scanner arranca de cero si no se carga ningún
+`.config`. Toda la configuración (TD keys, S3, slot assignments,
+flags de arranque) vive dentro del archivo. Al apagar el scanner no
+queda residuo en el sistema más allá del path "LAST" — solo el
+archivo `.config` que el usuario cuida.
 
-    # Al editar desde el frontend:
-    new_cfg = cfg.model_copy(update={"twelvedata_keys": new_keys})
-    save_config(new_cfg, "data/config_last.json")
-
-**Estado actual (módulo standalone, sin wiring al backend):**
-
-El Config existe pero no está integrado aún a los endpoints. Los
-endpoints de backup/restore S3 siguen aceptando credenciales en body
-por compat. La integración se hará cuando el frontend exista y
-consuma el Config (decisión documentada como deuda técnica en AR.2).
+**Plaintext por decisión de producto:** el archivo no se encripta. La
+seguridad depende de dónde lo guarde el usuario.
 """
 
-from modules.config.crypto import (
-    MasterKeyError,
-    decrypt_str,
-    encrypt_str,
-    get_master_key,
-)
 from modules.config.loader import load_config, save_config
-from modules.config.models import S3Config, TDKeyConfig, UserConfig
+from modules.config.models import S3Config, StartupFlags, TDKeyConfig, UserConfig
 
 __all__ = [
-    "MasterKeyError",
     "S3Config",
+    "StartupFlags",
     "TDKeyConfig",
     "UserConfig",
-    "decrypt_str",
-    "encrypt_str",
-    "get_master_key",
     "load_config",
     "save_config",
 ]
