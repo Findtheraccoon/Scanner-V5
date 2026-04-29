@@ -349,7 +349,51 @@ Adicionales wired en la sesión:
 
 ### Para el siguiente chat
 
-**Estado al 2026-04-30:** backend **completo a spec §3 + §4 + §9.4** + endpoints `/config/*` + `/fixtures/*` + `/database/vacuum` (8 deudas técnicas cerradas en la sesión OZyjj) · **1118 tests + 1 slow** passing · parity 245/245 · ruff limpio. **Frontend Cockpit completo wired al backend** sobre Vite 5 + React 18 + TS strict + Tailwind 3 + Biome + Vitest + Zustand 5 + TanStack Query 5.
+**Estado al 2026-04-30 (post sesión OZyjj · scaffold React de Configuración):** backend completo · **frontend con 4 pestañas wired**: Cockpit + Configuración (NUEVO), Dashboard / Memento siguen como stubs.
+
+**Sesión 2026-04-30 (continuación · scaffold de Configuración):**
+
+10 commits incrementales sobre la rama `claude/review-project-status-OZyjj`, todos con `tsc --noEmit` + `pnpm lint` + `pnpm test` + `pnpm build` verdes.
+
+**1. Tipos + queries:**
+- `frontend/src/api/types.ts` (+220 líneas): TDKeyConfig, S3Config, StartupFlags, UserConfig, FixtureListItem, ValidatorReport*, DatabaseStats*, S3Backup*, SlotPatch*.
+- `frontend/src/api/queries.ts` (+24 hooks): config (10) · fixtures (3) · validator (4) · database (4) · S3 (3) · slots PATCH.
+
+**2. Stores + WS:**
+- `stores/configUi.ts`: collapse map de los 6 boxes (default todos colapsados).
+- `stores/validatorProgress.ts`: alimentado por WS `validator.progress` con runId + tests + lastMessage + finishedAt derivado.
+- `api/ws.ts`: dispatch de `validator.progress` reemplaza el no-op anterior.
+
+**3. Componentes UI compartidos:**
+- `components/ui/Pilot.tsx` (4 estados con glow).
+- `components/ui/Badge.tsx` (6 variantes: default/ok/warn/err/run/pend).
+- `components/ui/Toggle.tsx` (on/off con accent Phoenix).
+- `components/ui/Dropzone.tsx` (drag-and-drop + file picker).
+
+**4. Pestaña Configuración:**
+- `pages/Configuration/Frame.tsx`: contenedor grid 2-col con `::before` línea vertical.
+- `pages/Configuration/Box.tsx`: subgrid (col 1: dot button · col 2: head + body) con collapse store.
+- `pages/Configuration/configuration.css` (~870 líneas): portado del Hi-Fi v1 standalone con clases prefijadas `cfg-`, +componentes UI (`.btn`, `.field`, `.inp`, `.pg`, `.card`, `.toolbar`, `.note`, `.num`, `.dropzone`).
+- `pages/Configuration/boxes/Box1Engines.tsx`: 5 cards (database/data/slot_registry/scoring/validator) + flow lifespan. Lee `useEngineHealth` + `useSlots` + `useValidatorReportLatest`. Aggregate state `levelToState()`/`aggregateState()`.
+- `pages/Configuration/boxes/Box2Config.tsx`: 2 cards (acciones · resumen). Load/save/save_as/clear/download via `useConfigCurrent` + 4 mutations. Toast feedback.
+- `pages/Configuration/boxes/Box3Keys.tsx`: 5 cards de TD keys con form inline para agregar (4 fields). Probe agregado + individual via `useValidatorConnectivity` filtrado en frontend. Uso live por WS `api_usage.tick` → `useApiUsageStore`. Eliminar via `usePutTdKeys` con keys filtrado.
+- `pages/Configuration/boxes/Box4Slots.tsx`: tabla 6 slots (ticker · fixture select nativo · toggle · runtime status). Biblioteca de fixtures + delete. Upload via `Dropzone` + `useUploadFixture`. PATCH /slots/{id} via `usePatchSlot`.
+- `pages/Configuration/boxes/Box5Validator.tsx`: grid 7 celdas (D/A/B/C/E/F/G) alimentado por store live o por último reporte. Histórico de reports con cursor pagination. Engines mini compactos. `useValidatorRun` + `useValidatorConnectivity`.
+- `pages/Configuration/boxes/Box6S3.tsx`: form 6 fields + listado de backups + 4 acciones (probar / guardar creds en .config / backup / restore). Hidratación inicial del form desde `useConfigCurrent(true)`. Confirm doble en restore.
+
+**5. Tests:**
+- `test/router.test.tsx`: 2 tests nuevos (header + 6 boxes con dots, todos colapsados por default). Total 7 tests passing.
+
+Métricas finales del bundle:
+- CSS 81.46 KB (gz 15.60)
+- JS 341.47 KB (gz 105.38)
+
+**Decisiones / deudas v1 documentadas en commits:**
+- Edición fina de cred/min y cred/día de TD keys: queda como deuda (se hace editando .config y volviendo a cargar).
+- Edición inline del ticker en Box 4: deshabilitada (cambio en vivo es destructivo).
+- Modal de detalle de reporte del Validator: deuda v2.
+- Confirmaciones via `window.confirm()` simple (modal pulido v2).
+- mini-rep del histórico con 1 dot · no 7 dots desglosados (el endpoint list no devuelve `tests`).
 
 **Sesión 2026-04-30 — cierre de 9/11 deudas técnicas backend (sesión OZyjj):**
 

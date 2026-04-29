@@ -1,12 +1,38 @@
 import { useAuthStore } from "@/stores/auth";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "./client";
+import { ApiError, api } from "./client";
 import type {
   AutoScanStatus,
+  ConfigCurrentResponse,
+  ConfigLastInfo,
+  ConfigLoadResponse,
+  ConfigPutS3Response,
+  ConfigPutStartupFlagsResponse,
+  ConfigPutTdKeysResponse,
+  ConfigReloadPoliciesResponse,
+  ConfigSaveResponse,
+  DatabaseRotateAggressiveResponse,
+  DatabaseRotateResponse,
+  DatabaseStatsResponse,
+  DatabaseVacuumResponse,
   EngineHealth,
+  FixtureDeleteResponse,
+  FixtureUploadResponse,
+  FixturesListResponse,
+  S3BackupResponse,
+  S3Config,
+  S3ListResponse,
+  S3RestoreResponse,
   ScanManualResponse,
   SignalPayload,
   SlotInfo,
+  SlotPatchBody,
+  SlotPatchResponse,
+  StartupFlags,
+  TDKeyConfig,
+  ValidatorConnectivityResult,
+  ValidatorReport,
+  ValidatorReportsListResponse,
 } from "./types";
 
 const enabled = () => useAuthStore.getState().token !== null;
@@ -118,6 +144,353 @@ export function useAutoScanResume() {
     mutationFn: () => api<AutoScanStatus>("/scan/auto/resume", { method: "POST" }),
     onSuccess: (data) => {
       qc.setQueryData(["scan.auto.status"], data);
+    },
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   CONFIG — Box 2 + Box 3 + Box 6
+   ════════════════════════════════════════════════════════════════════ */
+
+export function useConfigCurrent(includeSecrets = false) {
+  const token = useAuthStore((s) => s.token);
+  return useQuery<ConfigCurrentResponse>({
+    queryKey: ["config.current", includeSecrets],
+    queryFn: () =>
+      api<ConfigCurrentResponse>("/config/current", {
+        query: { include_secrets: includeSecrets },
+      }),
+    enabled: token !== null,
+    staleTime: 10_000,
+  });
+}
+
+export function useConfigLast() {
+  const token = useAuthStore((s) => s.token);
+  return useQuery<ConfigLastInfo | null>({
+    queryKey: ["config.last"],
+    queryFn: () => api<ConfigLastInfo | null>("/config/last"),
+    enabled: token !== null,
+    staleTime: 30_000,
+  });
+}
+
+export function useConfigLoad() {
+  const qc = useQueryClient();
+  return useMutation<ConfigLoadResponse, Error, { path: string }>({
+    mutationFn: ({ path }) =>
+      api<ConfigLoadResponse>("/config/load", {
+        method: "POST",
+        body: JSON.stringify({ path }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["config.current"] });
+      qc.invalidateQueries({ queryKey: ["config.last"] });
+    },
+  });
+}
+
+export function useConfigSave() {
+  const qc = useQueryClient();
+  return useMutation<ConfigSaveResponse, Error, { path?: string }>({
+    mutationFn: ({ path }) =>
+      api<ConfigSaveResponse>("/config/save", {
+        method: "POST",
+        body: JSON.stringify(path !== undefined ? { path } : {}),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["config.current"] });
+      qc.invalidateQueries({ queryKey: ["config.last"] });
+    },
+  });
+}
+
+export function useConfigSaveAs() {
+  const qc = useQueryClient();
+  return useMutation<ConfigSaveResponse, Error, { path: string }>({
+    mutationFn: ({ path }) =>
+      api<ConfigSaveResponse>("/config/save_as", {
+        method: "POST",
+        body: JSON.stringify({ path }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["config.current"] });
+      qc.invalidateQueries({ queryKey: ["config.last"] });
+    },
+  });
+}
+
+export function useConfigClear() {
+  const qc = useQueryClient();
+  return useMutation<{ cleared: boolean }, Error, void>({
+    mutationFn: () => api<{ cleared: boolean }>("/config/clear", { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["config.current"] });
+    },
+  });
+}
+
+export function usePutTdKeys() {
+  const qc = useQueryClient();
+  return useMutation<ConfigPutTdKeysResponse, Error, { keys: TDKeyConfig[] }>({
+    mutationFn: ({ keys }) =>
+      api<ConfigPutTdKeysResponse>("/config/twelvedata_keys", {
+        method: "PUT",
+        body: JSON.stringify({ twelvedata_keys: keys }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["config.current"] });
+    },
+  });
+}
+
+export function usePutS3() {
+  const qc = useQueryClient();
+  return useMutation<ConfigPutS3Response, Error, { s3: S3Config | null }>({
+    mutationFn: ({ s3 }) =>
+      api<ConfigPutS3Response>("/config/s3", {
+        method: "PUT",
+        body: JSON.stringify({ s3_config: s3 }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["config.current"] });
+    },
+  });
+}
+
+export function usePutStartupFlags() {
+  const qc = useQueryClient();
+  return useMutation<ConfigPutStartupFlagsResponse, Error, { flags: StartupFlags }>({
+    mutationFn: ({ flags }) =>
+      api<ConfigPutStartupFlagsResponse>("/config/startup_flags", {
+        method: "PUT",
+        body: JSON.stringify({ startup_flags: flags }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["config.current"] });
+    },
+  });
+}
+
+export function useReloadPolicies() {
+  return useMutation<ConfigReloadPoliciesResponse, Error, void>({
+    mutationFn: () =>
+      api<ConfigReloadPoliciesResponse>("/config/reload-policies", { method: "POST" }),
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   FIXTURES — Box 4 (biblioteca + upload + delete)
+   ════════════════════════════════════════════════════════════════════ */
+
+export function useFixtures() {
+  const token = useAuthStore((s) => s.token);
+  return useQuery<FixturesListResponse>({
+    queryKey: ["fixtures.list"],
+    queryFn: () => api<FixturesListResponse>("/fixtures"),
+    enabled: token !== null,
+    staleTime: 30_000,
+  });
+}
+
+export function useUploadFixture() {
+  const qc = useQueryClient();
+  return useMutation<FixtureUploadResponse, ApiError, { file: File }>({
+    mutationFn: async ({ file }) => {
+      const form = new FormData();
+      form.append("file", file);
+      const token = useAuthStore.getState().token;
+      const headers: Record<string, string> = {};
+      if (token) headers.authorization = `Bearer ${token}`;
+      const res = await fetch("/api/v1/fixtures/upload", {
+        method: "POST",
+        body: form,
+        headers,
+      });
+      if (!res.ok) {
+        let body: unknown = null;
+        try {
+          body = await res.json();
+        } catch {
+          body = await res.text().catch(() => null);
+        }
+        throw new ApiError(`HTTP ${res.status}`, res.status, body);
+      }
+      return (await res.json()) as FixtureUploadResponse;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["fixtures.list"] });
+    },
+  });
+}
+
+export function useDeleteFixture() {
+  const qc = useQueryClient();
+  return useMutation<FixtureDeleteResponse, ApiError, { fixtureId: string }>({
+    mutationFn: ({ fixtureId }) =>
+      api<FixtureDeleteResponse>(`/fixtures/${encodeURIComponent(fixtureId)}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["fixtures.list"] });
+    },
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   VALIDATOR — Box 5 (run + connectivity + reports)
+   ════════════════════════════════════════════════════════════════════ */
+
+export function useValidatorReportLatest() {
+  const token = useAuthStore((s) => s.token);
+  return useQuery<ValidatorReport | null>({
+    queryKey: ["validator.report.latest"],
+    queryFn: async () => {
+      try {
+        return await api<ValidatorReport>("/validator/reports/latest");
+      } catch (e) {
+        if ((e as ApiError).status === 404) return null;
+        throw e;
+      }
+    },
+    enabled: token !== null,
+    staleTime: 30_000,
+  });
+}
+
+export function useValidatorReports(limit = 20) {
+  const token = useAuthStore((s) => s.token);
+  return useQuery<ValidatorReportsListResponse>({
+    queryKey: ["validator.reports", limit],
+    queryFn: () =>
+      api<ValidatorReportsListResponse>("/validator/reports", {
+        query: { limit },
+      }),
+    enabled: token !== null,
+    staleTime: 30_000,
+  });
+}
+
+export function useValidatorRun() {
+  const qc = useQueryClient();
+  return useMutation<ValidatorReport, Error, void>({
+    mutationFn: () => api<ValidatorReport>("/validator/run", { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["validator.report.latest"] });
+      qc.invalidateQueries({ queryKey: ["validator.reports"] });
+    },
+  });
+}
+
+export function useValidatorConnectivity() {
+  const qc = useQueryClient();
+  return useMutation<ValidatorConnectivityResult, Error, void>({
+    mutationFn: () =>
+      api<ValidatorConnectivityResult>("/validator/connectivity", { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["validator.reports"] });
+    },
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   DATABASE — vacuum + rotate + stats
+   ════════════════════════════════════════════════════════════════════ */
+
+export function useDatabaseStats() {
+  const token = useAuthStore((s) => s.token);
+  return useQuery<DatabaseStatsResponse>({
+    queryKey: ["database.stats"],
+    queryFn: () => api<DatabaseStatsResponse>("/database/stats"),
+    enabled: token !== null,
+    staleTime: 15_000,
+  });
+}
+
+export function useDatabaseVacuum() {
+  const qc = useQueryClient();
+  return useMutation<DatabaseVacuumResponse, ApiError, void>({
+    mutationFn: () => api<DatabaseVacuumResponse>("/database/vacuum", { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["database.stats"] });
+    },
+  });
+}
+
+export function useDatabaseRotate() {
+  const qc = useQueryClient();
+  return useMutation<DatabaseRotateResponse, Error, void>({
+    mutationFn: () => api<DatabaseRotateResponse>("/database/rotate", { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["database.stats"] });
+    },
+  });
+}
+
+export function useDatabaseRotateAggressive() {
+  const qc = useQueryClient();
+  return useMutation<DatabaseRotateAggressiveResponse, ApiError, void>({
+    mutationFn: () =>
+      api<DatabaseRotateAggressiveResponse>("/database/rotate/aggressive", {
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["database.stats"] });
+    },
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   S3 BACKUP — Box 6 (backup + restore + listado)
+   Las credenciales viajan en el body por compat con el endpoint actual
+   (deuda histórica). Cuando el frontend tenga `.config` con S3 cargado,
+   este hook lo lee del store y lo pasa.
+   ════════════════════════════════════════════════════════════════════ */
+
+export function useS3Backup() {
+  return useMutation<S3BackupResponse, ApiError, { s3: S3Config }>({
+    mutationFn: ({ s3 }) =>
+      api<S3BackupResponse>("/database/backup", {
+        method: "POST",
+        body: JSON.stringify({ s3 }),
+      }),
+  });
+}
+
+export function useS3Restore() {
+  return useMutation<S3RestoreResponse, ApiError, { s3: S3Config; key: string }>({
+    mutationFn: ({ s3, key }) =>
+      api<S3RestoreResponse>("/database/restore", {
+        method: "POST",
+        body: JSON.stringify({ s3, key }),
+      }),
+  });
+}
+
+export function useS3List() {
+  return useMutation<S3ListResponse, ApiError, { s3: S3Config }>({
+    mutationFn: ({ s3 }) =>
+      api<S3ListResponse>("/database/backups", {
+        method: "POST",
+        body: JSON.stringify({ s3 }),
+      }),
+  });
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   SLOTS PATCH — Box 4 (enable/disable + cambio de fixture/ticker)
+   ════════════════════════════════════════════════════════════════════ */
+
+export function usePatchSlot() {
+  const qc = useQueryClient();
+  return useMutation<SlotPatchResponse, ApiError, { slotId: number; body: SlotPatchBody }>({
+    mutationFn: ({ slotId, body }) =>
+      api<SlotPatchResponse>(`/slots/${slotId}`, {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["slots"] });
     },
   });
 }

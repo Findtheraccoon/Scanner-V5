@@ -71,13 +71,30 @@ describe("CockpitPage", () => {
 });
 
 describe("Stub pages", () => {
-  it("Configuración renderiza el stub", () => {
-    renderAt("/configuracion");
-    expect(screen.getByRole("heading", { name: "configuración" })).toBeInTheDocument();
-  });
-
   it("Memento renderiza el stub", () => {
     renderAt("/memento");
     expect(screen.getByRole("heading", { name: "memento" })).toBeInTheDocument();
+  });
+});
+
+describe("ConfigurationPage", () => {
+  it("renderiza el header + los 6 boxes con sus dots", () => {
+    renderAt("/configuracion");
+    // Título
+    expect(screen.getByRole("heading", { name: /configuración del scanner/i })).toBeInTheDocument();
+    // 6 boxes — los dots tienen role="button" con aria-label "Expandir/Colapsar sección N: ..."
+    for (const i of [1, 2, 3, 4, 5, 6]) {
+      expect(screen.getByLabelText(new RegExp(`sección ${i}:`, "i"))).toBeInTheDocument();
+    }
+  });
+
+  it("los 6 boxes arrancan colapsados por default", () => {
+    renderAt("/configuracion");
+    // Cada box tiene un aria-label que dice "Expandir" cuando está colapsado.
+    // Si fuera al revés (expandido), diría "Colapsar".
+    for (const i of [1, 2, 3, 4, 5, 6]) {
+      const dot = screen.getByLabelText(new RegExp(`expandir sección ${i}:`, "i"));
+      expect(dot).toBeInTheDocument();
+    }
   });
 });
