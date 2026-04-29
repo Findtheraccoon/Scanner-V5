@@ -555,94 +555,20 @@ body::after {
 }
 
 .config-layout {
-  display: grid;
-  grid-template-columns: var(--rail-w) 1fr;
-  gap: 0;
   position: relative;
 }
 
 /* ============================================================
-   RAIL — guía vertical izquierda con dots
-   ============================================================ */
-.rail {
-  position: relative;
-  padding: 24px 12px 24px 0;
-}
-.rail__line {
-  position: absolute;
-  top: 32px;
-  bottom: 32px;
-  left: 22px;
-  width: 1px;
-  background: linear-gradient(180deg,
-    transparent 0%,
-    var(--hair-3) 8%,
-    var(--hair-3) 92%,
-    transparent 100%);
-}
-.rail__dot {
-  position: relative;
-  margin-bottom: 92px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  cursor: pointer;
-  transition: opacity var(--t-fast);
-}
-.rail__dot:last-child { margin-bottom: 0; }
-.rail__dot:hover { opacity: 0.92; }
-.rail__bullet {
-  position: relative;
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background:
-    var(--glass-grad-3),
-    linear-gradient(180deg, var(--bg-elev-3) 0%, var(--bg-elev-2) 100%);
-  border: 1px solid var(--hair-3);
-  display: grid;
-  place-items: center;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--t-55);
-  box-shadow: var(--bevel-full);
-  transition: all var(--t-fast);
-}
-.rail__bullet::before {
-  /* halo del estado */
-  content: '';
-  position: absolute;
-  inset: -6px;
-  border-radius: 50%;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity var(--t-fast);
-}
-.rail__dot.is-ok    .rail__bullet { color: var(--ok);   border-color: rgba(34,197,94,0.55); }
-.rail__dot.is-ok    .rail__bullet::before { opacity: 1; box-shadow: 0 0 14px rgba(34,197,94,0.30); }
-.rail__dot.is-warn  .rail__bullet { color: var(--warn); border-color: rgba(245,158,11,0.55); }
-.rail__dot.is-warn  .rail__bullet::before { opacity: 1; box-shadow: 0 0 14px rgba(245,158,11,0.30); }
-.rail__dot.is-err   .rail__bullet { color: var(--err);  border-color: rgba(239,68,68,0.55); }
-.rail__dot.is-err   .rail__bullet::before { opacity: 1; box-shadow: 0 0 14px rgba(239,68,68,0.30); }
-.rail__dot.is-pend  .rail__bullet { color: var(--t-38); border-color: var(--hair-2); }
-.rail__label {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--t-55);
-  white-space: nowrap;
-}
-.rail__dot.is-ok   .rail__label { color: var(--t-90); }
-.rail__dot.is-warn .rail__label { color: var(--t-90); }
-.rail__dot.is-err  .rail__label { color: var(--t-90); }
-
-/* ============================================================
-   FRAME — contenedor de los 6 boxes
+   FRAME — contenedor de los 6 boxes con rail integrado.
+   Layout grid 2-col: dot del box (col 1) + contenido (col 2).
+   La línea vertical se dibuja como ::before continua, los dots
+   viven al lado de su box-head correspondiente y se desplazan
+   con la altura real de cada box (subgrid).
    ============================================================ */
 .frame {
+  display: grid;
+  grid-template-columns: var(--rail-w) 1fr;
+  position: relative;
   background:
     var(--glass-grad-2),
     linear-gradient(180deg, var(--card-bg) 0%, var(--card-bg-2) 100%);
@@ -653,46 +579,95 @@ body::after {
   backdrop-filter: var(--blur-soft);
   -webkit-backdrop-filter: var(--blur-soft);
 }
+.frame::before {
+  /* línea vertical continua del rail */
+  content: '';
+  position: absolute;
+  top: 36px;
+  bottom: 36px;
+  left: calc(var(--rail-w) / 2);
+  width: 1px;
+  background: linear-gradient(180deg,
+    transparent 0%,
+    var(--hair-3) 8%,
+    var(--hair-3) 92%,
+    transparent 100%);
+  pointer-events: none;
+  z-index: 1;
+}
 
 /* ============================================================
-   BOX (paso plegable)
+   BOX (paso plegable · grid 2-col con subgrid)
    ============================================================ */
 .box {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
   position: relative;
   border-bottom: 1px solid var(--hair);
 }
 .box:last-child { border-bottom: none; }
-.box__head {
+
+/* Dot del box · vive en col 1, alineado al centro del box-head */
+.box__dot {
+  grid-column: 1;
+  grid-row: 1;
+  position: relative;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  margin-top: var(--gap-5);
+  margin-left: auto;
+  margin-right: auto;
+  border-radius: 50%;
+  background:
+    var(--glass-grad-3),
+    linear-gradient(180deg, var(--bg-elev-3) 0%, var(--bg-elev-2) 100%);
+  border: 1px solid var(--hair-3);
+  box-shadow: var(--bevel-full);
   display: grid;
-  grid-template-columns: 56px 1fr auto;
+  place-items: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--t-55);
+  align-self: start;
+  justify-self: center;
+  transition: all var(--t-fast);
+  cursor: pointer;
+  user-select: none;
+}
+.box__dot::before {
+  /* halo del estado */
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--t-fast);
+}
+.box.is-ok    .box__dot { color: var(--ok);   border-color: rgba(34,197,94,0.55); }
+.box.is-ok    .box__dot::before { opacity: 1; box-shadow: 0 0 14px rgba(34,197,94,0.30); }
+.box.is-warn  .box__dot { color: var(--warn); border-color: rgba(245,158,11,0.55); }
+.box.is-warn  .box__dot::before { opacity: 1; box-shadow: 0 0 14px rgba(245,158,11,0.30); }
+.box.is-err   .box__dot { color: var(--err);  border-color: rgba(239,68,68,0.55); }
+.box.is-err   .box__dot::before { opacity: 1; box-shadow: 0 0 14px rgba(239,68,68,0.30); }
+.box.is-pend  .box__dot { color: var(--t-38); border-color: var(--hair-2); }
+
+/* Head + body en col 2 */
+.box__head {
+  grid-column: 2;
+  grid-row: 1;
+  display: grid;
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: var(--gap-4);
-  padding: var(--gap-5) var(--gap-6);
+  padding: var(--gap-5) var(--gap-6) var(--gap-5) var(--gap-3);
   cursor: pointer;
   transition: background var(--t-fast);
 }
 .box__head:hover { background: rgba(255,255,255,0.018); }
-.box__num {
-  width: 38px;
-  height: 38px;
-  border-radius: var(--r);
-  display: grid;
-  place-items: center;
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--t-55);
-  background:
-    var(--glass-grad-1),
-    linear-gradient(180deg, var(--bg-elev-2) 0%, var(--bg-elev-1) 100%);
-  border: 1px solid var(--hair-2);
-  box-shadow: var(--bevel-soft);
-}
-.box.is-ok    .box__num { color: var(--ok);   border-color: rgba(34,197,94,0.32); }
-.box.is-warn  .box__num { color: var(--warn); border-color: rgba(245,158,11,0.36); }
-.box.is-err   .box__num { color: var(--err);  border-color: rgba(239,68,68,0.36); }
-.box.is-pend  .box__num { color: var(--t-38); }
-
 .box__title-wrap { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .box__title {
   font-size: 16px;
@@ -707,6 +682,7 @@ body::after {
   letter-spacing: 0.02em;
   line-height: 1.5;
 }
+.box__sub .ref { color: var(--accent); }
 .box__meta {
   display: inline-flex;
   align-items: center;
@@ -745,13 +721,12 @@ body::after {
 .box.is-collapsed .box__chev { transform: rotate(-90deg); }
 
 .box__body {
-  padding: 4px var(--gap-6) var(--gap-6);
+  grid-column: 2;
+  grid-row: 2;
+  padding: 4px var(--gap-6) var(--gap-6) var(--gap-3);
   overflow: hidden;
-  max-height: none;
 }
-.box.is-collapsed .box__body {
-  display: none;
-}
+.box.is-collapsed .box__body { display: none; }
 
 /* ============================================================
    PILOT (dot ok/warn/err/pend)
@@ -2130,8 +2105,7 @@ input.inp { width: 100%; }
   .s3-grid       { grid-template-columns: 1fr; }
 }
 @media (max-width: 1200px) {
-  :root { --rail-w: 72px; }
-  .rail__label { display: none; }
+  :root { --rail-w: 64px; }
   .keys-grid { grid-template-columns: repeat(2, 1fr); }
   .eng-cards { grid-template-columns: repeat(2, 1fr); }
 }
@@ -2193,26 +2167,15 @@ input.inp { width: 100%; }
 
     <div class="config-layout">
 
-      <!-- ===== RAIL ===== -->
-      <aside class="rail">
-        <div class="rail__line"></div>
-        <a class="rail__dot is-ok"   href="#box-1"><span class="rail__bullet">1</span><span class="rail__label">motores</span></a>
-        <a class="rail__dot is-ok"   href="#box-2"><span class="rail__bullet">2</span><span class="rail__label">config</span></a>
-        <a class="rail__dot is-warn" href="#box-3"><span class="rail__bullet">3</span><span class="rail__label">proveedor</span></a>
-        <a class="rail__dot is-warn" href="#box-4"><span class="rail__bullet">4</span><span class="rail__label">slots</span></a>
-        <a class="rail__dot is-ok"   href="#box-5"><span class="rail__bullet">5</span><span class="rail__label">validator</span></a>
-        <a class="rail__dot is-pend" href="#box-6"><span class="rail__bullet">6</span><span class="rail__label">backup S3</span></a>
-      </aside>
-
-      <!-- ===== FRAME ===== -->
+      <!-- ===== FRAME (rail integrado vía subgrid) ===== -->
       <section class="frame">
 
         <!-- ============================================================
              BOX 1 — Motores (observabilidad pura · sin arranque manual)
              ============================================================ -->
-        <article class="box is-ok" id="box-1" data-box="1">
+        <article class="box is-ok is-collapsed" id="box-1" data-box="1">
+          <span class="box__dot">1</span>
           <header class="box__head">
-            <div class="box__num">01</div>
             <div class="box__title-wrap">
               <div class="box__title">Motores del backend</div>
               <div class="box__sub">5 motores arrancan con el lifespan FastAPI · esta vista es <span class="ref">sólo observabilidad</span> · no hay arranque manual desde la UI</div>
@@ -2331,9 +2294,9 @@ input.inp { width: 100%; }
         <!-- ============================================================
              BOX 2 — Archivo de configuración (.config)
              ============================================================ -->
-        <article class="box is-ok" id="box-2" data-box="2">
+        <article class="box is-ok is-collapsed" id="box-2" data-box="2">
+          <span class="box__dot">2</span>
           <header class="box__head">
-            <div class="box__num">02</div>
             <div class="box__title-wrap">
               <div class="box__title">Archivo de configuración</div>
               <div class="box__sub">cargar · guardar · descargar · contiene TD keys + fixtures asignadas + preferencias · plaintext (sin encripción)</div>
@@ -2419,9 +2382,9 @@ input.inp { width: 100%; }
         <!-- ============================================================
              BOX 3 — TwelveData keys (5 keys round-robin)
              ============================================================ -->
-        <article class="box is-warn" id="box-3" data-box="3">
+        <article class="box is-warn is-collapsed" id="box-3" data-box="3">
+          <span class="box__dot">3</span>
           <header class="box__head">
-            <div class="box__num">03</div>
             <div class="box__title-wrap">
               <div class="box__title">Proveedor de datos · TwelveData</div>
               <div class="box__sub">5 keys round-robin · KeyPool · probe individual + agregado · estado en vivo via WS <span class="ref">api_usage.tick</span></div>
@@ -2570,9 +2533,9 @@ input.inp { width: 100%; }
         <!-- ============================================================
              BOX 4 — Slot Registry + fixtures (sin columna benchmark)
              ============================================================ -->
-        <article class="box is-warn" id="box-4" data-box="4">
+        <article class="box is-warn is-collapsed" id="box-4" data-box="4">
+          <span class="box__dot">4</span>
           <header class="box__head">
-            <div class="box__num">04</div>
             <div class="box__title-wrap">
               <div class="box__title">Slot Registry + fixtures</div>
               <div class="box__sub">6 slots fijos · enable/disable dispara warmup + revalidación A/B/C · benchmark lo define el fixture</div>
@@ -2776,9 +2739,9 @@ input.inp { width: 100%; }
         <!-- ============================================================
              BOX 5 — Validator + diagnóstico
              ============================================================ -->
-        <article class="box is-ok" id="box-5" data-box="5">
+        <article class="box is-ok is-collapsed" id="box-5" data-box="5">
+          <span class="box__dot">5</span>
           <header class="box__head">
-            <div class="box__num">05</div>
             <div class="box__title-wrap">
               <div class="box__title">Validator + diagnóstico</div>
               <div class="box__sub">batería D / A / B / C / E / F / G · histórico de reportes en DB · TXT en LOG/ · 5 días retention</div>
@@ -2930,9 +2893,9 @@ input.inp { width: 100%; }
         <!-- ============================================================
              BOX 6 — Backup S3 (último de la cadena · pendiente)
              ============================================================ -->
-        <article class="box is-pend" id="box-6" data-box="6">
+        <article class="box is-pend is-collapsed" id="box-6" data-box="6">
+          <span class="box__dot">6</span>
           <header class="box__head">
-            <div class="box__num">06</div>
             <div class="box__title-wrap">
               <div class="box__title">Backup remoto · S3-compatible</div>
               <div class="box__sub">AWS · Backblaze B2 · Cloudflare R2 · MinIO · respaldo offsite del archivo Config + DB · opcional, no bloquea</div>
