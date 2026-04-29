@@ -5,6 +5,7 @@ import { Frame } from "./Frame";
 import { Box1Engines } from "./boxes/Box1Engines";
 import { Box2Config } from "./boxes/Box2Config";
 import { Box3Keys } from "./boxes/Box3Keys";
+import { Box4Slots } from "./boxes/Box4Slots";
 import "./configuration.css";
 
 /* ConfigurationPage · root de la pestaña Configuración.
@@ -40,16 +41,7 @@ export function ConfigurationPage(): ReactElement {
         <Box1Engines />
         <Box2Config />
         <Box3Keys />
-
-        <Box
-          id={4}
-          state="pend"
-          title="Slot Registry + fixtures"
-          sub="6 slots fijos · enable/disable dispara warmup + revalidación A/B/C"
-          statusText="—"
-        >
-          <div className="note">Pendiente · contenido en commit 7.</div>
-        </Box>
+        <Box4Slots />
 
         <Box
           id={5}
