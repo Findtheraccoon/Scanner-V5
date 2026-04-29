@@ -1,12 +1,12 @@
 import { Pilot } from "@/components/ui/Pilot";
 import type { ReactElement } from "react";
-import { Box } from "./Box";
 import { Frame } from "./Frame";
 import { Box1Engines } from "./boxes/Box1Engines";
 import { Box2Config } from "./boxes/Box2Config";
 import { Box3Keys } from "./boxes/Box3Keys";
 import { Box4Slots } from "./boxes/Box4Slots";
 import { Box5Validator } from "./boxes/Box5Validator";
+import { Box6S3 } from "./boxes/Box6S3";
 import "./configuration.css";
 
 /* ConfigurationPage · root de la pestaña Configuración.
@@ -44,16 +44,7 @@ export function ConfigurationPage(): ReactElement {
         <Box3Keys />
         <Box4Slots />
         <Box5Validator />
-
-        <Box
-          id={6}
-          state="pend"
-          title="Backup remoto · S3-compatible"
-          sub="AWS · B2 · R2 · MinIO · respaldo offsite"
-          statusText="—"
-        >
-          <div className="note">Pendiente · contenido en commit 9.</div>
-        </Box>
+        <Box6S3 />
       </Frame>
     </main>
   );
