@@ -82,6 +82,11 @@ class Settings(BaseSettings):
     aggressive_rotation_enabled: bool = Field(default=False)
     aggressive_rotation_interval_s: float = Field(default=3600.0, gt=0)
 
+    # Config (Configuración Paso 1) — path donde se persiste el "LAST"
+    # del último .config cargado/guardado. Único archivo que el sistema
+    # mantiene entre arranques; los .config en sí los maneja el usuario.
+    last_config_path_file: str = Field(default="data/last_config_path.json")
+
     @field_validator("log_level")
     @classmethod
     def _normalize_log_level(cls, v: str) -> str:

@@ -214,6 +214,46 @@ def _build_validator(
     )
 
 
+def _try_load_last_config(app, settings: Settings) -> None:
+    """Si `data/last_config_path.json` apunta a un `.config` existente,
+    cárgalo en `app.state.user_config` para que el scanner arranque
+    con la última configuración del usuario sin tener que cargarla
+    a mano cada vez.
+
+    Silencioso ante errores: si algo falla, el scanner arranca con
+    runtime vacío (`UserConfig() default`) y el usuario la carga
+    manualmente desde el frontend.
+    """
+    import json
+    from pathlib import Path
+
+    from modules.config import load_config
+
+    last_path_file = Path(settings.last_config_path_file)
+    if not last_path_file.is_file():
+        return
+    try:
+        meta = json.loads(last_path_file.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        logger.warning(f"could not read {last_path_file} — skipping LAST")
+        return
+    cfg_path = Path(meta.get("path", ""))
+    if not cfg_path.is_file():
+        logger.info(
+            f"LAST config path {cfg_path} does not exist — starting from scratch",
+        )
+        return
+    try:
+        cfg = load_config(cfg_path)
+    except Exception:
+        logger.exception(f"could not load LAST config {cfg_path} — skipping")
+        return
+
+    app.state.user_config = cfg
+    app.state.user_config_path = cfg_path
+    logger.info(f"LAST config loaded: {cfg_path} ({cfg.name})")
+
+
 def _build_aggressive_watchdog_factory(app, settings: Settings):
     """Factory del watchdog automático de rotación agresiva (§9.4).
 
@@ -325,6 +365,7 @@ def main() -> int:
         extra_workers=extra_workers,
         rotate_on_shutdown=settings.rotate_on_shutdown,
         db_size_limit_mb=settings.db_size_limit_mb,
+        last_config_path_file=settings.last_config_path_file,
     )
 
     if (
@@ -349,10 +390,16 @@ def main() -> int:
             running=running,
         )
         extra_workers.append(factory)
-        # Expose registry + data_engine + running event via app.state.
+        # Expose registry + data_engine + key_pool + running event via app.state.
         app.state.registry_runtime = scan_context["registry"]
         app.state.data_engine = scan_context["data_engine"]
+        app.state.key_pool = scan_context["pool"]
         app.state.auto_scan_running = running
+
+    # Carga del LAST .config si el archivo existe y el path apunta a un
+    # `.config` válido en disco. Silencioso ante fallos — el scanner
+    # arranca de cero si algo falla.
+    _try_load_last_config(app, settings)
 
     # V.7 — Validator wiring. Se construye siempre (standalone si no
     # hay scan_context) y se engancha al app.state para que los

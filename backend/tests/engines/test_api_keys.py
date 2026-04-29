@@ -353,3 +353,63 @@ class TestShutdown:
         pool = KeyPool([make_config("k1")])
         pool.shutdown()
         pool.shutdown()  # no debe lanzar
+
+
+class TestReload:
+    """Hot-reload de keys sin reiniciar el backend (PUT /config/twelvedata_keys)."""
+
+    async def test_reload_replaces_keys(self) -> None:
+        pool = KeyPool([make_config("k1"), make_config("k2")])
+        await pool.reload([make_config("k3"), make_config("k4")])
+        snap = pool.snapshot()
+        assert {s.key_id for s in snap} == {"k3", "k4"}
+
+    async def test_reload_preserves_counters_for_kept_keys(self) -> None:
+        pool = KeyPool([make_config("k1"), make_config("k2")])
+        # Consumir un crédito de k1.
+        k = await pool.acquire()
+        pool.release(k.key_id, credits_used=1, success=True)
+        used_daily_before = next(
+            s for s in pool.snapshot() if s.key_id == k.key_id
+        ).used_daily
+        assert used_daily_before == 1
+
+        # Reload manteniendo k1 y agregando k3.
+        await pool.reload([make_config(k.key_id), make_config("k3")])
+
+        kept = next(s for s in pool.snapshot() if s.key_id == k.key_id)
+        assert kept.used_daily == used_daily_before
+        new_one = next(s for s in pool.snapshot() if s.key_id == "k3")
+        assert new_one.used_daily == 0
+
+    async def test_reload_wipes_secret_of_removed_keys(self) -> None:
+        pool = KeyPool(
+            [make_config("k1", secret="old-1"), make_config("k2", secret="old-2")],
+        )
+        old_entry = pool._entries["k1"]
+        await pool.reload([make_config("k2", secret="new-2")])
+        # k1 ya no está en el pool nuevo; su secret fue wipeado.
+        assert old_entry.secret == ""
+        assert pool._entries["k2"].secret == "new-2"
+
+    async def test_reload_updates_credits_per_minute(self) -> None:
+        pool = KeyPool([make_config("k1", credits_per_minute=4)])
+        await pool.reload([make_config("k1", credits_per_minute=20)])
+        snap = pool.snapshot()[0]
+        assert snap.max_minute == 20
+
+    async def test_reload_rejects_empty(self) -> None:
+        pool = KeyPool([make_config("k1")])
+        with pytest.raises(ValueError, match="at least one"):
+            await pool.reload([])
+
+    async def test_reload_rejects_duplicates(self) -> None:
+        pool = KeyPool([make_config("k1")])
+        with pytest.raises(ValueError, match=r"[Dd]uplicate"):
+            await pool.reload([make_config("k1"), make_config("k1")])
+
+    async def test_reload_after_shutdown_fails(self) -> None:
+        pool = KeyPool([make_config("k1")])
+        pool.shutdown()
+        with pytest.raises(RuntimeError, match="shut down"):
+            await pool.reload([make_config("k2")])
