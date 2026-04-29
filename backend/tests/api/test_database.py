@@ -495,3 +495,75 @@ class TestRotateOnShutdown:
         )
         async with app.router.lifespan_context(app):
             pass
+
+
+class TestVacuum:
+    """`POST /database/vacuum` — recupera espacio post rotación agresiva."""
+
+    @pytest.mark.asyncio
+    async def test_unauthenticated_401(self) -> None:
+        app = create_app(
+            valid_api_keys={"sk-test"},
+            db_url="sqlite+aiosqlite:///:memory:",
+            auto_init_db=False,
+        )
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test",
+        ) as client:
+            r = await client.post("/api/v1/database/vacuum")
+        assert r.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_in_memory_returns_400(self) -> None:
+        app = create_app(
+            valid_api_keys={"sk-test"},
+            db_url="sqlite+aiosqlite:///:memory:",
+            auto_init_db=False,
+        )
+        await init_db(app.state.db_engine)
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test",
+            ) as client:
+                r = await client.post(
+                    "/api/v1/database/vacuum", headers=AUTH,
+                )
+            assert r.status_code == 400
+            assert "in-memory" in r.text or "memory" in r.text
+        finally:
+            await app.state.db_engine.dispose()
+
+    @pytest.mark.asyncio
+    async def test_vacuum_on_file_db_returns_sizes(self, tmp_path: Path) -> None:
+        db_file = tmp_path / "scanner.db"
+        app = create_app(
+            valid_api_keys={"sk-test"},
+            db_url=f"sqlite+aiosqlite:///{db_file}",
+            auto_init_db=False,
+        )
+        await init_db(app.state.db_engine)
+        # Inserto y borro filas para que VACUUM tenga algo que reclamar.
+        async with app.state.session_factory() as session:
+            for i in range(50):
+                session.add(_old_signal(days_ago=400 + i))
+            await session.commit()
+        # Cierro el engine antes del VACUUM (SQLite locking).
+        await app.state.db_engine.dispose()
+
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test",
+            ) as client:
+                r = await client.post(
+                    "/api/v1/database/vacuum", headers=AUTH,
+                )
+            assert r.status_code == 200, r.text
+            body = r.json()
+            assert "size_mb_before" in body
+            assert "size_mb_after" in body
+            assert "db_path" in body
+            assert body["size_mb_after"] >= 0
+        finally:
+            # El handler del vacuum reabrió la conexión SQLite directa,
+            # pero el engine SQLAlchemy ya estaba disposed.
+            pass

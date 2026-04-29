@@ -87,6 +87,11 @@ class Settings(BaseSettings):
     # mantiene entre arranques; los .config en sí los maneja el usuario.
     last_config_path_file: str = Field(default="data/last_config_path.json")
 
+    # Fixtures (Configuración Paso 3) — directorio donde viven los
+    # canonicals + sibling .sha256 + .metrics.json. Los endpoints
+    # /api/v1/fixtures/* operan sobre este directorio.
+    fixtures_dir: str = Field(default="fixtures")
+
     @field_validator("log_level")
     @classmethod
     def _normalize_log_level(cls, v: str) -> str:

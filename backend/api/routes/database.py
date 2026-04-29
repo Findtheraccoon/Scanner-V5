@@ -27,6 +27,8 @@ deuda técnica documentada en `modules/db/backup.py` hasta que exista
 
 from __future__ import annotations
 
+import asyncio
+import sqlite3
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -248,6 +250,70 @@ async def restore(
             "apague el backend y renombre `restored_path` → `db_path`."
         ),
     }
+
+
+def _vacuum_sync(db_path: Path) -> dict:
+    """`VACUUM` directo sobre el archivo SQLite.
+
+    Bloqueante. Reclama el espacio que `DELETE` no devuelve al
+    filesystem. En DBs grandes puede tomar minutos. Se invoca via
+    `asyncio.to_thread` desde el handler para no bloquear el event
+    loop.
+
+    Returns:
+        `{db_path, size_mb_before, size_mb_after}`.
+
+    Raises:
+        sqlite3.OperationalError: si la DB está bloqueada por otra
+            conexión activa (frecuente — el backend mantiene el
+            engine abierto). El handler lo traduce a 503.
+    """
+    size_before = db_path.stat().st_size / (1024 * 1024)
+    conn = sqlite3.connect(str(db_path))
+    try:
+        conn.execute("VACUUM")
+        conn.commit()
+    finally:
+        conn.close()
+    size_after = db_path.stat().st_size / (1024 * 1024)
+    return {
+        "db_path": str(db_path),
+        "size_mb_before": round(size_before, 2),
+        "size_mb_after": round(size_after, 2),
+    }
+
+
+@router.post("/vacuum")
+async def vacuum(
+    request: Request,
+    _token: str = Depends(require_auth),
+) -> dict:
+    """Recupera espacio post rotación agresiva (§9.4).
+
+    SQLite no devuelve al filesystem el espacio que liberan los
+    `DELETE` hasta hacer `VACUUM`. Esta operación es **bloqueante**
+    y puede tomar minutos en DBs grandes; el frontend debe mostrar
+    spinner y advertencia.
+
+    - 400 si la DB es `:memory:` (no aplica).
+    - 503 si SQLite está locked (otra conexión activa) — usuario
+      debe pausar el auto-scan o el backup en curso e intentar de
+      nuevo.
+    """
+    db_path = _try_derive_db_path(request)
+    if db_path is None:
+        raise HTTPException(
+            status_code=400,
+            detail="VACUUM no soportado para SQLite in-memory",
+        )
+    try:
+        result = await asyncio.to_thread(_vacuum_sync, db_path)
+    except sqlite3.OperationalError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"DB locked — VACUUM no disponible: {e}",
+        ) from e
+    return result
 
 
 @router.post("/backups")

@@ -366,6 +366,7 @@ def main() -> int:
         rotate_on_shutdown=settings.rotate_on_shutdown,
         db_size_limit_mb=settings.db_size_limit_mb,
         last_config_path_file=settings.last_config_path_file,
+        fixtures_dir=settings.fixtures_dir,
     )
 
     if (
