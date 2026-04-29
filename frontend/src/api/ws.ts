@@ -3,6 +3,7 @@ import { useAuthStore } from "@/stores/auth";
 import { useEngineStore } from "@/stores/engine";
 import { useSignalsStore } from "@/stores/signals";
 import { useSlotsStore } from "@/stores/slots";
+import { useValidatorProgressStore } from "@/stores/validatorProgress";
 import { useEffect } from "react";
 import type {
   ApiUsageTickPayload,
@@ -93,9 +94,9 @@ function dispatch(env: WsEnvelope): void {
       useApiUsageStore.getState().applyTick(env.payload as ApiUsageTickPayload);
       break;
     case "validator.progress":
-      // no-op por ahora; cuando entremos a Configuración consume este evento
-      // para mostrar la progress bar del Validator.
-      void (env.payload as ValidatorProgressPayload);
+      useValidatorProgressStore
+        .getState()
+        .applyProgress(env.payload as ValidatorProgressPayload);
       break;
     case "system.log":
       // no-op por ahora; útil para Dashboard cuando lleguemos.
