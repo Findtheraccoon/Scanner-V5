@@ -681,3 +681,62 @@ input.inp { width: 100%; }
 @media (max-width: 1200px) {
   .eng-cards { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   BOX 2 — Archivo de configuración (.config)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.cfg-wrap {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: var(--gap-4);
+}
+.cfg-active {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(0,0,0,0.32);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm);
+}
+.cfg-active__name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--t-100);
+  letter-spacing: 0.02em;
+}
+.cfg-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: var(--gap-3);
+}
+.cfg-state {
+  background: rgba(0,0,0,0.32);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-sm);
+  padding: 12px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.cfg-state__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.cfg-state__row .lbl { color: var(--t-55); }
+.cfg-state__row .val { color: var(--t-90); }
+.cfg-state__row .val.is-ok    { color: var(--ok); }
+.cfg-state__row .val.is-warn  { color: var(--warn); }
+.cfg-state__row .val.is-pend  { color: var(--t-38); }
+.cfg-state__divider { border-top: 1px dashed var(--hair-2); margin: 4px 0; }
+
+@media (max-width: 1500px) {
+  .cfg-wrap { grid-template-columns: 1fr; }
+}

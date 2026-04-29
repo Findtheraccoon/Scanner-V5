@@ -3,6 +3,7 @@ import type { ReactElement } from "react";
 import { Box } from "./Box";
 import { Frame } from "./Frame";
 import { Box1Engines } from "./boxes/Box1Engines";
+import { Box2Config } from "./boxes/Box2Config";
 import "./configuration.css";
 
 /* ConfigurationPage · root de la pestaña Configuración.
@@ -36,16 +37,7 @@ export function ConfigurationPage(): ReactElement {
 
       <Frame>
         <Box1Engines />
-
-        <Box
-          id={2}
-          state="pend"
-          title="Archivo de configuración"
-          sub="cargar · guardar · descargar · contiene TD keys + fixtures + preferencias"
-          statusText="—"
-        >
-          <div className="note">Pendiente · contenido en commit 5.</div>
-        </Box>
+        <Box2Config />
 
         <Box
           id={3}
