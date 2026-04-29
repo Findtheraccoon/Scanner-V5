@@ -6,7 +6,6 @@ import type {
   ConfigCurrentResponse,
   ConfigLastInfo,
   ConfigLoadResponse,
-  ConfigPutResponse,
   ConfigPutS3Response,
   ConfigPutStartupFlagsResponse,
   ConfigPutTdKeysResponse,
@@ -411,8 +410,7 @@ export function useDatabaseStats() {
 export function useDatabaseVacuum() {
   const qc = useQueryClient();
   return useMutation<DatabaseVacuumResponse, ApiError, void>({
-    mutationFn: () =>
-      api<DatabaseVacuumResponse>("/database/vacuum", { method: "POST" }),
+    mutationFn: () => api<DatabaseVacuumResponse>("/database/vacuum", { method: "POST" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["database.stats"] });
     },

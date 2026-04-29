@@ -26,10 +26,8 @@ const ALL_COLLAPSED: Record<BoxId, boolean> = {
 
 export const useConfigUiStore = create<ConfigUiState>((set) => ({
   collapsed: { ...ALL_COLLAPSED },
-  toggle: (id) =>
-    set((s) => ({ collapsed: { ...s.collapsed, [id]: !s.collapsed[id] } })),
-  set: (id, collapsed) =>
-    set((s) => ({ collapsed: { ...s.collapsed, [id]: collapsed } })),
+  toggle: (id) => set((s) => ({ collapsed: { ...s.collapsed, [id]: !s.collapsed[id] } })),
+  set: (id, collapsed) => set((s) => ({ collapsed: { ...s.collapsed, [id]: collapsed } })),
   collapseAll: () => set({ collapsed: { ...ALL_COLLAPSED } }),
   expandAll: () =>
     set({

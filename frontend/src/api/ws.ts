@@ -94,9 +94,7 @@ function dispatch(env: WsEnvelope): void {
       useApiUsageStore.getState().applyTick(env.payload as ApiUsageTickPayload);
       break;
     case "validator.progress":
-      useValidatorProgressStore
-        .getState()
-        .applyProgress(env.payload as ValidatorProgressPayload);
+      useValidatorProgressStore.getState().applyProgress(env.payload as ValidatorProgressPayload);
       break;
     case "system.log":
       // no-op por ahora; útil para Dashboard cuando lleguemos.
