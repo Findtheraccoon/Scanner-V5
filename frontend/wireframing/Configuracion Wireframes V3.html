@@ -938,3 +938,417 @@
           </div>
         </div>
       </div>
+
+      <!-- ============================================================
+           BOX 5 — Validator + diagnóstico (sin flags de arranque)
+           ============================================================ -->
+      <div class="box open" data-box="5">
+        <div class="box-head">
+          <div class="box-num">5</div>
+          <div>
+            <div class="box-title">validator + diagnóstico</div>
+            <div class="box-sub">batería D/A/B/C/E/F/G · histórico de reportes · estado de motores read-only</div>
+          </div>
+          <div class="box-meta">
+            <span class="box-status v-p5-idle"><span class="pilot"></span>último · pass · 7/7</span>
+            <span class="box-status warn v-p5-running" style="display:none"><span class="pilot"></span>corriendo · 3/7</span>
+            <span class="box-status warn v-p5-failed" style="display:none"><span class="pilot"></span>warning · F parity</span>
+            <span class="box-chev">▾</span>
+          </div>
+        </div>
+        <div class="box-body">
+
+          <style>
+            .p5-grid{display:grid;grid-template-columns:2fr 1fr;gap:18px;}
+            .val-block{border:1.5px solid var(--ink);background:var(--paper);padding:14px 16px;}
+            .val-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+            .val-title{font-family:'Kalam',cursive;font-size:18px;font-weight:700;}
+            .val-bar{height:10px;border:1.2px solid var(--ink);background:var(--paper);position:relative;margin-bottom:14px;}
+            .val-bar i{display:block;height:100%;background:var(--ink);}
+            .val-bar .lbl{position:absolute;right:-2px;top:-18px;font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);}
+            .val-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;}
+            .vg-cell{border:1.5px solid var(--ink);padding:8px 6px;background:var(--paper);display:flex;flex-direction:column;gap:4px;min-height:90px;position:relative;}
+            .vg-cell .l{font-family:'Kalam',cursive;font-size:18px;font-weight:700;text-align:center;}
+            .vg-cell .n{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.06em;text-align:center;color:var(--muted);line-height:1.2;}
+            .vg-cell .stat{margin-top:auto;height:6px;border:1px solid var(--ink);background:var(--paper);position:relative;}
+            .vg-cell .stat i{display:block;height:100%;}
+            .vg-cell.ok .stat i{width:100%;background:var(--accent);}
+            .vg-cell.ok::after{content:"✓";position:absolute;top:5px;right:6px;font-family:'Kalam',cursive;font-weight:700;font-size:13px;color:var(--ok);}
+            .vg-cell.run .stat i{width:55%;background:var(--warn);}
+            .vg-cell.run::after{content:"⟳";position:absolute;top:5px;right:6px;font-family:'Kalam',cursive;font-weight:700;font-size:13px;color:var(--warn);}
+            .vg-cell.warn .stat i{width:100%;background:var(--warn);}
+            .vg-cell.warn::after{content:"⚠";position:absolute;top:5px;right:6px;font-size:12px;color:var(--warn);}
+            .vg-cell.fail .stat i{width:100%;background:var(--err);}
+            .vg-cell.fail::after{content:"✕";position:absolute;top:5px;right:6px;font-family:'Kalam',cursive;font-weight:700;font-size:13px;color:var(--err);}
+            .vg-cell.pend{opacity:.45;}
+            .val-msg{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);margin-top:10px;padding-top:10px;border-top:1.5px dashed var(--ink);display:flex;justify-content:space-between;align-items:center;gap:8px;}
+
+            .reports{border:1.5px solid var(--ink);background:var(--paper);padding:0;}
+            .reports .rh-head{padding:8px 12px;background:var(--paper-2);border-bottom:1.5px solid var(--ink);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between;align-items:center;}
+            .rep-row{padding:8px 12px;border-bottom:1px dashed var(--ink);font-family:'JetBrains Mono',monospace;font-size:10.5px;display:grid;grid-template-columns:1fr auto;gap:6px;cursor:pointer;}
+            .rep-row:hover{background:var(--paper-2);}
+            .rep-row:last-child{border-bottom:none;}
+            .rep-meta{display:flex;gap:10px;align-items:center;color:var(--muted);}
+            .rep-meta .trig{font-size:9px;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--ink);padding:1px 5px;color:var(--ink);}
+            .rep-mini{display:flex;gap:2px;align-items:center;}
+            .rep-mini i{width:7px;height:7px;background:var(--ok);border:1px solid var(--ink);display:inline-block;}
+            .rep-mini i.warn{background:var(--warn);}
+            .rep-mini i.fail{background:var(--err);}
+            .rep-mini i.pend{background:transparent;}
+
+            .engines{display:grid;grid-template-columns:1fr;gap:10px;margin-top:10px;}
+            .engine-row{
+              border:1px solid var(--ink);background:var(--paper);padding:8px 10px;
+              display:flex;align-items:center;gap:10px;
+            }
+            .engine-row .nm{font-family:'Kalam',cursive;font-size:14px;font-weight:700;display:flex;align-items:center;gap:6px;min-width:120px;}
+            .engine-row .ms{font-family:'JetBrains Mono',monospace;font-size:9.5px;color:var(--muted);line-height:1.4;flex:1;}
+          </style>
+
+          <div class="step-toolbar">
+            <span class="left">corre la batería on-demand · histórico persiste en DB · TXT en LOG/</span>
+            <div class="right">
+              <button class="btn ghost">solo conectividad</button>
+              <button class="btn primary">correr validator</button>
+            </div>
+          </div>
+
+          <div class="p5-grid">
+
+            <!-- 5.1 Grid del Validator + 5.2 Histórico -->
+            <div>
+              <div class="val-block">
+                <div class="val-head">
+                  <div>
+                    <div class="val-title">batería D/A/B/C/E/F/G</div>
+                    <div class="cap">grid 7 celdas · alimentado por WS <span class="mono">validator.progress</span></div>
+                  </div>
+                  <span class="box-status">trigger · manual</span>
+                </div>
+
+                <!-- IDLE -->
+                <div class="v-p5-idle" style="display:block">
+                  <div class="val-bar"><i style="width:100%"></i><span class="lbl">7/7 · pass · 42s</span></div>
+                  <div class="val-grid">
+                    <div class="vg-cell ok"><div class="l">D</div><div class="n">infra</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">A</div><div class="n">fixtures</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">B</div><div class="n">canonicals</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">C</div><div class="n">registry</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">E</div><div class="n">end-to-end</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">F</div><div class="n">parity</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">G</div><div class="n">conectividad</div><div class="stat"><i></i></div></div>
+                  </div>
+                  <div class="val-msg">
+                    <span>último run · hace 8m · 7/7 pass · parity 245/245</span>
+                    <button class="btn sm ghost">ver TXT</button>
+                  </div>
+                </div>
+
+                <!-- RUNNING -->
+                <div class="v-p5-running" style="display:none">
+                  <div class="val-bar"><i style="width:43%;background:var(--warn)"></i><span class="lbl">3/7 · 43% · running</span></div>
+                  <div class="val-grid">
+                    <div class="vg-cell ok"><div class="l">D</div><div class="n">infra</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">A</div><div class="n">fixtures</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">B</div><div class="n">canonicals</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell run"><div class="l">C</div><div class="n">registry</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell pend"><div class="l">E</div><div class="n">end-to-end</div><div class="stat"><i style="width:0"></i></div></div>
+                    <div class="vg-cell pend"><div class="l">F</div><div class="n">parity</div><div class="stat"><i style="width:0"></i></div></div>
+                    <div class="vg-cell pend"><div class="l">G</div><div class="n">conectividad</div><div class="stat"><i style="width:0"></i></div></div>
+                  </div>
+                  <div class="val-msg">
+                    <span>check C · validando slot_registry.json (3/6 slots)…</span>
+                    <button class="btn sm ghost" disabled>cancelar</button>
+                  </div>
+                </div>
+
+                <!-- FAILED -->
+                <div class="v-p5-failed" style="display:none">
+                  <div class="val-bar"><i style="width:100%;background:var(--warn)"></i><span class="lbl">7/7 · warning · 38s</span></div>
+                  <div class="val-grid">
+                    <div class="vg-cell ok"><div class="l">D</div><div class="n">infra</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">A</div><div class="n">fixtures</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">B</div><div class="n">canonicals</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">C</div><div class="n">registry</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">E</div><div class="n">end-to-end</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell warn"><div class="l">F</div><div class="n">parity</div><div class="stat"><i></i></div></div>
+                    <div class="vg-cell ok"><div class="l">G</div><div class="n">conectividad</div><div class="stat"><i></i></div></div>
+                  </div>
+                  <div class="val-msg">
+                    <span style="color:var(--warn)">check F · parity 243/245 (99.18%) · ENG-050 warning · &lt; min_match_rate 99%</span>
+                    <button class="btn sm ghost">ver detalle</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 5.2 Histórico de reportes -->
+              <div class="reports" style="margin-top:14px">
+                <div class="rh-head">
+                  <span>histórico · /validator/reports</span>
+                  <div style="display:flex;gap:6px">
+                    <button class="btn sm ghost">filtros…</button>
+                    <button class="btn sm ghost">exportar</button>
+                  </div>
+                </div>
+                <div class="rep-row">
+                  <div>
+                    <span style="font-weight:600">2026-04-29 09:14 ET</span> · 42s
+                    <div class="rep-meta"><span class="trig">manual</span><span>7/7 pass · parity 245/245</span></div>
+                  </div>
+                  <div class="rep-mini"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                </div>
+                <div class="rep-row">
+                  <div>
+                    <span style="font-weight:600">2026-04-29 08:00 ET</span> · 38s
+                    <div class="rep-meta"><span class="trig">startup</span><span>7/7 pass · parity 245/245</span></div>
+                  </div>
+                  <div class="rep-mini"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                </div>
+                <div class="rep-row">
+                  <div>
+                    <span style="font-weight:600">2026-04-28 18:42 ET</span> · 12s
+                    <div class="rep-meta"><span class="trig">hot_reload</span><span>3/3 pass (A·B·C) · slot 03 IWM</span></div>
+                  </div>
+                  <div class="rep-mini"><i></i><i></i><i></i><i class="pend"></i><i class="pend"></i><i class="pend"></i><i class="pend"></i></div>
+                </div>
+                <div class="rep-row">
+                  <div>
+                    <span style="font-weight:600">2026-04-28 14:00 ET</span> · 5s
+                    <div class="rep-meta"><span class="trig">connectivity</span><span>1/1 pass (G) · 5 keys ok</span></div>
+                  </div>
+                  <div class="rep-mini"><i class="pend"></i><i class="pend"></i><i class="pend"></i><i class="pend"></i><i class="pend"></i><i class="pend"></i><i></i></div>
+                </div>
+                <div class="rep-row">
+                  <div>
+                    <span style="font-weight:600">2026-04-28 09:00 ET</span> · 41s
+                    <div class="rep-meta"><span class="trig">startup</span><span>7/7 warning · parity 243/245</span></div>
+                  </div>
+                  <div class="rep-mini"><i></i><i></i><i></i><i></i><i></i><i class="warn"></i><i></i></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Estado de los 3 motores (espejo del Box 1 pero compacto) -->
+            <div>
+              <div class="val-block">
+                <div class="val-head">
+                  <div class="val-title">estado de motores</div>
+                  <div class="cap" style="font-size:13px">resumen · detalle full en Dashboard</div>
+                </div>
+                <div class="engines">
+                  <div class="engine-row">
+                    <div class="nm">data engine <span class="pilot"></span></div>
+                    <div class="ms">heartbeat hace 8s · 5 keys / 3 ok</div>
+                  </div>
+                  <div class="engine-row">
+                    <div class="nm">scoring <span class="pilot"></span></div>
+                    <div class="ms">healthcheck OK · v5.2.0 · parity 245/245</div>
+                  </div>
+                  <div class="engine-row">
+                    <div class="nm">database <span class="pilot"></span></div>
+                    <div class="ms">342 MB op · 1.2 GB archive · última rot. hace 6h</div>
+                  </div>
+                </div>
+                <div style="margin-top:8px">
+                  <button class="btn sm ghost">ver último healthcheck (JSON)</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="ann" style="top:10px;right:-14px;width:200px;text-align:right">
+            <span class="num">7</span>el grid de 7 celdas se alimenta del WS · 2 events por test (start + end)
+          </div>
+          <div class="ann" style="bottom:80px;left:-14px;width:200px">
+            <span class="num">8</span>histórico con cursor pagination · click → modal con detalle full + descarga TXT
+          </div>
+        </div>
+      </div>
+
+      <!-- ============================================================
+           BOX 6 — Backup remoto S3 (último de la cadena)
+           ============================================================ -->
+      <div class="box" data-box="6">
+        <div class="box-head">
+          <div class="box-num">6</div>
+          <div>
+            <div class="box-title">backup remoto · S3-compatible</div>
+            <div class="box-sub">AWS · Backblaze B2 · Cloudflare R2 · MinIO · respaldo offsite del archivo Config + DB</div>
+          </div>
+          <div class="box-meta">
+            <span class="box-status v-p6-ok"><span class="pilot"></span>conectado · último hace 18h</span>
+            <span class="box-status warn v-p6-s3-fail" style="display:none"><span class="pilot"></span>sin conexión</span>
+            <span class="box-chev">▾</span>
+          </div>
+        </div>
+        <div class="box-body">
+
+          <style>
+            .s3-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+            .s3-card{border:1.5px solid var(--ink);background:var(--paper);padding:14px 16px;}
+            .s3-card .h{font-family:'Kalam',cursive;font-size:18px;font-weight:700;margin:0 0 4px;}
+            .s3-card .s{font-family:'Caveat',cursive;font-size:14px;color:var(--muted);margin-bottom:10px;}
+            .s3-fields{display:grid;grid-template-columns:1fr 1fr;gap:8px 10px;}
+            .s3-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+            .s3-status{
+              border-top:1px dashed var(--ink);padding-top:10px;margin-top:10px;
+              font-family:'JetBrains Mono',monospace;font-size:11px;
+            }
+            .s3-status .ok{color:var(--ok);}
+            .s3-status .err{color:var(--err);}
+
+            .backups-list{border:1.5px solid var(--ink);background:var(--paper);}
+            .backups-head{padding:8px 12px;background:var(--paper-2);border-bottom:1.5px solid var(--ink);font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);}
+            .backup-row{display:grid;grid-template-columns:1fr 80px 110px 100px;gap:10px;padding:8px 12px;border-bottom:1px dashed var(--ink);align-items:center;font-family:'JetBrains Mono',monospace;font-size:11px;}
+            .backup-row:last-child{border-bottom:none;}
+            .backup-row .key{font-weight:600;}
+            .backup-row .size{color:var(--muted);}
+            .backup-row .ts{color:var(--muted);}
+            .backup-row .actions-cell{display:flex;gap:6px;justify-content:flex-end;}
+          </style>
+
+          <div class="s3-grid">
+
+            <!-- 6.1 Configuración del bucket -->
+            <div class="s3-card">
+              <div class="h">configuración del bucket</div>
+              <div class="s">cualquier provider con endpoint URL · multi-region</div>
+
+              <div class="s3-fields">
+                <div class="field"><label>endpoint URL</label><div class="inp">https://s3.us-east-1.amazonaws.com</div></div>
+                <div class="field"><label>region</label><div class="inp">us-east-1</div></div>
+                <div class="field"><label>bucket</label><div class="inp">scanner-v5-backups</div></div>
+                <div class="field"><label>prefix</label><div class="inp">backups/</div></div>
+                <div class="field"><label>access key</label><div class="inp masked">••••••••••••••••</div></div>
+                <div class="field"><label>secret key</label><div class="inp masked">••••••••••••••••••••</div></div>
+              </div>
+
+              <div class="s3-actions">
+                <button class="btn sm">probar conexión</button>
+                <button class="btn sm primary">backup ahora</button>
+                <button class="btn sm">listar backups</button>
+                <button class="btn sm danger">restaurar…</button>
+              </div>
+
+              <div class="s3-status v-p6-ok" style="display:block">
+                <div><span class="ok">✓</span> conexión OK · último backup hace 18h · 234 MB</div>
+                <div class="cap" style="margin-top:4px">"restaurar" siempre crea sibling de la DB · nunca pisa la viva — doble confirmación obligatoria</div>
+              </div>
+              <div class="s3-status v-p6-s3-fail" style="display:none">
+                <div><span class="err">✕</span> probe falló · timeout @ endpoint_url</div>
+                <div class="cap" style="margin-top:4px">verificar endpoint + credenciales · backup local sigue funcionando · el sistema NO depende de S3</div>
+              </div>
+            </div>
+
+            <!-- 6.2 Listado de backups -->
+            <div class="s3-card">
+              <div class="h">backups disponibles</div>
+              <div class="s">orden descendente por fecha · click "restaurar" abre confirmación</div>
+
+              <div class="backups-list">
+                <div class="backups-head">key · size · last_modified</div>
+                <div class="backup-row">
+                  <span class="key">backups/scanner_2026-04-29.gz</span>
+                  <span class="size">234 MB</span>
+                  <span class="ts">hace 18h</span>
+                  <div class="actions-cell"><button class="btn sm danger">restaurar</button></div>
+                </div>
+                <div class="backup-row">
+                  <span class="key">backups/scanner_2026-04-28.gz</span>
+                  <span class="size">231 MB</span>
+                  <span class="ts">hace 1d</span>
+                  <div class="actions-cell"><button class="btn sm danger">restaurar</button></div>
+                </div>
+                <div class="backup-row">
+                  <span class="key">backups/scanner_2026-04-27.gz</span>
+                  <span class="size">228 MB</span>
+                  <span class="ts">hace 2d</span>
+                  <div class="actions-cell"><button class="btn sm danger">restaurar</button></div>
+                </div>
+                <div class="backup-row">
+                  <span class="key">backups/scanner_2026-04-26.gz</span>
+                  <span class="size">225 MB</span>
+                  <span class="ts">hace 3d</span>
+                  <div class="actions-cell"><button class="btn sm danger">restaurar</button></div>
+                </div>
+                <div class="backup-row">
+                  <span class="key">backups/scanner_2026-04-22.gz</span>
+                  <span class="size">218 MB</span>
+                  <span class="ts">hace 7d</span>
+                  <div class="actions-cell"><button class="btn sm danger">restaurar</button></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <div class="ann" style="top:14px;right:-14px;width:200px;text-align:right">
+            <span class="num">9</span>credenciales S3 hoy van por body al backend — encriptación con master key cuando se cierre la deuda técnica
+          </div>
+          <div class="ann" style="bottom:14px;left:-14px;width:200px">
+            <span class="num">10</span>backup automático periódico se decide en Dashboard (no acá) · acá es solo manual
+          </div>
+        </div>
+      </div>
+
+    </div>
+    <!-- /frame -->
+  </div>
+  <!-- /config-layout -->
+
+  <!-- pie -->
+  <div class="cap" style="margin-top:18px;font-size:14px">
+    fuente funcional: <span class="mono">frontend/wireframing/Configuracion specs.md</span> · cualquier divergencia con el spec se resuelve a favor del spec
+    <br>
+    iteración v3 sobre v2 — cambios pedidos por el usuario: 6 boxes · box 1 observabilidad · box 2 sólo carga/guardado · box 4 sin benchmark · box 5 sin flags · persistencia DB → Dashboard · línea-guía izquierda
+  </div>
+
+</div>
+<!-- /wrap -->
+
+<script>
+  /* ============================================================
+     SCRIPT — tweaks panel + acordeones
+     ============================================================ */
+
+  // Tweaks: toggle de pills por grupo, persistido en localStorage
+  function bindGroup(group, attr, apply){
+    document.querySelectorAll(`[data-group="${group}"] .pill`).forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        document.querySelectorAll(`[data-group="${group}"] .pill`).forEach(b=>b.classList.remove('on'));
+        btn.classList.add('on');
+        const val = btn.getAttribute(`data-${attr}`);
+        apply(val);
+        try{ localStorage.setItem('scv5cfg3_'+attr, val); }catch{}
+      });
+    });
+  }
+  bindGroup('p2','p2',(v)=>{ document.body.dataset.stP2 = v; });
+  bindGroup('p5','p5',(v)=>{ document.body.dataset.stP5 = v; });
+  bindGroup('p6','p6',(v)=>{ document.body.dataset.stP6 = v; });
+  bindGroup('ann','ann',(v)=>{ document.body.dataset.ann = v; });
+
+  // Acordeones: click en .box-head expande/colapsa el .box
+  document.querySelectorAll('.box .box-head').forEach(h=>{
+    h.addEventListener('click', (e)=>{
+      // ignorar clicks en botones / inputs internos
+      if (e.target.closest('button, input, .toggle, .fix-select, .fix-dropdown')) return;
+      const box = h.closest('.box');
+      box.classList.toggle('open');
+    });
+  });
+
+  // Restore persisted tweaks
+  (function restore(){
+    [['p2','p2'],['p5','p5'],['p6','p6'],['ann','ann']].forEach(([g,a])=>{
+      const v = localStorage.getItem('scv5cfg3_'+a);
+      if(!v) return;
+      const btn = document.querySelector(`[data-group="${g}"] .pill[data-${a}="${v}"]`);
+      if(btn) btn.click();
+    });
+  })();
+</script>
+
+</body>
+</html>
