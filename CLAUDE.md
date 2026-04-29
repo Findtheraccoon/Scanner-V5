@@ -53,7 +53,7 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 
 ## Estado actual de la implementación
 
-**Rama activa:** `claude/review-project-status-LhwGj` — scaffolding inicial del frontend Vite + React 18. La rama previa fue mergeada a main; este branch continúa con la app web sobre el backend ya completo.
+**Rama activa:** `claude/review-project-status-OZyjj` — cierre de 9 de 11 deudas técnicas del backend identificadas en `frontend/wireframing/Configuracion specs.md` §6.2. La branch previa `LhwGj` fue mergeada a main vía PR #40 (commit `ab0182e`).
 
 ### Completado
 
@@ -66,11 +66,11 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 | 5 (Persistencia + API + WS) | `backend/modules/db/` + `backend/api/` + `backend/modules/signal_pipeline/` — SQLAlchemy async, Alembic híbrido, REST auth Bearer, WS con 6 eventos, pipeline scan→persist→broadcast con flag `persist`, backup/restore S3, transparent reads op+archive | ✅ |
 | 6 (Database Engine) | `backend/engines/database/` — heartbeat + rotación retention + move-to-archive + retención agresiva (§9.4) + watchdog auto opt-in | ✅ |
 | 7 (Archive + S3) | `data/archive/scanner_archive.db` + `modules/db/backup.py` + validator_reports histórico | ✅ |
-| Config | `backend/modules/config/` — Fernet encriptado standalone (crypto + loader + models). Wiring a endpoints pendiente | ✅ standalone |
+| Config | `backend/modules/config/` — plaintext + `api/routes/config.py` con 10 endpoints (load/save/save_as/clear/last/current + PUT keys/s3/startup_flags + reload-policies). Modelo `.config` portable; sistema arranca de cero sin `.config` cargado. LAST persistido en `data/last_config_path.json`. | ✅ wired |
 | D (Entrypoint) | `backend/main.py` + `backend/settings.py` + `backend/api/workers.py` — Pydantic Settings, lifecycle, worker factories, Validator wiring, archive wiring, shutdown rotation, healthcheck wired al heartbeat | ✅ |
-| Fixtures | `backend/modules/fixtures/` — loader | ✅ base |
+| Fixtures | `backend/modules/fixtures/` — loader + `api/routes/fixtures.py` con GET list / POST upload / DELETE (valida engine_compat_range, 409 si fixture_id duplicado o usado por slot) | ✅ wired |
 
-**Tests totales:** 1074 passing + 1 slow (parity regression guard) en `backend/tests/`. `ruff check .` limpio.
+**Tests totales:** 1118 passing + 1 slow (parity regression guard) en `backend/tests/`. `ruff check .` limpio.
 
 **Frontend tests:** 6/6 passing (`pnpm test` en `frontend/`). Vite build limpio (~294KB JS gzip 93.6KB · 54KB CSS gzip 11KB). `pnpm lint` (Biome) limpio.
 
@@ -229,14 +229,18 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 | `api/workers.py:heartbeat_worker` | Extendido con `healthcheck_fn` opcional (corre via `asyncio.to_thread` antes de emitir el heartbeat). Sin el param, el worker reporta siempre green |
 | `tests/engines/scoring/test_parity_regression.py` | Regression guard `@pytest.mark.slow @pytest.mark.parity` — falla si parity < 100%. ~2min. Se excluye del `pytest -q` default |
 
-### Módulos nuevos del Config encriptado (standalone, pendiente wiring)
+### Módulos nuevos del Config plaintext + REST + Fixtures REST + Vacuum (sesión OZyjj 2026-04-30)
 
 | Archivo | Rol |
 |---|---|
-| `modules/config/crypto.py` | `get_master_key()` env→file→auto-gen + `encrypt_str`/`decrypt_str` con Fernet. `MasterKeyError` custom |
-| `modules/config/models.py` | `UserConfig` Pydantic frozen + `TDKeyConfig` + `S3Config` (copias encriptadas del body). Secretos en plain fields en runtime |
-| `modules/config/loader.py` | `save_config` encripta los 3 secretos (`twelvedata_keys`, `s3_config`, `api_bearer_token`) como `<name>_enc` + atomic write. `load_config` desencripta y reconstruye el modelo |
+| `modules/config/models.py` | `UserConfig` Pydantic frozen + `TDKeyConfig` + `S3Config` + `StartupFlags` (override de `Settings`). Plaintext, sin encripción |
+| `modules/config/loader.py` | `save_config` / `load_config` plaintext con atomic write |
 | `modules/config/__init__.py` | API pública del módulo |
+| `api/routes/config.py` | 10 endpoints: load / save / save_as / clear / last / current / PUT keys/s3/startup_flags / reload-policies. Hot-reload del KeyPool integrado |
+| `api/routes/fixtures.py` | 3 endpoints: GET (list) / POST upload (multipart) / DELETE. Valida `engine_compat_range` ⊇ `ENGINE_VERSION`, persiste sibling `.sha256`, 409 si fixture_id duplicado o usado por slot |
+| `engines/data/api_keys.py:KeyPool.reload(keys)` | Hot-reload de keys preservando contadores runtime de las que siguen activas. Wipe del secret de las eliminadas |
+| `api/routes/database.py:vacuum` | `POST /database/vacuum` — SQLite VACUUM bloqueante via `asyncio.to_thread`. 503 si DB locked |
+| `main.py:_try_load_last_config` | Carga silenciosa del LAST `.config` al arranque del backend si el path apuntado existe |
 
 ### Frontend (Cockpit completo wired al backend · 2026-04-29)
 
@@ -306,13 +310,13 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
   - **Hi-Fi de Configuración** — spec funcional `Configuracion specs.md` + wireframe mid-fi `V3.html` ya disponibles. Próximo paso: hi-fi Phoenix v1 sobre el V3 + scaffold React (reemplaza el stub).
   - **Hi-Fi del Dashboard** — sin spec ni wireframe todavía. La persistencia DB + retención que se sacó de Configuración vive acá.
   - **Hi-Fi de Memento** — sin spec ni wireframe todavía.
-  - **11 deudas técnicas del backend** identificadas en `Configuracion specs.md` §6.2 — necesarias para cablear el frontend al 100% de Configuración (uploads de fixtures, /config/save, /config/master-key/*, /system/restart, /system/open-folder, /database/vacuum, etc).
-  - **Setting `auto_scan_run_at_startup`** en `Settings` Pydantic — el "Auto-LAST" del spec §5.2; hoy el `auto_scan_loop` arranca corriendo siempre.
+  - ~~**11 deudas técnicas del backend**~~ → **9 cerradas 2026-04-30** (sesión OZyjj). Quedan 2 diferidas: `POST /system/restart` (alto riesgo, PR aparte) y `GET /system/open-folder` (descartado v1). Las de `master-key/*` se eliminaron por decisión de modelo (`.config` plaintext, sin master key).
+  - ~~**Setting `auto_scan_run_at_startup`**~~ → **Eliminado por decisión.** El sistema arranca con auto-scan activo (lifespan); el toggle pause/resume se hace desde el Cockpit, no desde Configuración Paso 5.
 - ~~**Fase 5.4 cierre**~~ → **Cerrado 2026-04-23 al 100%.** Post subida del `qqq_1min.json` original del Observatory, se identificaron 2 bugs reales del motor (ver gotchas #16 y #17): aggregator no resetaba al cambio de día + ORB gate usaba mean-cross-day en vez de median-intraday. Ambos arreglados → **245/245 match**. `DEFAULT_MIN_MATCH_RATE` subido a 0.99. Regression guard en `test_parity_regression.py` (slow, ~2min).
 - ~~**Healthcheck continuo spec §3.4**~~ → **Cerrado 2026-04-23.** `engines/scoring/healthcheck.py` wired al `heartbeat_worker` con `healthcheck_fn` opcional. Cada 2 min valida operativamente el motor (no-crash, shape, signal vocab) y reporta green/yellow+ENG-050/red+ENG-001 al Dashboard.
 - ~~**Watchdog automático AR.5**~~ → **Cerrado 2026-04-23.** `engines/database/watchdog.py:aggressive_rotation_watchdog` opt-in via `SCANNER_AGGRESSIVE_ROTATION_ENABLED=true`. Chequea tamaño DB cada `SCANNER_AGGRESSIVE_ROTATION_INTERVAL_S` (default 3600s) y dispara rotación agresiva. Default off por ser destructivo.
-- ~~**`modules/config/` encriptado**~~ → **Cerrado 2026-04-23 en modo standalone.** Fernet-based con master key desde env `SCANNER_MASTER_KEY` o file `data/master.key` (auto-gen). `UserConfig` Pydantic con 3 campos secretos encriptados inline al persistir. **Wiring a endpoints pendiente** — los endpoints `POST /database/backup` siguen aceptando credenciales en body por compat. Integración cuando el frontend consuma el Config (decisión UX: cómo editar + cuándo recargar).
-- **Distribución Windows:** `.exe` via Inno Setup. Depende de frontend + decisión sobre bundling del `master.key`.
+- ~~**`modules/config/` encriptado**~~ → **Refactoreado 2026-04-30 a plaintext + wired al REST (sesión OZyjj).** El módulo Fernet/master_key fue eliminado: el `.config` es ahora un archivo portable JSON plaintext que el usuario maneja como un documento (Cargar / Guardar / LAST). Sin `.config` cargado, el sistema arranca de cero. La seguridad depende de dónde el usuario almacene el archivo. 10 endpoints REST en `api/routes/config.py`. LAST persistido en `data/last_config_path.json`. Hot-reload del KeyPool tras `PUT /config/twelvedata_keys`.
+- **Distribución Windows:** `.exe` via Inno Setup. Depende de frontend.
 - ~~**Auto-scan pause/resume**~~ → **Cerrado.** `POST /api/v1/scan/auto/{pause,resume,status}` con `asyncio.Event` en `app.state.auto_scan_running`. El loop bloquea en `await running.wait()` antes del próximo ciclo y emite `engine.status={status: "paused"}` por WS. 6 tests nuevos en `tests/api/test_scan.py::TestAutoScanPauseResume`. Frontend cableado vía `useAutoScanPause/Resume/Status`.
 
 #### Deudas técnicas a eliminar / cerrar antes de la release 1
@@ -320,32 +324,67 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 **Frontend:**
 - **`frontend/src/components/Dev/DevStateSwitcher.tsx` + `dev-state-switcher.css`**: switcher flotante (sólo `import.meta.env.DEV`) que fuerza estados del Cockpit (warmup/degraded/splus/error/scanning/loading) escribiendo en `useEngineStore.stateOverride`. Útil para previsualizar variantes sin levantar backend ni reproducir condiciones reales. Pre-release: borrar la carpeta `Dev/`, quitar `stateOverride` + `setStateOverride` de `engine.ts`, y la rama del override en `useCockpitState`.
 
-**Backend (endpoints faltantes para que la pestaña Configuración funcione al 100%):**
+**Backend (endpoints faltantes — estado 2026-04-30 post sesión OZyjj):**
 
-Identificados durante el spec funcional `Configuracion specs.md` §6.2. Cada uno tiene su uso documentado y constraints técnicos:
+Identificados durante el spec funcional `Configuracion specs.md` §6.2. Estado tras la sesión:
 
-| Método | Path | Uso | Constraint |
-|---|---|---|---|
-| `POST` | `/api/v1/fixtures/upload` | Box 4 — upload de fixture nuevo | multipart o body JSON, valida estructura Pydantic + SHA-256 + `engine_compat_range`, persiste en `backend/fixtures/`, 409 si `fixture_id` duplicado |
-| `DELETE` | `/api/v1/fixtures/{fixture_id}` | Box 4 — eliminar fixture | rechaza 409 si algún slot lo tiene asignado |
-| `POST` | `/api/v1/database/vacuum` | Dashboard — recuperar espacio post rotación agresiva | bloqueante · SQLite VACUUM directo · puede tomar minutos |
-| `PUT` | `/api/v1/config/twelvedata_keys` | Box 3 — guardar 5 keys | encripta `secret` con master key · hot-reload del KeyPool |
-| `PUT` | `/api/v1/config/s3` | Box 6 — guardar credenciales S3 | encripta `secret_key` con master key |
-| `PUT` | `/api/v1/config/startup_flags` | Box 5 — guardar flags de arranque (si se reactivan) | persiste en UserConfig · algunos requieren reinicio |
-| `POST` | `/api/v1/config/reload-policies` | Dashboard — hot-reload del watchdog | reinicia el task del watchdog sin reiniciar el backend |
-| `POST` | `/api/v1/config/master-key/generate` | Box 1 viejo (si se vuelve a meter master key) | retorna la clave plaintext UNA vez · persiste en `data/master.key` |
-| `POST` | `/api/v1/config/master-key/load` | Box 1 viejo idem | acepta clave en body · valida que pueda desencriptar UserConfig actual |
-| `POST` | `/api/v1/system/restart` | Box 5 — reiniciar backend desde la UI | `os.execv` o equivalente · frontend reconecta con backoff |
-| `GET` | `/api/v1/system/open-folder` | (descartado v1 ·) Box 1 — abrir carpeta de datos | invoca el SO · 200 o 501 según plataforma |
+| Método | Path | Estado |
+|---|---|---|
+| `POST` | `/api/v1/fixtures/upload` | ✅ wired (sesión OZyjj) |
+| `DELETE` | `/api/v1/fixtures/{fixture_id}` | ✅ wired (sesión OZyjj) |
+| `POST` | `/api/v1/database/vacuum` | ✅ wired (sesión OZyjj) |
+| `PUT` | `/api/v1/config/twelvedata_keys` | ✅ wired (sesión OZyjj) — hot-reload del KeyPool |
+| `PUT` | `/api/v1/config/s3` | ✅ wired (sesión OZyjj) |
+| `PUT` | `/api/v1/config/startup_flags` | ✅ wired (sesión OZyjj) |
+| `POST` | `/api/v1/config/reload-policies` | ✅ wired (sesión OZyjj) |
+| `POST` | `/api/v1/config/master-key/generate` | ❌ eliminado (modelo `.config` plaintext) |
+| `POST` | `/api/v1/config/master-key/load` | ❌ eliminado (modelo `.config` plaintext) |
+| `POST` | `/api/v1/system/restart` | ⏸ diferido a PR aparte (alto riesgo `os.execv`) |
+| `GET` | `/api/v1/system/open-folder` | ❌ descartado v1 (per spec) |
 
-**Backend (settings):**
-- **`auto_scan_run_at_startup: bool = True`** en `Settings` Pydantic — el "Auto-LAST" del spec §5.2. Hoy el `auto_scan_loop` arranca corriendo siempre. Cuando se cierre, modificar el factory en `main.py:138` para que el `running.set()` inicial respete este flag.
+Adicionales wired en la sesión:
+- `POST /api/v1/config/load`, `/save`, `/save_as`, `/clear` — gestión del `.config` portable.
+- `GET /api/v1/config/last`, `/current` — lectura del runtime + LAST.
+- `GET /api/v1/fixtures` — listado con metadata + sha256 status + slots que lo usan.
 
 ### Para el siguiente chat
 
-**Estado al 2026-04-29:** backend **completo a spec §3 + §4 + §9.4** + endpoint `pause/resume` del auto-scan loop · **1074 tests + 1 slow** passing · parity 245/245 · ruff limpio. **Frontend Cockpit completo wired al backend** sobre Vite 5 + React 18 + TS strict + Tailwind 3 + Biome + Vitest + Zustand 5 + TanStack Query 5. 6/6 smoke tests · build limpio (CSS 54KB · JS 294KB).
+**Estado al 2026-04-30:** backend **completo a spec §3 + §4 + §9.4** + endpoints `/config/*` + `/fixtures/*` + `/database/vacuum` (8 deudas técnicas cerradas en la sesión OZyjj) · **1118 tests + 1 slow** passing · parity 245/245 · ruff limpio. **Frontend Cockpit completo wired al backend** sobre Vite 5 + React 18 + TS strict + Tailwind 3 + Biome + Vitest + Zustand 5 + TanStack Query 5.
 
-Sesión 2026-04-29 — **Cockpit funcional + estados degradados + endpoints pause/resume + spec funcional + 2 wireframes mid-fi de Configuración**:
+**Sesión 2026-04-30 — cierre de 9/11 deudas técnicas backend (sesión OZyjj):**
+
+**Refactor del módulo `config/` a plaintext (decisión de producto):**
+- Borrado `crypto.py` (Fernet + master key flow). El `.config` es un archivo portable que el usuario maneja como un documento. Sin `.config` cargado el sistema arranca de cero — coherente con el modelo histórico del producto ("nada persiste cuando el usuario apaga el scanner; los secretos viven en su `.config`").
+- `models.py` agrega `StartupFlags` (override de `Settings` cuando hay `.config` cargado).
+- `loader.py` simplificado: save/load JSON plaintext con atomic write.
+
+**KeyPool hot-reload:**
+- Nuevo método `async reload(keys)` que reemplaza la configuración preservando contadores runtime (`used_minute`, `used_daily`, etc) de las keys cuyo `key_id` siga en el set nuevo. Wipe best-effort del `secret` de keys eliminadas. Permite que `PUT /config/twelvedata_keys` aplique cambios sin reiniciar el backend.
+
+**10 endpoints REST en `api/routes/config.py`:**
+- `POST /config/load` · `/save` · `/save_as` · `/clear` — gestión del `.config` runtime.
+- `GET /config/last` (path del último cargado, persistido en `data/last_config_path.json`) · `/current` (UserConfig runtime con secretos redactados por default; `?include_secrets=true` para edición).
+- `PUT /config/twelvedata_keys` (con reload del KeyPool) · `/s3` · `/startup_flags`.
+- `POST /config/reload-policies` (sync de `db_size_limit_mb` runtime).
+
+**3 endpoints REST en `api/routes/fixtures.py`:**
+- `GET /fixtures` — lista los `.json` del `fixtures_dir` con metadata + sha256_status + slots que lo usan.
+- `POST /fixtures/upload` — multipart con `.json`. Valida Pydantic + reglas FIX-XXX + `engine_compat_range` ⊇ `ENGINE_VERSION`. 409 si fixture_id duplicado. Persiste `.json` + sibling `.sha256`.
+- `DELETE /fixtures/{fixture_id}` — borra `.json` + `.sha256` + `.metrics.json`. 409 si algún slot lo tiene cargado.
+
+**1 endpoint REST adicional en `api/routes/database.py`:**
+- `POST /database/vacuum` — bloqueante via `asyncio.to_thread`. Recupera espacio post rotación agresiva. 400 con `:memory:`, 503 si la DB está locked.
+
+**Wiring al lifecycle:**
+- `Settings.last_config_path_file` (`data/last_config_path.json`) y `Settings.fixtures_dir` (`fixtures`) nuevos.
+- `app.state.{user_config, user_config_path, last_config_path_file, fixtures_dir, key_pool}` expuestos vía `create_app()`.
+- `main.py:_try_load_last_config` carga el LAST silenciosamente al arranque si el path apuntado existe; si falla, runtime queda vacío y el usuario carga manualmente.
+
+**Dependencia nueva:** `python-multipart>=0.0.20` en `pyproject.toml` (requerido por `UploadFile` de FastAPI).
+
+**Tests nuevos:** 24 (config route) + 7 (KeyPool reload) + 3 (vacuum) + 16 (fixtures) = **50 tests nuevos**. Suite total: 1118 passing.
+
+Sesión previa 2026-04-29 — **Cockpit funcional + estados degradados + endpoints pause/resume + spec funcional + 2 wireframes mid-fi de Configuración**:
 
 **Backend nuevo:**
 - `POST /api/v1/scan/auto/{pause,resume,status}` con `asyncio.Event` en `app.state.auto_scan_running`. El loop bloquea en `await running.wait()` antes del próximo ciclo y emite `engine.status={status:"paused"}` por WS. **6 tests nuevos** en `tests/api/test_scan.py::TestAutoScanPauseResume`. Cierra la deuda histórica del toggle AUTO.
@@ -372,26 +411,23 @@ Sesión 2026-04-29 — **Cockpit funcional + estados degradados + endpoints paus
 - `frontend/wireframing/Configuracion Wireframes V2.html` — primer mid-fi paper-style alineado al spec (5 boxes).
 - `frontend/wireframing/Configuracion Wireframes V3.html` — iteración con feedback del usuario (1354 líneas): 6 boxes · línea-guía vertical izquierda con dots · auto-colapso al quedar OK · Box 1 observabilidad de motores (sin arranque manual) · Box 2 carga/guardado del Config (sin bearer/master/paths) · Box 4 sin columna benchmark · fixture como dropdown · Box 5 sin flags · Box 6 sólo S3 al final.
 
-**Branch de trabajo:** `claude/review-project-status-LhwGj`.
+**Branch de trabajo:** `claude/review-project-status-OZyjj`.
 
-**PR:** [#40](https://github.com/Findtheraccoon/Scanner-V5/pull/40) — abierto, contiene los últimos 3 commits del wireframe V3 + handoff. Los PRs anteriores de la sesión (#35-#39) ya fueron mergeados a main.
+**PR:** abierto al final de la sesión OZyjj con los 4 commits del bloque (refactor config + endpoints config + endpoints vacuum/fixtures + handoff).
 
-**Decisiones cerradas en la sesión:**
-1. **Stack frontend confirmado**: Vite + React 18 + TS strict + Tailwind 3 + Zustand 5 + TanStack Query 5 + Biome + Vitest. shadcn/ui se difiere a Configuración (forms).
-2. **Wiring backend desde día 1** vía Vite proxy. Sin MSW.
-3. **Estados Cockpit implementados** con prioridad explícita; el splus tiene ventana de 30s sobre `latestSignal.computed_at`.
-4. **DevStateSwitcher** como deuda técnica documentada (no pre-release).
-5. **Configuración mid-fi V3** consensuado: 6 boxes con cambios específicos vs el wireframe del diseñador (que tenía conceptos no alineados al backend real).
-6. **Box 1 de Configuración = observabilidad pura** (decisión punto B → b en última iteración) — los motores arrancan automáticamente con lifespan; no hay arranque manual desde la UI. Reduce deuda técnica.
-7. **Box 4 sin columna benchmark** (decisión punto A → c) — el bench lo define el fixture, se ve sólo en el detalle de la biblioteca de fixtures.
+**Decisiones cerradas en la sesión OZyjj (2026-04-30):**
+1. **`auto_scan_run_at_startup` eliminado del scope** — el sistema arranca con auto-scan activo (decisión 6 del handoff anterior: motores con lifespan, sin arranque manual desde la UI).
+2. **`.config` plaintext (decisión A del usuario)** — sin master key, sin Fernet. El `.config` es un archivo portable que el usuario maneja como un documento. Tirado el módulo `crypto.py` y simplificado el `loader.py` plaintext.
+3. **`/system/restart` diferido a otro PR** — alto riesgo de testear `os.execv` sin romper el dev server.
+4. **`/system/open-folder` descartado v1** — confirmado por la nota en el spec (era opcional).
 
 **Decisiones abiertas para el próximo chat:**
-1. **Próximo bloque sugerido**:
-   - (a) **Hi-Fi v1 Phoenix de Configuración** sobre el wireframe V3 mid-fi + scaffold React reemplazando el stub.
-   - (b) **Cerrar las 11 deudas técnicas del backend** identificadas en el spec funcional (uploads, /config/save, /system/restart, etc) antes de cablear el frontend.
+1. **Próximo bloque sugerido** (mismo que el handoff anterior):
+   - (a) **Hi-Fi v1 Phoenix de Configuración** sobre el wireframe V3 mid-fi + scaffold React reemplazando el stub. **Ahora el backend está 100% listo para cablear** (excepto `/system/restart` que se difirió).
+   - (b) **`POST /system/restart`** en un PR aparte si se considera valioso para v1 (el frontend muestra fallback "ejecutar `python backend/main.py` manualmente" hasta entonces).
    - (c) **Hi-Fi del Dashboard** — sin spec ni wireframe todavía. La persistencia DB + retención que se sacó de Configuración vive acá.
    - (d) **Lightweight Charts** en el panel del Cockpit (reemplaza el SVG estático).
-2. **Configuración React necesita cerrar deudas backend** para funcionar al 100%; el orden natural es (b) → (a) o (a) en placeholder → (b) después.
+2. **Recomendación:** ir por (a) ahora que el backend está completo. (b) puede esperar — el fallback manual es aceptable para alfa.
 
 Superficie backend disponible para el frontend:
 
@@ -406,8 +442,16 @@ Superficie backend disponible para el frontend:
 | POST | `/api/v1/validator/{run,connectivity}` | Batería completa + solo conectividad |
 | GET | `/api/v1/validator/reports{,/latest,/{id}}` | Histórico de reportes |
 | POST | `/api/v1/database/rotate{,/aggressive}` | Rotación manual + agresiva §9.4 |
+| POST | `/api/v1/database/vacuum` | SQLite VACUUM (NUEVO sesión OZyjj) |
 | GET | `/api/v1/database/stats` | Contadores + tamaño op + umbrales |
 | POST | `/api/v1/database/{backup,restore,backups}` | S3-compat, multi-provider |
+| POST | `/api/v1/config/{load,save,save_as,clear}` | Gestión del `.config` runtime (NUEVO sesión OZyjj) |
+| GET | `/api/v1/config/{last,current}` | LAST + UserConfig runtime (NUEVO sesión OZyjj) |
+| PUT | `/api/v1/config/{twelvedata_keys,s3,startup_flags}` | Edita runtime + reload del KeyPool (NUEVO sesión OZyjj) |
+| POST | `/api/v1/config/reload-policies` | Hot-reload de `db_size_limit_mb` (NUEVO sesión OZyjj) |
+| GET | `/api/v1/fixtures` | List `.json` con metadata + sha256 + slots usage (NUEVO sesión OZyjj) |
+| POST | `/api/v1/fixtures/upload` | Multipart upload + valida engine_compat_range (NUEVO sesión OZyjj) |
+| DELETE | `/api/v1/fixtures/{fixture_id}` | Borra `.json` + siblings; 409 si usado (NUEVO sesión OZyjj) |
 | WS | `/ws?token=...` | 6 eventos push |
 
 **Pestañas (estado actual):**
