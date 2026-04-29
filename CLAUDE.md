@@ -374,7 +374,7 @@ Sesión 2026-04-29 — **Cockpit funcional + estados degradados + endpoints paus
 
 **Branch de trabajo:** `claude/review-project-status-LhwGj`.
 
-**PR:** [#35](https://github.com/Findtheraccoon/Scanner-V5/pull/35) — abierto, ready for review, 16 commits acumulados desde el inicio del scaffolding hasta el handoff.
+**PR:** [#40](https://github.com/Findtheraccoon/Scanner-V5/pull/40) — abierto, contiene los últimos 3 commits del wireframe V3 + handoff. Los PRs anteriores de la sesión (#35-#39) ya fueron mergeados a main.
 
 **Decisiones cerradas en la sesión:**
 1. **Stack frontend confirmado**: Vite + React 18 + TS strict + Tailwind 3 + Zustand 5 + TanStack Query 5 + Biome + Vitest. shadcn/ui se difiere a Configuración (forms).
