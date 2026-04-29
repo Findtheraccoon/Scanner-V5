@@ -4,6 +4,7 @@ import { Box } from "./Box";
 import { Frame } from "./Frame";
 import { Box1Engines } from "./boxes/Box1Engines";
 import { Box2Config } from "./boxes/Box2Config";
+import { Box3Keys } from "./boxes/Box3Keys";
 import "./configuration.css";
 
 /* ConfigurationPage · root de la pestaña Configuración.
@@ -38,16 +39,7 @@ export function ConfigurationPage(): ReactElement {
       <Frame>
         <Box1Engines />
         <Box2Config />
-
-        <Box
-          id={3}
-          state="pend"
-          title="Proveedor de datos · TwelveData"
-          sub="5 keys round-robin · KeyPool · probe individual + agregado"
-          statusText="—"
-        >
-          <div className="note">Pendiente · contenido en commit 6.</div>
-        </Box>
+        <Box3Keys />
 
         <Box
           id={4}
