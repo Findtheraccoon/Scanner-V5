@@ -560,3 +560,124 @@ input.inp { width: 100%; }
 }
 .note .accent { color: var(--accent); font-weight: 600; }
 .note .ref { color: var(--accent); }
+
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--t-100);
+  font-weight: 500;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   BOX 1 — Motores (5 cards + flow lifespan)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.eng-cards {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: var(--gap-3);
+  margin-bottom: var(--gap-4);
+}
+.eng-card {
+  background: var(--glass-grad-1), var(--card-bg-2);
+  border: 1px solid var(--card-border);
+  border-radius: var(--r);
+  box-shadow: var(--bevel-soft);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 180px;
+  position: relative;
+}
+.eng-card::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.18;
+}
+.eng-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.eng-card__name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--t-100);
+  letter-spacing: 0.02em;
+}
+.eng-card__role {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--t-38);
+  margin-top: -4px;
+}
+.eng-card__body {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.65;
+  color: var(--t-75);
+}
+.eng-card__deps {
+  margin-top: auto;
+  border-top: 1px dashed var(--hair-2);
+  padding-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--t-38);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.eng-card__deps .ref {
+  color: var(--t-75);
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+.eng-card.is-warn { border-color: rgba(245,158,11,0.36); }
+.eng-card.is-warn::before { background: linear-gradient(90deg, transparent, var(--warn), transparent); opacity: 0.28; }
+.eng-card.is-err  { border-color: rgba(239,68,68,0.36); }
+.eng-card.is-err::before  { background: linear-gradient(90deg, transparent, var(--err), transparent); opacity: 0.28; }
+
+.eng-flow {
+  background: var(--glass-grad-1), var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: var(--r);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--t-55);
+}
+.eng-flow__lbl {
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--t-38);
+  margin-right: 4px;
+}
+.eng-flow__node {
+  padding: 3px 9px;
+  background: var(--bg-elev-1);
+  border: 1px solid var(--hair-2);
+  border-radius: var(--r-pill);
+  color: var(--t-90);
+  font-weight: 500;
+}
+.eng-flow__arr { color: var(--accent); font-weight: 600; }
+
+@media (max-width: 1500px) {
+  .eng-cards { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 1200px) {
+  .eng-cards { grid-template-columns: repeat(2, 1fr); }
+}

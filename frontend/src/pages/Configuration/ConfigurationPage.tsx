@@ -2,6 +2,7 @@ import { Pilot } from "@/components/ui/Pilot";
 import type { ReactElement } from "react";
 import { Box } from "./Box";
 import { Frame } from "./Frame";
+import { Box1Engines } from "./boxes/Box1Engines";
 import "./configuration.css";
 
 /* ConfigurationPage · root de la pestaña Configuración.
@@ -34,15 +35,7 @@ export function ConfigurationPage(): ReactElement {
       </header>
 
       <Frame>
-        <Box
-          id={1}
-          state="pend"
-          title="Motores del backend"
-          sub="5 motores arrancan con el lifespan FastAPI · esta vista es sólo observabilidad"
-          statusText="—"
-        >
-          <div className="note">Pendiente · contenido en commit 4.</div>
-        </Box>
+        <Box1Engines />
 
         <Box
           id={2}
