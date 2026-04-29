@@ -70,9 +70,9 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 | D (Entrypoint) | `backend/main.py` + `backend/settings.py` + `backend/api/workers.py` — Pydantic Settings, lifecycle, worker factories, Validator wiring, archive wiring, shutdown rotation, healthcheck wired al heartbeat | ✅ |
 | Fixtures | `backend/modules/fixtures/` — loader | ✅ base |
 
-**Tests totales:** 1068 passing + 1 slow (parity regression guard) en `backend/tests/`. `ruff check .` limpio.
+**Tests totales:** 1074 passing + 1 slow (parity regression guard) en `backend/tests/`. `ruff check .` limpio.
 
-**Frontend tests:** 6/6 passing (`pnpm test` en `frontend/`). Vite build limpio (~261KB JS gzip 82KB · 43KB CSS gzip 9KB). `pnpm lint` (Biome) limpio.
+**Frontend tests:** 6/6 passing (`pnpm test` en `frontend/`). Vite build limpio (~294KB JS gzip 93.6KB · 54KB CSS gzip 11KB). `pnpm lint` (Biome) limpio.
 
 ### Scoring Engine — detalle por fase
 
@@ -238,29 +238,76 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 | `modules/config/loader.py` | `save_config` encripta los 3 secretos (`twelvedata_keys`, `s3_config`, `api_bearer_token`) como `<name>_enc` + atomic write. `load_config` desencripta y reconstruye el modelo |
 | `modules/config/__init__.py` | API pública del módulo |
 
-### Frontend (scaffold inicial · 2026-04-27)
+### Frontend (Cockpit completo wired al backend · 2026-04-29)
 
 | Capa | Detalle | Estado |
 |---|---|---|
 | Toolchain | Vite 5 + React 18 + TS strict + pnpm + Biome + Vitest + jsdom + RTL | ✅ |
-| Estilos | tokens Phoenix completos (`src/styles/tokens.css`), reset+atmosphere global, `shell.css` topbar/apibar/footer, `cockpit.css` watchlist+panel — ports verbatim del Hi-Fi v2 | ✅ |
+| Estilos | tokens Phoenix completos (`src/styles/tokens.css`), reset+atmosphere global, `shell.css` topbar/apibar/footer, `cockpit.css` watchlist+panel + estados degradados | ✅ |
 | Tailwind | Plugin custom Phoenix con utilities `glass-*`, `tier-*`, `bookmark-shape`, `iridescent-*`, `num-tabular`. Theme extendido con paleta + radii + tipografías | ✅ |
-| Router | React Router 6 con 4 pestañas + `AppShell` compartido (health-line + topbar + apibar + Outlet + footer). `/` → `/cockpit` | ✅ |
-| Cockpit | Watchlist (6 slots, 5 cargados + 1 vacío) + Panel derecho (banner sticky · resumen ejecutivo · chart estático · detalle técnico colapsable). Selectores CSS 1:1 con Hi-Fi v2 | ✅ shell estático |
+| Router | React Router 6 con 4 pestañas (Cockpit · Dashboard · Memento · Configuración) + `AppShell` compartido. `/` → `/cockpit` | ✅ |
+| Cockpit shell | Watchlist + Panel banner/exec/chart/detail + halo cromático tier-aware + iridiscente Houdini + dithering anti-posterización + oklab + sweep specular | ✅ |
+| Cockpit estados | 7 estados: normal · warmup · degraded · splus · error · scanning · loading · prioridad resuelta en `useCockpitState()` | ✅ |
+| Stores Zustand | `auth` (persist localStorage), `slots`, `apiUsage`, `signals`, `engine` (con `dataPaused` + `ws`), `scanning` | ✅ |
+| TanStack Query | `useEngineHealth`, `useSlots`, `useLatestSignal`, `useAutoScanStatus`, `useScanManual`, `useAutoScanPause/Resume` | ✅ |
+| WebSocket | `useScannerWS()` con auto-reconnect (backoff 1/2/4/8/16s), dispatch a stores de los 6 eventos | ✅ |
+| Efectos UI | Reloj/fecha live ET, Toast component (4 tonos), Botón Copiar funcional con clipboard, Toggle AUTO cableado, Botón Scan + mutation | ✅ |
+| Bearer UI | Input compacto en footer con persistencia localStorage + reconexión WS al guardar | ✅ |
+| DevStateSwitcher | Switcher dev-only (botón ⚙ bottom-right) para forzar 8 estados sin backend. **Deuda técnica documentada** | ✅ |
 | Stubs | Configuración / Dashboard / Memento — placeholder unificado en `pages/_stub/StubPage.tsx` | ✅ |
-| API client | `src/api/client.ts` con bearer opcional + `ApiError`. Vite proxy `/api`+`/ws` → `VITE_BACKEND_URL` (default localhost:8000) | ✅ base |
+| API client | `src/api/client.ts` con bearer + `ApiError` + `getBearerToken`. Vite proxy `/api`+`/ws` → `VITE_BACKEND_URL` | ✅ |
 | Tests smoke | `src/test/router.test.tsx` — render + landmarks + 4 pestañas + active state + apibar + cockpit + 2 stubs (6/6) | ✅ |
+| Wireframes Configuración | `Configuracion specs.md` (spec funcional 6 secciones · 18 endpoints + 11 deudas técnicas) + `Configuracion Wireframes V2.html` + `V3.html` mid-fi paper-style con 6 boxes | ✅ |
+
+### Módulos nuevos del Frontend (Cockpit + estados + wiring)
+
+| Archivo | Rol |
+|---|---|
+| `src/main.tsx` | Entrypoint · `QueryClientProvider` + `ToastProvider` + `RouterProvider` |
+| `src/router.tsx` | React Router 6 con 4 rutas (cockpit/dashboard/memento/configuracion). `/` → `/cockpit` |
+| `src/api/client.ts` | Fetch wrapper con bearer opcional + `ApiError` + `setBearerToken/getBearerToken` |
+| `src/api/types.ts` | Tipos del backend (EngineHealth · SlotInfo · KeyUsage · SignalPayload · 6 WS events) |
+| `src/api/queries.ts` | 7 hooks TanStack Query: `useEngineHealth/Slots/LatestSignal/AutoScanStatus/ScanManual/AutoScanPause/Resume` |
+| `src/api/ws.ts` | `useScannerWS()` con auto-reconnect (backoff 1/2/4/8/16s), dispatch a stores |
+| `src/stores/auth.ts` | Bearer token persist localStorage + sync con `setBearerToken` del client |
+| `src/stores/engine.ts` | Estados de los motores + `dataPaused` + `ws` (WsConnectionState) + `stateOverride` (DEUDA: dev) |
+| `src/stores/slots.ts` | 6 slots del registry + `selectedSlotId` (default 2 · QQQ del Hi-Fi v2) |
+| `src/stores/apiUsage.ts` | Estado por TD key alimentado por `api_usage.tick` del WS |
+| `src/stores/signals.ts` | `bySlot` + `latest` actualizados por `signal.new` del WS o por `useLatestSignal` |
+| `src/stores/scanning.ts` | `active: Set<number>` efímero · ON/OFF por slot durante mutation `useScanManual` |
+| `src/components/AppShell/{AppShell,TopBar,ApiBar,Footer}.tsx` | Shell con health-line + topbar (live indicator del WS) + apibar (5 keys + scan + auto) + footer (status + bearer input) |
+| `src/components/Toast/{ToastProvider,toast.css}` | Stack bottom-right · 4 tonos (success/info/warn/error) · context provider |
+| `src/components/Dev/{DevStateSwitcher,dev-state-switcher.css}` | DEUDA TÉCNICA · switcher dev-only (botón ⚙) para forzar 8 estados del Cockpit |
+| `src/lib/clock.ts` | Reloj/fecha live ET vía `useSyncExternalStore` (un único setInterval global) |
+| `src/lib/copyToClipboard.ts` | Helper con fallback `textarea + execCommand` |
+| `src/lib/chatFormat.ts` | Template del payload de copiar (fallback hardcoded del Hi-Fi v2) |
+| `src/pages/Cockpit/CockpitPage.tsx` | Página · resuelve `effectiveState` (incluye `loading` derivado de queries iniciales) |
+| `src/pages/Cockpit/Watchlist.tsx` | 6 slots fallback hardcoded + override del backend cuando hay datos |
+| `src/pages/Cockpit/Slot.tsx` | Card + bookmark sólo en A/A+/S/S+ + sparkline + flag `is-scanning` por store |
+| `src/pages/Cockpit/Sparkline.tsx` | SVG con linear gradients fill+stroke por slot |
+| `src/pages/Cockpit/Panel.tsx` | Banner sticky tier-aware + Exec chips + Chart estático + Detail colapsable |
+| `src/pages/Cockpit/StateToast.tsx` | `useCockpitState()` resuelve estado por prioridad + `<StateToasts>` component |
+| `src/pages/Cockpit/useEffectiveSlot.ts` | Helper que combina backend + fallback Hi-Fi v2 (fix del bug del banner sin backend) |
+| `src/pages/Cockpit/data.ts` | Fallback hardcoded del Hi-Fi v2 (6 slots con tickers + bands + sparklines) |
+| `src/pages/Cockpit/cockpit.css` | CSS verbatim del Hi-Fi v2 + estados degradados + scanning pulse + state-toasts |
+| `src/pages/{Configuration,Dashboard,Memento}/*Page.tsx` | Stubs unificados via `pages/_stub/StubPage.tsx` |
+| `src/styles/{tokens,global,shell}.css` | Paleta Phoenix + reset + atmosphere + topbar/apibar/footer compartido |
+| `tailwind.config.ts` | Plugin custom Phoenix · utilities `glass-*/tier-*/bookmark-shape/iridescent-*` con interpolación oklab |
+| `frontend/wireframing/Configuracion specs.md` | Spec funcional 6 secciones · 18 endpoints REST + 11 deudas técnicas + 6 eventos WS |
+| `frontend/wireframing/Configuracion Wireframes V2.html` | Mid-fi paper-style 5 boxes (primera iteración) |
+| `frontend/wireframing/Configuracion Wireframes V3.html` | Mid-fi paper-style 6 boxes con feedback aplicado · 1354 líneas |
 
 ### Pendiente
 
-- **Frontend (próximas iteraciones, scaffold ya operativo):**
-  - **Stores Zustand** (`auth`, `slots`, `apiUsage`, `signals`) — migrar la fuente de datos del Cockpit desde `pages/Cockpit/data.ts` hacia stores.
-  - **TanStack Query hooks** (`useEngineHealth`, `useSlots`, `useLatestSignals`, `useApiUsage`) consumiendo los endpoints `/api/v1/*`.
-  - **WebSocket listener** `useScannerWS()` que mappea los 6 eventos a actions de stores. Auto-reconnect + token bearer.
-  - **Lightweight Charts** en el panel del Cockpit (reemplaza el SVG estático del prototipo).
-  - **Estados restantes del Cockpit** (warmup, degraded, fatal, scan en curso, S+ nueva, AUTO off) — diseñar variantes y conectarlas al estado global.
-  - **Hi-Fi del Dashboard / Configuración / Memento** y reemplazo de los stubs.
-  - **Cockpit Hi-Fi v1** ya mergeado a main (PR #31, ref histórica). El scaffold actual usa **Hi-Fi v2 "Phoenix"** como fuente.
+- **Frontend (próximas iteraciones, Cockpit completo · faltan otras pestañas):**
+  - ~~Stores Zustand · TanStack Query · WebSocket listener~~ → **Cerrado 2026-04-29.** 5 stores + 7 hooks + `useScannerWS()` con auto-reconnect implementados (ver tabla "Frontend" arriba).
+  - ~~Estados degradados del Cockpit~~ → **Cerrado 2026-04-29.** 7 estados implementados con prioridad: error → splus → degraded → warmup → scanning → loading → normal.
+  - **Lightweight Charts** en el panel del Cockpit (reemplaza el SVG estático). Pendiente.
+  - **Hi-Fi de Configuración** — spec funcional `Configuracion specs.md` + wireframe mid-fi `V3.html` ya disponibles. Próximo paso: hi-fi Phoenix v1 sobre el V3 + scaffold React (reemplaza el stub).
+  - **Hi-Fi del Dashboard** — sin spec ni wireframe todavía. La persistencia DB + retención que se sacó de Configuración vive acá.
+  - **Hi-Fi de Memento** — sin spec ni wireframe todavía.
+  - **11 deudas técnicas del backend** identificadas en `Configuracion specs.md` §6.2 — necesarias para cablear el frontend al 100% de Configuración (uploads de fixtures, /config/save, /config/master-key/*, /system/restart, /system/open-folder, /database/vacuum, etc).
+  - **Setting `auto_scan_run_at_startup`** en `Settings` Pydantic — el "Auto-LAST" del spec §5.2; hoy el `auto_scan_loop` arranca corriendo siempre.
 - ~~**Fase 5.4 cierre**~~ → **Cerrado 2026-04-23 al 100%.** Post subida del `qqq_1min.json` original del Observatory, se identificaron 2 bugs reales del motor (ver gotchas #16 y #17): aggregator no resetaba al cambio de día + ORB gate usaba mean-cross-day en vez de median-intraday. Ambos arreglados → **245/245 match**. `DEFAULT_MIN_MATCH_RATE` subido a 0.99. Regression guard en `test_parity_regression.py` (slow, ~2min).
 - ~~**Healthcheck continuo spec §3.4**~~ → **Cerrado 2026-04-23.** `engines/scoring/healthcheck.py` wired al `heartbeat_worker` con `healthcheck_fn` opcional. Cada 2 min valida operativamente el motor (no-crash, shape, signal vocab) y reporta green/yellow+ENG-050/red+ENG-001 al Dashboard.
 - ~~**Watchdog automático AR.5**~~ → **Cerrado 2026-04-23.** `engines/database/watchdog.py:aggressive_rotation_watchdog` opt-in via `SCANNER_AGGRESSIVE_ROTATION_ENABLED=true`. Chequea tamaño DB cada `SCANNER_AGGRESSIVE_ROTATION_INTERVAL_S` (default 3600s) y dispara rotación agresiva. Default off por ser destructivo.
@@ -268,48 +315,83 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 - **Distribución Windows:** `.exe` via Inno Setup. Depende de frontend + decisión sobre bundling del `master.key`.
 - ~~**Auto-scan pause/resume**~~ → **Cerrado.** `POST /api/v1/scan/auto/{pause,resume,status}` con `asyncio.Event` en `app.state.auto_scan_running`. El loop bloquea en `await running.wait()` antes del próximo ciclo y emite `engine.status={status: "paused"}` por WS. 6 tests nuevos en `tests/api/test_scan.py::TestAutoScanPauseResume`. Frontend cableado vía `useAutoScanPause/Resume/Status`.
 
-#### Deudas técnicas a eliminar antes de la release 1
+#### Deudas técnicas a eliminar / cerrar antes de la release 1
 
+**Frontend:**
 - **`frontend/src/components/Dev/DevStateSwitcher.tsx` + `dev-state-switcher.css`**: switcher flotante (sólo `import.meta.env.DEV`) que fuerza estados del Cockpit (warmup/degraded/splus/error/scanning/loading) escribiendo en `useEngineStore.stateOverride`. Útil para previsualizar variantes sin levantar backend ni reproducir condiciones reales. Pre-release: borrar la carpeta `Dev/`, quitar `stateOverride` + `setStateOverride` de `engine.ts`, y la rama del override en `useCockpitState`.
+
+**Backend (endpoints faltantes para que la pestaña Configuración funcione al 100%):**
+
+Identificados durante el spec funcional `Configuracion specs.md` §6.2. Cada uno tiene su uso documentado y constraints técnicos:
+
+| Método | Path | Uso | Constraint |
+|---|---|---|---|
+| `POST` | `/api/v1/fixtures/upload` | Box 4 — upload de fixture nuevo | multipart o body JSON, valida estructura Pydantic + SHA-256 + `engine_compat_range`, persiste en `backend/fixtures/`, 409 si `fixture_id` duplicado |
+| `DELETE` | `/api/v1/fixtures/{fixture_id}` | Box 4 — eliminar fixture | rechaza 409 si algún slot lo tiene asignado |
+| `POST` | `/api/v1/database/vacuum` | Dashboard — recuperar espacio post rotación agresiva | bloqueante · SQLite VACUUM directo · puede tomar minutos |
+| `PUT` | `/api/v1/config/twelvedata_keys` | Box 3 — guardar 5 keys | encripta `secret` con master key · hot-reload del KeyPool |
+| `PUT` | `/api/v1/config/s3` | Box 6 — guardar credenciales S3 | encripta `secret_key` con master key |
+| `PUT` | `/api/v1/config/startup_flags` | Box 5 — guardar flags de arranque (si se reactivan) | persiste en UserConfig · algunos requieren reinicio |
+| `POST` | `/api/v1/config/reload-policies` | Dashboard — hot-reload del watchdog | reinicia el task del watchdog sin reiniciar el backend |
+| `POST` | `/api/v1/config/master-key/generate` | Box 1 viejo (si se vuelve a meter master key) | retorna la clave plaintext UNA vez · persiste en `data/master.key` |
+| `POST` | `/api/v1/config/master-key/load` | Box 1 viejo idem | acepta clave en body · valida que pueda desencriptar UserConfig actual |
+| `POST` | `/api/v1/system/restart` | Box 5 — reiniciar backend desde la UI | `os.execv` o equivalente · frontend reconecta con backoff |
+| `GET` | `/api/v1/system/open-folder` | (descartado v1 ·) Box 1 — abrir carpeta de datos | invoca el SO · 200 o 501 según plataforma |
+
+**Backend (settings):**
+- **`auto_scan_run_at_startup: bool = True`** en `Settings` Pydantic — el "Auto-LAST" del spec §5.2. Hoy el `auto_scan_loop` arranca corriendo siempre. Cuando se cierre, modificar el factory en `main.py:138` para que el `running.set()` inicial respete este flag.
 
 ### Para el siguiente chat
 
-**Estado al 2026-04-27 (segunda sesión del día):** backend **completo a spec §3 + §4 + §9.4** (sin cambios desde 2026-04-23) · 1068 tests + 1 slow passing · parity 245/245 · ruff limpio. **Frontend scaffold operativo** sobre Vite + React 18 + TS strict + Tailwind + Biome + Vitest. Cockpit Hi-Fi v2 portado a componentes React (datos hardcoded), 4 pestañas con router, 6/6 tests smoke verdes, build limpio.
+**Estado al 2026-04-29:** backend **completo a spec §3 + §4 + §9.4** + endpoint `pause/resume` del auto-scan loop · **1074 tests + 1 slow** passing · parity 245/245 · ruff limpio. **Frontend Cockpit completo wired al backend** sobre Vite 5 + React 18 + TS strict + Tailwind 3 + Biome + Vitest + Zustand 5 + TanStack Query 5. 6/6 smoke tests · build limpio (CSS 54KB · JS 294KB).
 
-Última sesión (2026-04-26 / 2026-04-27) — **Cockpit Hi-Fi v2 "Phoenix"**:
+Sesión 2026-04-29 — **Cockpit funcional + estados degradados + endpoints pause/resume + spec funcional + 2 wireframes mid-fi de Configuración**:
 
-- Creado `frontend/wireframing/Cockpit Hi-Fi v2.html` (~90KB, ~2700 líneas) usando el plugin `frontend-design` (ahora sí disponible) + iteraciones cromáticas con la referencia `frontend/wireframing/Cockpit Hi-Fi Phoenix reference.html` que aportó Álvaro desde un editor visual externo.
-- **Paleta master:** acento naranja `#FF6A2C` Phoenix (variantes `#E55A1F / #7A2E0E / #3D1808`) sobre base neutra `#0d0d0d`. Bull/bear semánticos verde/rojo se mantienen.
-- **Tiers de score con paleta dedicada:** `--tier-r/b/a/ap/s/sp-{color,border,glow}` (R `#737880`, B `#82AAC0`, A `#3B9AE8`, A+ `#B941D5`, S `#DC9418`, S+ base `#06080E` + texto `#9AAABF`).
-- **Glass cromado real** (no físicas pesadas): `backdrop-filter: blur(40-44px) saturate(180-220%) brightness/contrast` en topbar, apibar, cards de watchlist, banner principal, exec, chart canvas, footer. Edge glass top/bottom + bordes refractivos laterales (cálido izq + frío der). Watchlist y panel transparentes para que los glows ambient atraviesen.
-- **Iridiscentes Houdini animados:** `@property --iri-angle` para `conic-gradient` rotando. Aplicado solo a tiers premium: **S** (familia dorada full-color rotación 8s) y **S+** (reflejos translúcidos sobre `#06080E` premium, rotación 11s). Botón COPIAR con `iri-pan` 9s. R/B/A/A+ con relleno plano del color del tier.
-- **Bookmarks como lengüeta de marca-páginas:** `clip-path: polygon(...)` con bordes superiores planos, costados rectos, punta triangular abajo (V con micro-suavizado en los hombros). Tamaño 26×30px. Solo se muestran en setups A, A+, S, S+ (R y B sin bookmark — su tier se infiere del score numérico). El sweep metálico blanco animado del S+ sigue activo encima del iridiscente.
-- **Banner principal del ticker** con 3 órdenes jerárquicos: ticker grande, banda+score+CALL+SETUP, subíndices uppercase. **Banda del banner sin relleno**, solo la letra del tier con `text-shadow` glow doble. Ticker ghost gigante translúcido detrás (240px, gradient text-clip iridiscente). Más oscuro `rgba(8,8,8,0.92→0.85)`.
-- **Ambient atmosphere:** glows del body en paleta cálida libre (naranja, rosa magenta, ámbar — sin azul ni mint). Dithering multi-capa: puntos 22×22px + turbulence SVG fina animada (`grain-breathe` 14s) para romper banding sin centellar.
-- **Layout final:**
-  - Topbar 100px sin logo (solo `SCANNER` uppercase letterspaced + `v5.0.0-dev` mono pequeño) + pestañas centradas con tab-shape + sombra superior + indicador "live" verde.
-  - API bar 114px, primera celda con **scan ahora + auto toggle** apilados centrados (migrados desde el footer); 5 cells de KEY 1..5 con `KEY 1 · hace 3s` en una línea + uso `4/8` + barra; última celda "diaria" con 5 filas apiladas `[name · barra · usados/800]`.
-  - Watchlist con cards de glass esmerilado, sparkline ambient con gradient stroke, contenido `slot · ticker · CALL · score · WR%`.
-  - Panel: banner sticky → resumido (precio + 6 chips: alineación, ATR, vela, R, S, vol) → gráfico SVG con MA20/40/200 + 30 velas → detalle técnico colapsado por default.
-  - Footer con `proveedor · twelvedata · 5 keys` + status `motor scoring · data engine · database`.
-- **Estados:** solo "operativo normal" implementado. Los 7 estados restantes (warmup, degraded, fatal, loading, scan en curso, S+ nueva, AUTO off) quedan para cuando se scaffoldee React.
+**Backend nuevo:**
+- `POST /api/v1/scan/auto/{pause,resume,status}` con `asyncio.Event` en `app.state.auto_scan_running`. El loop bloquea en `await running.wait()` antes del próximo ciclo y emite `engine.status={status:"paused"}` por WS. **6 tests nuevos** en `tests/api/test_scan.py::TestAutoScanPauseResume`. Cierra la deuda histórica del toggle AUTO.
+
+**Frontend nuevo (sesión completa):**
+- **5 stores Zustand**: `auth` (persist localStorage), `slots`, `apiUsage`, `signals`, `engine` (con `dataPaused`/`ws`/`stateOverride`), `scanning`.
+- **7 TanStack Query hooks**: `useEngineHealth`, `useSlots`, `useLatestSignal`, `useAutoScanStatus`, `useScanManual`, `useAutoScanPause`, `useAutoScanResume`.
+- **`useScannerWS()`** con auto-reconnect (backoff 1/2/4/8/16s), dispatch a stores de los 6 eventos del WS. Idempotente.
+- **Bearer token UI** compacto en footer con persistencia localStorage + reconexión WS al guardar.
+- **Toast system reutilizable** (4 tonos: success/info/warn/error) con context provider montado en `main.tsx`.
+- **Reloj y fecha live ET** vía `useSyncExternalStore` (un único `setInterval` global).
+- **Botones funcionales**: Copiar (clipboard + fallback execCommand + label dinámico + toast), Scan (mutation `/scan/manual` + feedback 900ms + tracking via `useScanningStore`), Toggle AUTO (cableado a `useAutoScanPause/Resume` + status sync).
+- **7 estados del Cockpit** implementados (Hi-Fi v1 portados): `normal · warmup · degraded · splus · error · scanning · loading`. Resolución por prioridad en `useCockpitState()`.
+- **Banner del Panel — paquete A "hero"**: iridiscente `conic-gradient(in oklab)` animado 18s + ghost ticker iridiscente text-clip animado 16s reverse + specular sweep diagonal cada 12s + halo cromático tier-aware (`--ticker-halo` por tier B/A/A+/S/S+).
+- **Anti-posterización**: dithering SVG turbulence sobre el iridiscente (alpha 0.3, mix-blend overlay) + `conic-gradient(in oklab from ...)` en banner/ghost/bookmarks S y S+/utility plugin + blur backdrop subido un escalón global (12→18, 20→28, 28→36, 16→22).
+- **Helper `useEffectiveSlot(id)`** que combina backend + fallback hardcoded del Hi-Fi v2 — fix del bug donde el banner no reaccionaba al cambio de slot sin backend.
+- **Bookmark sólo en A/A+/S/S+** (B y REVISAR muestran tier por score numérico, sin bookmark).
+- **Reorden de pestañas**: Cockpit · Dashboard · Memento · Configuración. `/` redirige a `/cockpit`.
+- **Live indicator** del topbar refleja el estado del WS (live/linking/offline) con color y label.
+- **DevStateSwitcher** (deuda técnica): switcher dev-only (botón ⚙ bottom-right, plegable) con 8 estados forzables vía `useEngineStore.stateOverride`. Sólo se monta si `import.meta.env.DEV`. **Anotado para eliminar pre-release 1.**
+
+**Documentación nueva:**
+- `frontend/wireframing/Configuracion specs.md` — spec funcional 6 secciones: layout · 5 pasos · apéndice de contratos. Lista 18 endpoints REST + 11 deudas técnicas del backend + 6 eventos WS + matriz hot-reload/reinicio + persistencia local vs backend.
+- `frontend/wireframing/Configuracion Wireframes V2.html` — primer mid-fi paper-style alineado al spec (5 boxes).
+- `frontend/wireframing/Configuracion Wireframes V3.html` — iteración con feedback del usuario (1354 líneas): 6 boxes · línea-guía vertical izquierda con dots · auto-colapso al quedar OK · Box 1 observabilidad de motores (sin arranque manual) · Box 2 carga/guardado del Config (sin bearer/master/paths) · Box 4 sin columna benchmark · fixture como dropdown · Box 5 sin flags · Box 6 sólo S3 al final.
 
 **Branch de trabajo:** `claude/review-project-status-LhwGj`.
 
-**PR del scaffold:** se crea al pushear (esta sesión).
+**PR:** [#35](https://github.com/Findtheraccoon/Scanner-V5/pull/35) — abierto, ready for review, 16 commits acumulados desde el inicio del scaffolding hasta el handoff.
 
-**Decisiones cerradas en esta sesión:**
-1. Stack: Vite 5 + React 18 + TS strict + Tailwind 3 + Zustand 5 + TanStack Query 5 + React Router 6 + pnpm + Biome + Vitest + jsdom + RTL. **shadcn/ui se difiere** hasta que entremos a Configuración (forms).
-2. Efectos del Hi-Fi v2 → CSS verbatim en `tokens.css`/`global.css`/`shell.css`/`pages/Cockpit/cockpit.css` + Tailwind plugin custom para utilities reutilizables (glass/tier/bookmark/iridescent). Los selectores BEM del prototipo se preservaron 1:1, lo que permite portar futuros hi-fi del diseñador casi sin diff visual.
-3. **Backend desde día 1**: Vite proxy `/api`+`/ws` → `localhost:8000`. No MSW ni fixtures locales — el backend levanta con un comando.
-4. **Lint/format**: Biome (single tool). CSS files ignorados del Biome (son ports verbatim del prototipo del diseñador y el soporte CSS de Biome es preview).
-5. **Tests** desde el día 1: smoke con Vitest + RTL + jsdom. 6/6 verdes.
+**Decisiones cerradas en la sesión:**
+1. **Stack frontend confirmado**: Vite + React 18 + TS strict + Tailwind 3 + Zustand 5 + TanStack Query 5 + Biome + Vitest. shadcn/ui se difiere a Configuración (forms).
+2. **Wiring backend desde día 1** vía Vite proxy. Sin MSW.
+3. **Estados Cockpit implementados** con prioridad explícita; el splus tiene ventana de 30s sobre `latestSignal.computed_at`.
+4. **DevStateSwitcher** como deuda técnica documentada (no pre-release).
+5. **Configuración mid-fi V3** consensuado: 6 boxes con cambios específicos vs el wireframe del diseñador (que tenía conceptos no alineados al backend real).
+6. **Box 1 de Configuración = observabilidad pura** (decisión punto B → b en última iteración) — los motores arrancan automáticamente con lifespan; no hay arranque manual desde la UI. Reduce deuda técnica.
+7. **Box 4 sin columna benchmark** (decisión punto A → c) — el bench lo define el fixture, se ve sólo en el detalle de la biblioteca de fixtures.
 
 **Decisiones abiertas para el próximo chat:**
-1. **Próximo bloque:** ¿wiring real al backend (stores Zustand + TanStack hooks + `useScannerWS`) o siguiente pestaña hi-fi (Dashboard recomendado)?
-2. **Lightweight Charts** o algún otro lib para el chart real (Hi-Fi v2 actualmente usa SVG estático).
-3. **Deuda técnica del backend ya identificada:** `POST /api/v1/scan/auto/{pause,resume}` para cablear el toggle AUTO. Sigue pendiente.
-4. **Compatibilidad:** las animaciones iridiscentes usan `@property` Houdini (Chrome 85+, Edge 85+, Safari 16.4+, Firefox 128+). Como el target es desktop Windows con browsers modernos, OK. Si hace falta fallback estático, está pensado.
+1. **Próximo bloque sugerido**:
+   - (a) **Hi-Fi v1 Phoenix de Configuración** sobre el wireframe V3 mid-fi + scaffold React reemplazando el stub.
+   - (b) **Cerrar las 11 deudas técnicas del backend** identificadas en el spec funcional (uploads, /config/save, /system/restart, etc) antes de cablear el frontend.
+   - (c) **Hi-Fi del Dashboard** — sin spec ni wireframe todavía. La persistencia DB + retención que se sacó de Configuración vive acá.
+   - (d) **Lightweight Charts** en el panel del Cockpit (reemplaza el SVG estático).
+2. **Configuración React necesita cerrar deudas backend** para funcionar al 100%; el orden natural es (b) → (a) o (a) en placeholder → (b) después.
 
 Superficie backend disponible para el frontend:
 
@@ -318,6 +400,8 @@ Superficie backend disponible para el frontend:
 | GET | `/api/v1/engine/health` | Piloto del scoring engine con healthcheck status |
 | GET | `/api/v1/signals/{latest,history,{id}}` | Histórico transparent op+archive |
 | POST | `/api/v1/scan/manual` | Scan on-demand |
+| GET | `/api/v1/scan/auto/status` | `{paused: bool}` (NUEVO) |
+| POST | `/api/v1/scan/auto/{pause,resume}` | Toggle AUTO (NUEVO) |
 | GET/PATCH | `/api/v1/slots`, `/api/v1/slots/{id}` | List + enable/disable + hot-reload warmup |
 | POST | `/api/v1/validator/{run,connectivity}` | Batería completa + solo conectividad |
 | GET | `/api/v1/validator/reports{,/latest,/{id}}` | Histórico de reportes |
@@ -326,18 +410,11 @@ Superficie backend disponible para el frontend:
 | POST | `/api/v1/database/{backup,restore,backups}` | S3-compat, multi-provider |
 | WS | `/ws?token=...` | 6 eventos push |
 
-**Stack frontend recomendado** (spec): React 18 + TypeScript + Vite + Tailwind + shadcn/ui + Zustand + TanStack Query + React Flow (Paso 3 nodo-conexión) + Lightweight Charts (Cockpit) + Vitest + `pnpm`.
-
-**Pestañas (ver `docs/operational/FRONTEND_FOR_DESIGNER.md` v2.0.0):**
-1. **Configuración** — 4 pasos apilados (Config + ONLINE BACKUP S3 / API Keys / Fixtures + Slot Registry canvas Runpod / Arranque motores con progress bar del Validator).
-2. **Dashboard** — Piloto Master + 4 secciones (Motores/Slots/Base de datos/Pruebas validación).
-3. **Memento** — Consulta de stats por slot + catálogo de patrones.
-4. **Cockpit** — Watchlist + detalle técnico + botón COPIAR con `chat_format` del payload WS.
-
-**Decisiones abiertas que pedir a Álvaro antes de empezar frontend:**
-- ¿Vite + pnpm como recomienda el spec, o preferís otro stack?
-- ¿Empezamos por Configuración (más complejo — canvas Runpod, upload fixtures) o por Dashboard (más simple, refleja estado backend)?
-- ¿Auto-LAST al arrancar (spec §5.2): backend ya tiene el `startup factory`, falta el flag en el Config del usuario.
+**Pestañas (estado actual):**
+1. **Cockpit** — Watchlist + detalle técnico + botón COPIAR con `chat_format` · **completo wired al backend**, 7 estados + bearer + DevStateSwitcher.
+2. **Dashboard** — stub. Sin spec ni wireframe todavía. Incluirá persistencia DB + retención (sacadas de Configuración).
+3. **Memento** — stub. Sin spec.
+4. **Configuración** — stub. Spec funcional + 2 wireframes mid-fi disponibles. Próximo paso: hi-fi Phoenix v1 + scaffold.
 
 **Comando de arranque end-to-end verificado:**
 ```bash
