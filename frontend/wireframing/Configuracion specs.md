@@ -515,4 +515,116 @@ Vista informativa que duplica la del footer del shell, con más detalle. Útil p
 
 ---
 
-> **Pendiente (B6):** Apéndice de contratos (tabla completa de endpoints + payloads esperados, eventos WS con su shape, comportamiento de hot-reload vs reinicio).
+## 6. Apéndice — contratos
+
+Esta sección lista de manera compacta los **contratos técnicos** que la pestaña Configuración consume. Sirve de checklist para el implementador del frontend.
+
+### 6.1 Endpoints REST
+
+Todos requieren `Authorization: Bearer <token>`. Errores comunes (no listados por endpoint): `401` sin/con token inválido, `503` si el motor responsable no está inicializado.
+
+| # | Método | Path | Body / Query | Response 200 |
+|---|---|---|---|---|
+| 1 | `GET` | `/api/v1/engine/health` | — | `{status, scoring{status,error_code?,parity_match_rate?}, data{status,message?}, database{status,message?}, validator{status,message?}, engine_version, uptime_seconds, last_heartbeat_at}` |
+| 2 | `GET` | `/api/v1/slots` | — | `[{slot_id, ticker, status, fixture_id?, benchmark?, enabled, message?, error_code?}, ... × 6]` |
+| 3 | `GET` | `/api/v1/slots/{id}` | path `id` | objeto individual del item 2 |
+| 4 | `PATCH` | `/api/v1/slots/{id}` | `{enabled, ticker?, fixture?, benchmark?}` | `{slot_id, status, message?}` (con `200` y `slot.status` broadcast por WS) · `400` fixture inválido · `404` slot inexistente · `503` data engine no inicializado |
+| 5 | `POST` | `/api/v1/validator/run` | — | `{run_id, trigger:"manual", started_at, finished_at, overall_status, tests:[{test_id,status,message,duration_ms}, ... × 7]}` |
+| 6 | `POST` | `/api/v1/validator/connectivity` | — | `{run_id, trigger:"connectivity", overall_status, td_keys:[{key_id,ok,error?}], s3:{ok,error?}}` |
+| 7 | `GET` | `/api/v1/validator/reports/latest` | — | mismo shape que `/run` |
+| 8 | `GET` | `/api/v1/validator/reports` | query `cursor?, limit?, trigger?, status?` | `{items:[...], next_cursor?}` (cursor pagination) |
+| 9 | `GET` | `/api/v1/validator/reports/{id}` | path `id` | reporte completo |
+| 10 | `GET` | `/api/v1/database/stats` | — | `{tables_operative:[{name,rows,retention_seconds,last_rotated_at?}], tables_archive:[...], size_mb_operative, size_mb_archive, size_limit_mb, last_rotation_at?}` |
+| 11 | `POST` | `/api/v1/database/rotate` | — | `{moved:{<table>:N}, archive_size_mb_after}` |
+| 12 | `POST` | `/api/v1/database/rotate/aggressive` | — | `{triggered, size_mb_before, size_mb_after, rotation, vacuum_recommended}` · `400` con `:memory:` · `503` sin archive |
+| 13 | `POST` | `/api/v1/database/backup` | `{endpoint_url, region, bucket, access_key, secret_key, prefix?}` | `{key, size_bytes, etag?}` |
+| 14 | `POST` | `/api/v1/database/restore` | `{...creds, key}` | `{sibling_path, size_bytes}` |
+| 15 | `POST` | `/api/v1/database/backups` | `{...creds}` | `[{key, size_bytes, last_modified}, ...]` (orden desc) |
+| 16 | `POST` | `/api/v1/scan/manual` | `{ticker, slot_id?, fixture, candles_daily, candles_1h, candles_15m, candle_timestamp, spy_daily?, bench_daily?, sim_datetime?, sim_date?}` | `{id?, conf, signal, dir, score, ticker, slot_id?, candle_timestamp, chat_format?}` (Cockpit lo consume — relevante en Configuración solo si se quiere botón "test scan"). |
+| 17 | `GET` | `/api/v1/scan/auto/status` | — | `{paused: bool}` |
+| 18 | `POST` | `/api/v1/scan/auto/{pause,resume}` | — | `{paused: bool}` |
+
+### 6.2 Endpoints faltantes (deuda técnica del backend)
+
+Endpoints que la pestaña Configuración necesita para funcionar al 100% y que **todavía no existen**. Cada uno se cablea con un mensaje "no implementado · contactar backend" en el frontend hasta que se agreguen.
+
+| Método | Path | Necesario para | Notas técnicas |
+|---|---|---|---|
+| `POST` | `/api/v1/fixtures/upload` | Paso 3.3 — upload de fixture nuevo | multipart o body JSON; valida estructura Pydantic + SHA-256 + `engine_compat_range` ⊇ engine actual; persiste en `backend/fixtures/`; no pisa fixtures con el mismo `fixture_id` (responde 409 si ya existe). |
+| `DELETE` | `/api/v1/fixtures/{fixture_id}` | Paso 3.2 — eliminar fixture | rechaza con `409` si algún slot lo tiene asignado. |
+| `POST` | `/api/v1/database/vacuum` | Paso 4.1 — recuperar espacio post rotación agresiva | bloqueante; SQLite `VACUUM` directo; toma minutos en DB grandes. |
+| `PUT` | `/api/v1/config/twelvedata_keys` | Paso 2.4 — guardar 5 keys | encripta `secret` con master key; persiste en `UserConfig`; hot-reload del `KeyPool`. |
+| `PUT` | `/api/v1/config/s3` | Paso 4.2 — guardar credenciales S3 | encripta `secret_key` con master key; persiste en `UserConfig`. |
+| `PUT` | `/api/v1/config/startup_flags` | Paso 5.3 — guardar 5 flags de arranque | persiste en `UserConfig`; algunos requieren reinicio (mensaje "se aplicará al próximo arranque"). |
+| `POST` | `/api/v1/config/reload-policies` | Paso 4.3 — hot-reload del watchdog tras cambiar `aggressive_rotation_interval_s` | reinicia el task del watchdog sin reiniciar el backend. |
+| `POST` | `/api/v1/config/master-key/generate` | Paso 1.2 — generar nueva master key | retorna la clave en plaintext una sola vez; persiste en `data/master.key`. |
+| `POST` | `/api/v1/config/master-key/load` | Paso 1.2 — cargar master key existente | acepta la clave en body; valida que pueda desencriptar el `UserConfig` actual. |
+| `POST` | `/api/v1/system/restart` | Paso 5.3 — reiniciar backend desde la UI | ejecuta `os.execv` o equivalente; el frontend reconecta automáticamente con backoff. |
+| `GET` | `/api/v1/system/open-folder` | Paso 1.3 — botón "abrir carpeta de datos" | invoca el SO (Windows: `explorer.exe`, macOS: `open`, Linux: `xdg-open`); responde `200 {opened: true}` o `501` si no se puede. |
+
+**Settings que faltan en `Settings` (Pydantic):**
+
+- `auto_scan_run_at_startup: bool = True` — el "Auto-LAST" del spec §5.2. Hoy el `auto_scan_loop` arranca corriendo siempre.
+
+### 6.3 Eventos WebSocket consumidos
+
+Conexión: `/ws?token=<bearer>`. Auto-reconnect con backoff `1/2/4/8/16s` (ya implementado en `useScannerWS`).
+
+| Evento | Shape del payload | Uso en Configuración |
+|---|---|---|
+| `engine.status` | `{engine: "data"\|"scoring"\|"database"\|"validator", status: "green"\|"yellow"\|"red"\|"paused", message?: string, error_code?: string}` | Paso 5.4 — badges de los 3 motores actualizados sin repollar. `paused` se convierte en sub-estado `dataPaused` del store. |
+| `slot.status` | `{slot_id: number, status: "active"\|"warming_up"\|"degraded"\|"disabled", message?: string, error_code?: string}` | Paso 3.1 — badge runtime de cada slot. |
+| `validator.progress` | `{run_id: string, trigger: "startup"\|"manual"\|"hot_reload"\|"connectivity", test: string, status: "running"\|"passed"\|"warning"\|"failed", message?: string}` | Paso 5.1 — barra de progreso live + 7 mini-badges. 2 events por test (start + end). |
+| `api_usage.tick` | `{key_id, used_minute, max_minute, used_daily, max_daily, last_call_ts: ISO\|null, exhausted: bool}` | Paso 2.3 — refresco en vivo del uso de cada TD key. |
+| `system.log` | `{level: "info"\|"warning"\|"error", message: string, source?: string}` | (opcional) Paso 5 — tail de los últimos N logs. Hoy la pestaña no lo consume; el Dashboard sí lo hará cuando llegue. |
+| `signal.new` | `{...SignalPayload}` | No consumido por Configuración (lo consume el Cockpit). |
+
+### 6.4 Comportamiento: hot-reload vs reinicio del backend
+
+Para que el wireframe sepa qué labels mostrar al usuario en cada cambio:
+
+**Cambios que toman efecto inmediatamente (sin reinicio):**
+
+- Paso 1.1 — bearer token: hot-reload del cliente HTTP + WS al guardar.
+- Paso 2 — TD keys (vía `KeyPool.reload()`).
+- Paso 3 — slots: enable/disable + warmup + revalidation A/B/C.
+- Paso 4.1 — rotaciones manuales (operación puntual).
+- Paso 4.2 — backup / restore S3 (operación puntual).
+- Paso 4.3 — `db_size_limit_mb` (lectura en cada chequeo del watchdog).
+- Paso 5.1 — correr validator manual.
+
+**Cambios que requieren reinicio del backend:**
+
+- Paso 1.3 — paths del sistema (`db_path`, `archive_db_path`, `log_dir`, `registry_path`). El `db_engine` ya está creado.
+- Paso 4.3 — `aggressive_rotation_enabled` (toggle del watchdog · habrá hot-reload con el endpoint `/config/reload-policies` cuando exista).
+- Paso 5.3 — todos los flags de arranque (`validator_run_at_startup`, `validator_parity_*`, `auto_scan_run_at_startup`, `heartbeat_interval_s`).
+- Paso 1.2 — regenerar master key (los secretos del `UserConfig` se invalidan; reload del config al volver a arrancar).
+
+**Cambios que requieren acción manual fuera del backend:**
+
+- Paso 3.3 — upload de fixture (hasta que exista `/fixtures/upload`): copiar `.json` y `.sha256` a `backend/fixtures/` + reiniciar backend.
+
+### 6.5 Persistencia local vs persistencia en backend
+
+Para que el wireframe sepa dónde "vive" cada cosa:
+
+| Configuración | Persistencia | Notas |
+|---|---|---|
+| Bearer token | `localStorage` del browser | No viaja al backend; sólo se inyecta como header. |
+| Master key | `data/master.key` en disco del backend | El backend la lee al startup; el frontend nunca la ve después de generarla. |
+| TD keys (5) | `UserConfig` encriptado (`data/user_config.json` o equivalente) | `secret` encriptado con master key. |
+| S3 credentials | `UserConfig` encriptado | `secret_key` encriptado con master key. |
+| Slot registry | `slot_registry.json` (fuente de verdad · spec §3.3) | Plain JSON · sin secretos. |
+| Fixtures | `backend/fixtures/*.json` + `*.sha256` | Plain JSON · validados por hash. |
+| Flags de arranque | `.env` o `UserConfig` | Decisión abierta de producto: hoy van en `.env`, deberían migrar a `UserConfig` para que la UI los pueda persistir. |
+| Políticas de retención | mismo lugar que flags | idem. |
+
+---
+
+## Cierre
+
+El documento cubre los **5 pasos verticales** de la pestaña Configuración con todos los inputs / botones / validaciones necesarios para implementar el wireframe hi-fi del diseñador y, después, el componente React.
+
+**Próximo paso recomendado del producto:** que el diseñador arme el hi-fi standalone (formato `frontend/wireframing/Configuracion Hi-Fi v1.html`) usando este spec como contrato funcional + el lenguaje visual Phoenix del Cockpit Hi-Fi v2 como referencia estética.
+
+**Próximo paso recomendado del backend:** cerrar las **11 deudas técnicas** listadas en §6.2 antes de que el frontend implemente la pestaña — sin esos endpoints, varias funciones de Configuración no se pueden cablear de manera real (sólo placeholders).
