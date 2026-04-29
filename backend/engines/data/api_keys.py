@@ -256,6 +256,56 @@ class KeyPool:
             for e in self._entries.values()
         ]
 
+    async def reload(self, keys: list[ApiKeyConfig]) -> None:
+        """Hot-reload de las keys del pool sin reiniciar el backend.
+
+        Reemplaza la configuración de keys preservando los contadores
+        runtime (`used_minute`, `used_daily`, `last_call_ts`,
+        `exhausted`) de las keys cuyo `key_id` siga en el set nuevo.
+        Las keys nuevas arrancan con contadores en cero. Las
+        eliminadas hacen wipe best-effort del `secret`.
+
+        Validaciones idénticas a `__init__`: lista no vacía, máximo
+        `MAX_API_KEYS`, `key_id` únicos.
+
+        Raises:
+            ValueError: si el input no cumple las validaciones.
+            RuntimeError: si el pool ya fue shutdown.
+        """
+        if not keys:
+            raise ValueError("reload requires at least one ApiKeyConfig")
+        if len(keys) > MAX_API_KEYS:
+            raise ValueError(
+                f"KeyPool admits at most {MAX_API_KEYS} keys (got {len(keys)})",
+            )
+        seen: set[str] = set()
+        for k in keys:
+            if k.key_id in seen:
+                raise ValueError(f"Duplicate key_id in reload: {k.key_id!r}")
+            seen.add(k.key_id)
+
+        async with self._lock:
+            if self._shutdown:
+                raise RuntimeError("KeyPool has been shut down")
+            new_entries: dict[str, _KeyEntry] = {}
+            for k in keys:
+                existing = self._entries.get(k.key_id)
+                new_entries[k.key_id] = _KeyEntry(
+                    key_id=k.key_id,
+                    secret=k.secret,
+                    credits_per_minute=k.credits_per_minute,
+                    credits_per_day=k.credits_per_day,
+                    enabled=k.enabled,
+                    used_minute=existing.used_minute if existing else 0,
+                    used_daily=existing.used_daily if existing else 0,
+                    last_call_ts=existing.last_call_ts if existing else None,
+                    exhausted=existing.exhausted if existing else False,
+                )
+            for old_id, entry in self._entries.items():
+                if old_id not in new_entries:
+                    entry.secret = ""
+            self._entries = new_entries
+
     def shutdown(self) -> None:
         """Wipe best-effort de secretos en memoria. Idempotente.
 

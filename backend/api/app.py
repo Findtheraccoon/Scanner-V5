@@ -54,6 +54,8 @@ def create_app(
     extra_workers: list | None = None,
     rotate_on_shutdown: bool = False,
     db_size_limit_mb: int = 5000,
+    last_config_path_file: str = "data/last_config_path.json",
+    fixtures_dir: str = "fixtures",
 ) -> FastAPI:
     """Construye una `FastAPI` lista para correr.
 
@@ -171,6 +173,16 @@ def create_app(
     app.state.archive_session_factory = archive_session_factory
     app.state.broadcaster = broadcaster
     app.state.db_size_limit_mb = db_size_limit_mb
+    # Config runtime (Configuración Paso 1). El usuario carga un .config
+    # explícitamente vía POST /config/load — sin .config cargado el
+    # scanner arranca de cero (UserConfig vacío en RAM).
+    from pathlib import Path as _Path
+
+    app.state.user_config = None
+    app.state.user_config_path = None
+    app.state.last_config_path_file = _Path(last_config_path_file)
+    app.state.key_pool = None
+    app.state.fixtures_dir = _Path(fixtures_dir)
 
     _register_routes(app)
     return app
@@ -196,7 +208,9 @@ async def _run_shutdown_rotation(
 
 def _register_routes(app: FastAPI) -> None:
     """Registra los routers REST + WebSocket."""
+    from api.routes.config import router as config_router
     from api.routes.database import router as database_router
+    from api.routes.fixtures import router as fixtures_router
     from api.routes.health import router as health_router
     from api.routes.scan import router as scan_router
     from api.routes.signals import router as signals_router
@@ -210,6 +224,8 @@ def _register_routes(app: FastAPI) -> None:
     app.include_router(slots_router, prefix="/api/v1")
     app.include_router(validator_router, prefix="/api/v1")
     app.include_router(database_router, prefix="/api/v1")
+    app.include_router(config_router, prefix="/api/v1")
+    app.include_router(fixtures_router, prefix="/api/v1")
     app.include_router(websocket_router)  # `/ws` sin prefijo /api/v1
 
 
