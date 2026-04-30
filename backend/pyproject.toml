@@ -63,6 +63,19 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 # ═══════════════════════════════════════
+# Hatchling — declaración explícita de paquetes a empaquetar.
+# El código del backend no vive en una carpeta `scanner_v5_backend/`
+# (que es lo que hatchling auto-infiere del `name`), sino repartido en
+# 4 carpetas top-level. Sin esta sección, `pip install -e .` falla con
+# "Unable to determine which files to ship inside the wheel".
+# `main.py` y `settings.py` quedan fuera intencionalmente — son
+# entrypoints que se ejecutan con `python main.py` desde la raíz del
+# backend, no library code que se importe desde otros proyectos.
+# ═══════════════════════════════════════
+[tool.hatch.build.targets.wheel]
+packages = ["api", "engines", "modules", "fixtures"]
+
+# ═══════════════════════════════════════
 # Ruff — linter + formatter
 # ═══════════════════════════════════════
 [tool.ruff]
