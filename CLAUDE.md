@@ -417,6 +417,64 @@ El security-review skill que se corrió (2026-04-30) **solo cubrió el diff del 
 - Correr `pip-audit` + `pnpm audit` en CI.
 - Considerar contratar audit externo si va a producción multi-usuario.
 
+#### Deudas técnicas de UX · Configuración + Cockpit (sesión 2026-04-30)
+
+##### UX-001 · Pilotos por box con semáforo real (HIGH · pendiente)
+
+Hoy el `BoxState` calcula `ok / warn / err / pend` con lógica ad-hoc por box. Los pilotos del rail (dot por box) y el badge de estado en el head no siempre reflejan el "configurado / parcial / no configurado" que el usuario espera. Modelo correcto:
+
+- **🔴 rojo (`err`):** el box no está configurado en absoluto (ej. 0 TD keys, 0 slots habilitados, 0 fixtures, S3 vacío + sin probar).
+- **🟡 amarillo (`warn`):** parcialmente configurado o con fallas no fatales (ej. 3/5 TD keys, 1 slot degraded de 5, último report del Validator con `warning`, S3 con creds pero probe falló).
+- **🟢 verde (`ok`):** todo OK.
+
+**Casos especiales:**
+- **Box 3 TD Keys:** con **al menos 1 key configurada y probada OK** → verde. El producto funciona con 1 sola key (no requiere las 5).
+- **Box 1 Motores:** verde si los 4 motores reportan green; warn si alguno yellow / paused; rojo si alguno red o si todos offline.
+- **Box 6 S3:** opcional → si está vacío sin nunca haber sido configurado, mostrar como `pend` (gris) en lugar de rojo (no es error, es opcional). Si tiene creds pero probe falló → warn.
+
+**Localización del fix:**
+- `frontend/src/pages/Configuration/boxes/Box*.tsx` — variable `state: BoxState` derivada en cada box.
+- `frontend/src/components/ui/Pilot.tsx` — variantes ya existen (`ok/warn/err/pend`); solo falta cablearlas correctamente.
+
+**Test de regresión:** snapshot por box con cada estado de configuración representativo.
+
+##### UX-002 · Box 4 Slots como tarjetas en lugar de tabla (MEDIUM · pendiente)
+
+Hoy Box 4 muestra los 6 slots como filas de una tabla compacta (ticker · fixture · enabled · status). Decisión nueva: mostrarlos como **6 tarjetas** análogas a las cards de TD keys del Box 3, donde el usuario:
+
+1. **Primero ingresa el ticker** (input grande, foco evidente).
+2. **Luego elige el fixture** (dropdown poblado con `useFixtures()` filtrado por compatibilidad).
+3. Toggle enabled + estado runtime + acciones (deshabilitar / reintentar).
+
+**Razón del cambio:** la tabla es densa y poco evidente para un usuario que arranca de cero. Las tarjetas guían el flujo "ticker → fixture → enable" naturalmente.
+
+**Localización del fix:**
+- `frontend/src/pages/Configuration/boxes/Box4Slots.tsx` — refactor del `<table class="slots-table">` a `<div class="slot-cards">` con `.slot-card` por slot.
+- `frontend/src/pages/Configuration/configuration.css` — estilos `.slot-cards` + `.slot-card` (similares a `.key-card` pero con campos diferentes).
+- Mantener la biblioteca de fixtures + el upload zone debajo (no cambian).
+
+**Estimado:** ~150 LOC de refactor sin tocar wiring (`usePatchSlot` sigue igual).
+
+##### UX-003 · Cockpit sin fallback de valores fake en estado de loading (HIGH · pendiente)
+
+Hoy el panel del Cockpit (Banner + Exec chips + Chart + Detail) muestra **valores hardcodeados de QQQ** (`$485.32`, `+0.82%`, alineación, ATR, MA, etc) cuando no hay backend conectado o no hay señal cargada. Eso engaña: el usuario cree que el sistema está corriendo cuando en realidad no llegó dato real.
+
+**Comportamiento correcto:**
+- Sin motores levantados (data en `offline` / WS desconectado) → **estado "loading"** explícito en el panel: spinner + texto "esperando motores", sin valores numéricos.
+- Sin señal cargada para el slot seleccionado → todos los valores numéricos como `—` (no fake).
+- Banner del ticker: muestra solo el símbolo y el bookmark de tier; sin precio, sin alineación, sin ATR, sin niveles, sin MA. Todo en `—` o ausente.
+- Chart: vacío con mensaje "sin datos" en lugar del SVG hardcodeado del Hi-Fi v2.
+
+**Localización del fix:**
+- `frontend/src/pages/Cockpit/Panel.tsx` — eliminar fallbacks del Hi-Fi v2 (`$485.32`, etc), reemplazar por `—` cuando `signal` es null.
+- `frontend/src/pages/Cockpit/data.ts` — el módulo de fallback hardcodeado se mantiene pero NO se debe usar como display por default. Solo para tests / desarrollo. O eliminarlo completamente si queda huérfano.
+- `frontend/src/pages/Cockpit/StateToast.tsx` — extender `useCockpitState()` para que el estado "loading" tenga prioridad cuando `useEngineStore.data === "offline"` o el WS está disconnected, y se traduzca a un overlay del panel.
+- Coherente con el cambio que ya se hizo en Watchlist (commit `461645b`) — eliminar fake data del watchlist; aplicar mismo principio al panel.
+
+**Test de regresión:** test del Cockpit que verifica que sin signal cargada, los `$` y `%` no aparecen en el DOM, solo `—`.
+
+---
+
 ### Para el siguiente chat
 
 **Estado al 2026-04-30 (post sesión OZyjj · scaffold React de Configuración):** backend completo · **frontend con 4 pestañas wired**: Cockpit + Configuración (NUEVO), Dashboard / Memento siguen como stubs.
