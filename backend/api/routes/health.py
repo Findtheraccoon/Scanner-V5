@@ -1,22 +1,34 @@
 """Health check endpoint — `GET /api/v1/engine/health`.
 
-Devuelve un snapshot del estado del motor de scoring leyendo la última
-entrada de la tabla `heartbeat` filtrada por `engine="scoring"`. Si no
-hay heartbeats aún, retorna `status="offline"` (sistema recién
-iniciado o database engine caído).
+Devuelve un snapshot **agregado** del estado de los 4 motores del
+backend (scoring, data, database, validator). Cada motor tiene su
+propio sub-objeto con `status` + `message?` + `error_code?`. Si un
+motor nunca emitió heartbeat, su status es `"offline"`.
 
 **Auth:** requiere Bearer token válido.
 
 **Response shape:**
 
     {
-      "status": "green" | "yellow" | "red" | "offline",
-      "engine": "scoring",
+      "status":  overall ("green"|"yellow"|"red"|"offline"),
+      "scoring": {"status", "message?", "error_code?", "last_heartbeat_at?"},
+      "data":    {"status", "message?", "error_code?", "last_heartbeat_at?"},
+      "database":{"status", "message?", "error_code?", "last_heartbeat_at?"},
+      "validator": {"status", "message?", "error_code?", "last_run_at?"},
       "engine_version": str,
-      "memory_pct": float | null,
-      "error_code": str | null,
-      "ts": ISO8601 tz-aware ET
+      "ts": ISO8601
     }
+
+`scoring`, `data`, `database` se leen de la tabla `heartbeats` (último
+row por motor). El `validator` se deriva del `overall_status` del
+último `ValidatorReport` (corre on-demand, no tiene heartbeat propio).
+
+**Compute del overall:**
+
+- offline si TODOS los motores son offline.
+- red si alguno es red.
+- yellow si alguno es yellow / paused.
+- green si todos los reportados son green.
 """
 
 from __future__ import annotations
@@ -28,25 +40,40 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.auth import require_auth
 from api.deps import get_session
 from engines.scoring import ENGINE_VERSION
-from modules.db import Heartbeat, now_et
+from modules.db import Heartbeat, ValidatorReportRecord, now_et
 
 router = APIRouter(tags=["engine"])
 
+_TRACKED_ENGINES = ("scoring", "data", "database")
 
-@router.get("/engine/health")
-async def engine_health(
-    session: AsyncSession = Depends(get_session),
-    _token: str = Depends(require_auth),
-) -> dict:
-    """Estado actual del motor de scoring leído del último heartbeat.
 
-    Si no hay heartbeats (sistema recién arrancado o database engine
-    caído), retorna `status="offline"` con timestamp del momento del
-    request.
+def _compute_overall(statuses: list[str]) -> str:
+    """Agrega los statuses de los 4 motores en uno solo.
+
+    Reglas:
+    - "offline" si TODOS son offline.
+    - "red" si alguno es red.
+    - "yellow" si alguno es yellow o paused.
+    - "green" en caso contrario.
+    """
+    if all(s == "offline" for s in statuses):
+        return "offline"
+    if any(s == "red" for s in statuses):
+        return "red"
+    if any(s in ("yellow", "paused") for s in statuses):
+        return "yellow"
+    return "green"
+
+
+async def _last_heartbeat(session: AsyncSession, engine: str) -> dict:
+    """Devuelve el sub-objeto del motor leyendo el último heartbeat.
+
+    Si nunca hubo heartbeat, retorna `{"status": "offline"}` con los
+    demás campos en None.
     """
     stmt = (
         select(Heartbeat)
-        .where(Heartbeat.engine == "scoring")
+        .where(Heartbeat.engine == engine)
         .order_by(desc(Heartbeat.ts))
         .limit(1)
     )
@@ -56,18 +83,77 @@ async def engine_health(
     if last is None:
         return {
             "status": "offline",
-            "engine": "scoring",
-            "engine_version": ENGINE_VERSION,
-            "memory_pct": None,
+            "message": None,
             "error_code": None,
-            "ts": now_et().isoformat(),
+            "last_heartbeat_at": None,
         }
 
     return {
         "status": last.status,
-        "engine": "scoring",
-        "engine_version": ENGINE_VERSION,
-        "memory_pct": last.memory_pct,
+        "message": None,
         "error_code": last.error_code,
-        "ts": last.ts.isoformat(),
+        "last_heartbeat_at": last.ts.isoformat(),
+    }
+
+
+async def _validator_status(session: AsyncSession) -> dict:
+    """El validator no emite heartbeats — su estado es el
+    `overall_status` del último reporte. Mapeo:
+
+    - "pass" → "green"
+    - "warning" → "yellow"
+    - "fail" → "red"
+    - sin reportes → "offline"
+    """
+    stmt = (
+        select(ValidatorReportRecord)
+        .order_by(desc(ValidatorReportRecord.finished_at))
+        .limit(1)
+    )
+    result = await session.execute(stmt)
+    last = result.scalar_one_or_none()
+
+    if last is None:
+        return {
+            "status": "offline",
+            "message": None,
+            "error_code": None,
+            "last_run_at": None,
+        }
+
+    overall = last.overall_status
+    status = (
+        "green" if overall == "pass"
+        else "yellow" if overall == "warning"
+        else "red"
+    )
+    return {
+        "status": status,
+        "message": f"último run: {overall}",
+        "error_code": None,
+        "last_run_at": last.finished_at.isoformat(),
+    }
+
+
+@router.get("/engine/health")
+async def engine_health(
+    session: AsyncSession = Depends(get_session),
+    _token: str = Depends(require_auth),
+) -> dict:
+    """Estado consolidado de los 4 motores del backend."""
+    sub_engines: dict[str, dict] = {}
+    for name in _TRACKED_ENGINES:
+        sub_engines[name] = await _last_heartbeat(session, name)
+    sub_engines["validator"] = await _validator_status(session)
+
+    overall = _compute_overall([sub["status"] for sub in sub_engines.values()])
+
+    return {
+        "status": overall,
+        "scoring": sub_engines["scoring"],
+        "data": sub_engines["data"],
+        "database": sub_engines["database"],
+        "validator": sub_engines["validator"],
+        "engine_version": ENGINE_VERSION,
+        "ts": now_et().isoformat(),
     }

@@ -138,10 +138,15 @@ class TestAppLifespan:
             heartbeat_interval_s=60.0,
         )
         async with app.router.lifespan_context(app):
-            # 1 worker: heartbeat
-            assert len(app.state.workers) == 1
+            # 3 workers de heartbeat: scoring (con healthcheck) + data + database.
+            # `enable_heartbeat=True` arranca los 3 — los otros motores
+            # necesitan emitir heartbeats para que /engine/health los
+            # reporte como green en lugar de offline.
+            assert len(app.state.workers) == 3
             names = {t.get_name() for t in app.state.workers}
-            assert "heartbeat_worker" in names
+            assert "heartbeat_worker_scoring" in names
+            assert "heartbeat_worker_data" in names
+            assert "heartbeat_worker_database" in names
         assert all(w.done() for w in app.state.workers)
 
     @pytest.mark.asyncio
@@ -157,9 +162,15 @@ class TestAppLifespan:
             auto_scheduler_interval_s=60.0,
         )
         async with app.router.lifespan_context(app):
-            assert len(app.state.workers) == 2
+            # 3 heartbeats (scoring + data + database) + auto_scheduler = 4
+            assert len(app.state.workers) == 4
             names = {t.get_name() for t in app.state.workers}
-            assert names == {"heartbeat_worker", "auto_scheduler_worker"}
+            assert names == {
+                "heartbeat_worker_scoring",
+                "heartbeat_worker_data",
+                "heartbeat_worker_database",
+                "auto_scheduler_worker",
+            }
         assert all(w.done() for w in app.state.workers)
 
     @pytest.mark.asyncio

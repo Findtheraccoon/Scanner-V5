@@ -35,15 +35,32 @@ function useBackendWiring(): void {
   useEffect(() => {
     if (!healthQuery.data) return;
     const h = healthQuery.data;
-    // El endpoint /engine/health solo expone scoring (lee del heartbeat).
-    // Los otros motores (data, database, validator) llegan por WS
-    // engine.status — el store los mantiene en "offline" hasta que
-    // reporten. Cuando el backend amplíe el endpoint a multi-motor,
-    // este wiring se extiende.
+    // El endpoint expone los 4 motores agregados. Mapeamos cada uno
+    // al store; los WS engine.status posteriores actualizan en tiempo
+    // real.
     applyEngine({
       engine: "scoring",
-      status: h.status,
-      error_code: h.error_code ?? undefined,
+      status: h.scoring.status,
+      message: h.scoring.message ?? undefined,
+      error_code: h.scoring.error_code ?? undefined,
+    });
+    applyEngine({
+      engine: "data",
+      status: h.data.status,
+      message: h.data.message ?? undefined,
+      error_code: h.data.error_code ?? undefined,
+    });
+    applyEngine({
+      engine: "database",
+      status: h.database.status,
+      message: h.database.message ?? undefined,
+      error_code: h.database.error_code ?? undefined,
+    });
+    applyEngine({
+      engine: "validator",
+      status: h.validator.status,
+      message: h.validator.message ?? undefined,
+      error_code: h.validator.error_code ?? undefined,
     });
   }, [healthQuery.data, applyEngine]);
 

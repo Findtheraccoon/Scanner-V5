@@ -123,17 +123,38 @@ def create_app(
                 await init_db(archive_engine)
         workers: list[asyncio.Task] = []
         if enable_heartbeat:
+            # Heartbeat del scoring engine (con healthcheck mini-parity).
             workers.append(
                 asyncio.create_task(
                     heartbeat_worker(
                         session_factory,
                         broadcaster,
+                        engine_name="scoring",
                         interval_s=heartbeat_interval_s,
                         healthcheck_fn=heartbeat_healthcheck_fn,
                     ),
-                    name="heartbeat_worker",
+                    name="heartbeat_worker_scoring",
                 ),
             )
+            # Heartbeats simples para data + database — sin healthcheck
+            # propio. Reportan green mientras el lifespan corre. Si los
+            # motores fallan, el lifespan se cae y los heartbeats dejan
+            # de emitirse → el endpoint /engine/health los reporta
+            # offline tras el TTL natural (24h con rotate_expired). Es
+            # el mecanismo más simple sin agregar hooks específicos.
+            for sub_engine in ("data", "database"):
+                workers.append(
+                    asyncio.create_task(
+                        heartbeat_worker(
+                            session_factory,
+                            broadcaster,
+                            engine_name=sub_engine,
+                            interval_s=heartbeat_interval_s,
+                            healthcheck_fn=None,
+                        ),
+                        name=f"heartbeat_worker_{sub_engine}",
+                    ),
+                )
         if enable_auto_scheduler:
             workers.append(
                 asyncio.create_task(

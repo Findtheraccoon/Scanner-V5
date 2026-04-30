@@ -223,7 +223,8 @@ export function Box1Engines(): ReactElement {
             <>
               SQLite operativa + archive
               <br />
-              heartbeat <span className="num">{formatRel(data?.ts)}</span>
+              heartbeat{" "}
+              <span className="num">{formatRel(data?.database.last_heartbeat_at ?? data?.ts)}</span>
               {dbMessage ? (
                 <>
                   <br />

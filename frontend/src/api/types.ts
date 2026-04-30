@@ -7,17 +7,28 @@ export type SignalConfidence = "REVISAR" | "B" | "A" | "A+" | "S" | "S+";
 export type SignalDirection = "CALL" | "PUT";
 export type SignalLabel = "SETUP" | "REVISAR" | "NEUTRAL";
 
-/* Health del motor de scoring · `GET /api/v1/engine/health`.
-   El backend hoy solo expone scoring (lee del último heartbeat). El
-   estado de los otros motores (data, database, validator) llega por
-   WS `engine.status` y vive en `useEngineStore`. Componentes que
-   necesiten estado multi-motor deben leer del store, no de este hook. */
+/* Health agregado de los 4 motores · `GET /api/v1/engine/health`.
+
+   Cada sub-motor (scoring, data, database, validator) tiene su propio
+   sub-objeto con status + message + error_code. El overall `status`
+   es la agregación (green / yellow / red / offline). El frontend usa
+   este endpoint al cargar y luego refresca por WS `engine.status` en
+   tiempo real. */
+export interface EngineSubStatus {
+  status: EngineStatusLevel;
+  message: string | null;
+  error_code: string | null;
+  last_heartbeat_at?: string | null;
+  last_run_at?: string | null;
+}
+
 export interface EngineHealth {
   status: EngineStatusLevel;
-  engine: "scoring";
+  scoring: EngineSubStatus;
+  data: EngineSubStatus;
+  database: EngineSubStatus;
+  validator: EngineSubStatus;
   engine_version: string;
-  memory_pct: number | null;
-  error_code: string | null;
   ts: string;
 }
 
