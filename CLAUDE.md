@@ -347,6 +347,76 @@ Adicionales wired en la sesión:
 - `GET /api/v1/config/last`, `/current` — lectura del runtime + LAST.
 - `GET /api/v1/fixtures` — listado con metadata + sha256 status + slots que lo usan.
 
+#### Deudas técnicas de seguridad (sesión 2026-04-30 · post launcher)
+
+##### 🔴 SEC-001 · Path traversal en SPA fallback (HIGH · pendiente)
+
+**Hallazgo del security-review skill** sobre el commit `1e2b159` (launcher / static mount).
+
+**Localización:** `backend/api/app.py` · función `_mount_frontend.spa_fallback` (líneas ≈ 315–327).
+
+**Síntoma:** el handler `@app.get("/{path:path}")` está sin auth y solo descarta paths que empiezan con `api/` o `ws`. Con `..` URL-encoded en el path (`/..%2Fdata%2Fbearer.txt`), `Path("static") / "../data/bearer.txt"` traversa fuera del `static_dir`. `is_file()` + `FileResponse` sirven el archivo al caller anónimo.
+
+**Impacto en modo launcher:**
+- Lectura no autenticada de `data/bearer.txt` → atacante obtiene el bearer master que da acceso a TODO el REST + WS.
+- Lectura de `data/scanner.db`, `data/last_config_path.json`, `slot_registry.json`, fixtures, código de `backend/`, etc.
+- Una vez con el bearer, puede hacer `GET /config/current?include_secrets=true` para extraer TD keys + S3 creds en plaintext.
+
+**Vector práctico:** cualquier proceso/tab del browser con acceso a `127.0.0.1:8000` (mismo equipo, container vecino, drive-by, DNS rebinding).
+
+**Fix recomendado** (no aplicado todavía):
+
+```python
+@app.get("/{path:path}", include_in_schema=False)
+async def spa_fallback(path: str) -> Response:
+    if path.startswith("api/") or path.startswith("ws"):
+        raise HTTPException(status_code=404)
+    # Reject traversal explicitly + resolve+containment.
+    if ".." in path.split("/") or path.startswith("/"):
+        return HTMLResponse(content=cached_index)
+    base_resolved = base.resolve()
+    try:
+        candidate = (base / path).resolve()
+        candidate.relative_to(base_resolved)        # raises si fuera de base
+    except (ValueError, OSError):
+        return HTMLResponse(content=cached_index)
+    if candidate.is_file():
+        return FileResponse(str(candidate))
+    return HTMLResponse(content=cached_index)
+```
+
+**Test de regresión obligatorio:**
+```python
+r = await client.get("/..%2Fdata%2Fbearer.txt")
+assert "scanner-bearer" in r.text   # devuelve SPA index, NO el bearer
+```
+
+**Hardening adicional sugerido:**
+- Mover `data/bearer.txt` fuera del cwd del backend (ej. user home) para que ni siquiera una regresión del fallback alcance el archivo.
+- Reemplazar el handler hand-rolled por `StaticFiles(directory=base, html=True)` (Starlette ya implementa traversal protection); mantener solo una capa thin custom para inyectar el meta del bearer en `index.html`.
+- Considerar bind a `127.0.0.1` exclusivo (ya está) + `Host:` header check para mitigar DNS rebinding desde browsers.
+
+##### Revisión más profunda pendiente
+
+El security-review skill que se corrió (2026-04-30) **solo cubrió el diff del PR #45** (launcher + system endpoints + cableado motores). NO se hizo audit completo del repo. Zonas ciegas conocidas que requieren revisión más profunda antes de release 1:
+
+1. **`POST /database/{backup,restore,backups}`** — credenciales S3 viajan en body request por compat histórica. Si alguien intercepta el HTTP local (proxy, otro proceso con acceso al puerto), las roba.
+2. **`POST /fixtures/upload`** — multipart. ¿Path traversal vía `fixture_id` controlado por el atacante en el JSON del fixture? El backend usa `fixture_id` como filename — verificar que `..` se rechaza.
+3. **`POST /config/{load,save,save_as}`** — aceptan `path` arbitrario del usuario. Sin sandbox del filesystem. Diseñado así por modelo "el usuario maneja sus paths" — pero si el frontend está expuesto via proxy, alguien podría leer/escribir cualquier archivo del SO.
+4. **SQLi** — SQLAlchemy ORM previene la mayoría, pero hay algunos paths con strings interpolados. No revisado a fondo.
+5. **Dependency vulns** — `pip-audit`, `npm audit` o `osv-scanner` nunca corridos en este repo. Pendiente.
+6. **Secrets en logs** — verificar si bearer / TD secrets / S3 creds aparecen en excepciones, debug prints o el log file de loguru por error.
+7. **WS message validation** — el backend ignora mensajes entrantes (server-push only) → bajo riesgo, pero no validé contra DoS por flooding.
+8. **CSRF / XSS** — React escapa por default; verificar que no hay `dangerouslySetInnerHTML` ni library deps con XSS conocido.
+9. **Permission check del `.config`** — al cargar un `.config` el backend lee de un path absoluto del filesystem; un atacante podría apuntar a un archivo sensible y ver el error de parsing (information disclosure parcial).
+10. **Heartbeat workers de data + database** — son siempre green sin healthcheck real. Si el backend está degradado parcialmente, el endpoint de health miente. No es una vuln de seguridad pero puede confundir un audit operacional.
+
+**Acción propuesta para release 1:**
+- Cerrar SEC-001 antes del merge a producción.
+- Programar audit completo del repo con security-review sobre `git diff $(git merge-base HEAD main)...HEAD` extendido al historial entero.
+- Correr `pip-audit` + `pnpm audit` en CI.
+- Considerar contratar audit externo si va a producción multi-usuario.
+
 ### Para el siguiente chat
 
 **Estado al 2026-04-30 (post sesión OZyjj · scaffold React de Configuración):** backend completo · **frontend con 4 pestañas wired**: Cockpit + Configuración (NUEVO), Dashboard / Memento siguen como stubs.
