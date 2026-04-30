@@ -59,14 +59,17 @@ describe("AppShell", () => {
 });
 
 describe("CockpitPage", () => {
-  it("renderiza la watchlist con ticker QQQ y el panel con banner del ticker", () => {
+  it("renderiza la watchlist + panel sin tickers cuando no hay slots del backend", () => {
     renderAt("/cockpit");
+    // Sin backend conectado: la watchlist muestra 6 cards vacías
+    // (no fallback hardcoded de tickers fake). Verificamos que las
+    // 6 cards estén renderizadas como `slot--empty`.
     const watchlist = screen.getByLabelText("watchlist");
-    expect(within(watchlist).getByText("QQQ")).toBeInTheDocument();
-
-    const panel = screen.getByLabelText("detalle");
-    expect(within(panel).getByRole("heading", { level: 1, name: "QQQ" })).toBeInTheDocument();
-    expect(within(panel).getByText("setup")).toBeInTheDocument();
+    const emptySlots = watchlist.querySelectorAll(".slot--empty");
+    expect(emptySlots).toHaveLength(6);
+    // Panel renderiza con su contenedor; el ticker depende del slot
+    // seleccionado y de si el backend respondió.
+    expect(screen.getByLabelText("detalle")).toBeInTheDocument();
   });
 });
 

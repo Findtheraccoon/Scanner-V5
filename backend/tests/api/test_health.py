@@ -98,8 +98,13 @@ class TestAuth:
 
 
 class TestHealthEndpoint:
+    """El endpoint devuelve un shape AGREGADO con 4 sub-motores
+    (scoring, data, database, validator) + overall + engine_version + ts.
+    Cada sub-motor tiene `{status, message, error_code}`. Sin heartbeats
+    + sin reportes del Validator → todos `"offline"` → overall offline."""
+
     @pytest.mark.asyncio
-    async def test_returns_expected_shape(self, client_with_auth) -> None:
+    async def test_returns_aggregated_shape(self, client_with_auth) -> None:
         r = await client_with_auth.get(
             "/api/v1/engine/health",
             headers={"Authorization": "Bearer sk-test-1"},
@@ -107,19 +112,16 @@ class TestHealthEndpoint:
         assert r.status_code == 200
         body = r.json()
         required_keys = {
-            "status", "engine", "engine_version",
-            "memory_pct", "error_code", "ts",
+            "status", "scoring", "data", "database", "validator",
+            "engine_version", "ts",
         }
         assert set(body.keys()) == required_keys
-
-    @pytest.mark.asyncio
-    async def test_engine_is_scoring(self, client_with_auth) -> None:
-        r = await client_with_auth.get(
-            "/api/v1/engine/health",
-            headers={"Authorization": "Bearer sk-test-1"},
-        )
-        body = r.json()
-        assert body["engine"] == "scoring"
+        # Cada sub-motor tiene status + message + error_code.
+        for sub_name in ("scoring", "data", "database", "validator"):
+            sub = body[sub_name]
+            assert "status" in sub
+            assert "message" in sub
+            assert "error_code" in sub
 
     @pytest.mark.asyncio
     async def test_ts_is_iso_tz_aware(self, client_with_auth) -> None:
@@ -133,32 +135,57 @@ class TestHealthEndpoint:
         assert ts.tzinfo is not None
 
     @pytest.mark.asyncio
-    async def test_no_heartbeat_returns_offline(self, client_with_auth) -> None:
-        """Sin heartbeats, el health endpoint retorna `offline`."""
+    async def test_no_heartbeats_overall_offline(self, client_with_auth) -> None:
+        """Sin heartbeats + sin reportes → overall offline."""
         r = await client_with_auth.get(
             "/api/v1/engine/health",
             headers={"Authorization": "Bearer sk-test-1"},
         )
         body = r.json()
         assert body["status"] == "offline"
+        for sub in ("scoring", "data", "database", "validator"):
+            assert body[sub]["status"] == "offline"
 
     @pytest.mark.asyncio
-    async def test_reads_latest_heartbeat_status(self, client_with_auth) -> None:
-        """Si hay heartbeats, retorna el status del más reciente."""
+    async def test_reads_latest_heartbeat_per_engine(self, client_with_auth) -> None:
+        """Cada sub-motor lee su propio último heartbeat. Overall agrega."""
         from engines.database import emit_engine_heartbeat
 
         factory = client_with_auth._transport.app.state.session_factory
-        await emit_engine_heartbeat(
-            factory, engine="scoring", status="yellow", memory_pct=82.3,
-        )
+        await emit_engine_heartbeat(factory, engine="scoring", status="yellow")
+        await emit_engine_heartbeat(factory, engine="data", status="green")
+        await emit_engine_heartbeat(factory, engine="database", status="green")
 
         r = await client_with_auth.get(
             "/api/v1/engine/health",
             headers={"Authorization": "Bearer sk-test-1"},
         )
         body = r.json()
+        assert body["scoring"]["status"] == "yellow"
+        assert body["data"]["status"] == "green"
+        assert body["database"]["status"] == "green"
+        assert body["validator"]["status"] == "offline"  # sin reportes
+        # overall: yellow porque scoring está yellow y validator offline
+        # (offline no escala a red salvo que TODOS sean offline).
         assert body["status"] == "yellow"
-        assert body["memory_pct"] == 82.3
+
+    @pytest.mark.asyncio
+    async def test_red_overrides_yellow(self, client_with_auth) -> None:
+        """Si algún motor está red, overall=red."""
+        from engines.database import emit_engine_heartbeat
+
+        factory = client_with_auth._transport.app.state.session_factory
+        await emit_engine_heartbeat(factory, engine="scoring", status="green")
+        await emit_engine_heartbeat(factory, engine="data", status="red")
+        await emit_engine_heartbeat(factory, engine="database", status="yellow")
+
+        r = await client_with_auth.get(
+            "/api/v1/engine/health",
+            headers={"Authorization": "Bearer sk-test-1"},
+        )
+        body = r.json()
+        assert body["status"] == "red"
+        assert body["data"]["status"] == "red"
 
 
 # ═══════════════════════════════════════════════════════════════════════════

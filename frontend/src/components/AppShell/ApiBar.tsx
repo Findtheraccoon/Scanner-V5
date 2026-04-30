@@ -60,7 +60,11 @@ export function ApiBar() {
   const scanMut = useScanManual();
 
   const [pulseScan, setPulseScan] = useState(false);
-  const isAutoOn = autoStatus.data ? !autoStatus.data.paused : true;
+  // Default OFF cuando no hay info confiable del backend (loading inicial,
+  // sin token, backend caído). El toggle pasa a ON sólo cuando el backend
+  // confirma `{paused: false}` — mostrar ON sin esa confirmación es
+  // engañoso (el usuario asume que el auto-scan corre y puede no estarlo).
+  const isAutoOn = autoStatus.data ? !autoStatus.data.paused : false;
 
   useEffect(() => {
     if (!pulseScan) return;

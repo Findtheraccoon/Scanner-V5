@@ -1,5 +1,13 @@
-import { useEngineHealth, useSlots, useValidatorReportLatest } from "@/api/queries";
+import type { ApiError } from "@/api/client";
+import {
+  useEngineHealth,
+  useSlots,
+  useSystemRestart,
+  useSystemShutdown,
+  useValidatorReportLatest,
+} from "@/api/queries";
 import type { EngineStatusLevel } from "@/api/types";
+import { useToast } from "@/components/Toast/ToastProvider";
 import { Pilot } from "@/components/ui/Pilot";
 import { useEngineStore } from "@/stores/engine";
 import type { ReactElement } from "react";
@@ -23,7 +31,7 @@ import { Box, type BoxState } from "../Box";
 */
 
 function levelToState(level: EngineStatusLevel | undefined): BoxState {
-  if (level === undefined) return "pend";
+  if (level === undefined || level === "offline") return "pend";
   if (level === "green") return "ok";
   if (level === "yellow" || level === "paused") return "warn";
   if (level === "red") return "err";
@@ -31,7 +39,7 @@ function levelToState(level: EngineStatusLevel | undefined): BoxState {
 }
 
 function aggregateState(levels: (EngineStatusLevel | undefined)[]): BoxState {
-  if (levels.some((l) => l === undefined)) return "pend";
+  if (levels.some((l) => l === undefined || l === "offline")) return "pend";
   if (levels.some((l) => l === "red")) return "err";
   if (levels.some((l) => l === "yellow" || l === "paused")) return "warn";
   return "ok";
@@ -79,6 +87,46 @@ export function Box1Engines(): ReactElement {
   const slotsQuery = useSlots();
   const lastReport = useValidatorReportLatest();
   const dataPaused = useEngineStore((s) => s.dataPaused);
+  const shutdown = useSystemShutdown();
+  const restart = useSystemRestart();
+  const { push: toast } = useToast();
+
+  const errMsg = (e: unknown): string => {
+    const err = e as ApiError;
+    return typeof err.body === "string"
+      ? err.body
+      : err.body
+        ? JSON.stringify(err.body)
+        : err.message;
+  };
+
+  const onShutdown = async () => {
+    if (
+      !confirm(
+        "¿detener el backend? Esto cierra todos los procesos asociados y la pestaña dejará de funcionar.",
+      )
+    )
+      return;
+    try {
+      await shutdown.mutateAsync();
+      toast("backend deteniéndose…", "warn");
+    } catch (e) {
+      toast(`shutdown falló — ${errMsg(e)}`, "error");
+    }
+  };
+
+  const onRestart = async () => {
+    if (
+      !confirm("¿reiniciar el backend? El proceso se cerrará y volverá a arrancar (~3 segundos).")
+    )
+      return;
+    try {
+      await restart.mutateAsync();
+      toast("backend reiniciándose…", "info");
+    } catch (e) {
+      toast(`restart falló — ${errMsg(e)}`, "error");
+    }
+  };
 
   const data = health.data;
   const slots = slotsQuery.data ?? [];
@@ -87,16 +135,25 @@ export function Box1Engines(): ReactElement {
   const slotsDegraded = slots.filter((s) => s.status === "degraded").length;
   const slotsDisabled = slots.filter((s) => s.status === "disabled").length;
 
-  const dbState = levelToState(data?.database.status);
-  const dataState = levelToState(data?.data.status);
+  // Estado de motores live desde el store (alimentado por WS engine.status).
+  // Defaults "offline" hasta que el backend reporte. Scoring se sincroniza
+  // también desde el REST /engine/health al cargar.
+  const engineState = useEngineStore();
+  const dbState = levelToState(engineState.database);
+  const dataState = levelToState(engineState.data);
+  const scoringState = levelToState(engineState.scoring);
+  const dbMessage = engineState.messages.database;
+  const dataMessage = engineState.messages.data;
+  const scoringMessage = engineState.messages.scoring;
+  const scoringErrorCode = engineState.errorCodes.scoring;
+
   const slotRegistryState = aggregateState(
     slots.length === 0
-      ? [undefined]
+      ? ["offline"]
       : slots.map((s) => (s.status === "degraded" ? "red" : "green")),
   );
-  const scoringState = levelToState(data?.scoring.status);
-  // El Validator no expone status global directo en /engine/health hoy;
-  // tomamos el overall_status del último reporte como proxy.
+  // El Validator no tiene WS status hoy; tomamos el overall_status del
+  // último reporte como proxy.
   const validatorState: BoxState =
     lastReport.data === null || lastReport.data === undefined
       ? "pend"
@@ -107,11 +164,11 @@ export function Box1Engines(): ReactElement {
           : "err";
 
   const overall = aggregateState([
-    data?.database.status,
-    data?.data.status,
-    slots.length === 0 ? undefined : "green",
-    data?.scoring.status,
-    lastReport.data === undefined ? undefined : "green",
+    engineState.database,
+    engineState.data,
+    slots.length === 0 ? "offline" : "green",
+    engineState.scoring,
+    lastReport.data === undefined ? "offline" : "green",
   ]);
 
   const total = 5;
@@ -132,6 +189,31 @@ export function Box1Engines(): ReactElement {
       }
       statusText={`${okCount} / ${total} operativos`}
     >
+      <div className="toolbar">
+        <span className="toolbar__left">
+          control del proceso del backend · usar con cuidado · cerrar la pestaña también detiene el
+          backend tras 60s sin reconexión
+        </span>
+        <div className="toolbar__right">
+          <button
+            type="button"
+            className="btn"
+            onClick={onRestart}
+            disabled={restart.isPending || shutdown.isPending}
+          >
+            {restart.isPending ? "reiniciando…" : "reiniciar backend"}
+          </button>
+          <button
+            type="button"
+            className="btn is-danger"
+            onClick={onShutdown}
+            disabled={shutdown.isPending || restart.isPending}
+          >
+            {shutdown.isPending ? "deteniendo…" : "detener backend"}
+          </button>
+        </div>
+      </div>
+
       <div className="eng-cards">
         <EngCard
           name="database"
@@ -141,11 +223,12 @@ export function Box1Engines(): ReactElement {
             <>
               SQLite operativa + archive
               <br />
-              heartbeat <span className="num">{formatRel(data?.last_heartbeat_at)}</span>
-              {data?.database.message ? (
+              heartbeat{" "}
+              <span className="num">{formatRel(data?.database.last_heartbeat_at ?? data?.ts)}</span>
+              {dbMessage ? (
                 <>
                   <br />
-                  <span className="num">{data.database.message}</span>
+                  <span className="num">{dbMessage}</span>
                 </>
               ) : null}
             </>
@@ -165,13 +248,13 @@ export function Box1Engines(): ReactElement {
                 <span className="num">auto-scan en pausa</span>
               ) : (
                 <>
-                  estado: <span className="num">{data?.data.status ?? "—"}</span>
+                  estado: <span className="num">{engineState.data}</span>
                 </>
               )}
-              {data?.data.message ? (
+              {dataMessage ? (
                 <>
                   <br />
-                  <span className="num">{data.data.message}</span>
+                  <span className="num">{dataMessage}</span>
                 </>
               ) : null}
             </>
@@ -202,13 +285,19 @@ export function Box1Engines(): ReactElement {
           state={scoringState}
           body={
             <>
-              motor v5.2.0
+              motor {data?.engine_version ?? "v5.2.0"}
               <br />
-              healthcheck: <span className="num">{data?.scoring.status ?? "—"}</span>
-              {data?.scoring.error_code ? (
+              healthcheck: <span className="num">{engineState.scoring}</span>
+              {scoringMessage ? (
                 <>
                   <br />
-                  <span className="num">{data.scoring.error_code}</span>
+                  <span className="num">{scoringMessage}</span>
+                </>
+              ) : null}
+              {scoringErrorCode ? (
+                <>
+                  <br />
+                  <span className="num">{scoringErrorCode}</span>
                 </>
               ) : null}
             </>

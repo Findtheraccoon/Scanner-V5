@@ -66,6 +66,11 @@ lerna-debug.log*
 # Vite build output
 frontend/dist/
 frontend/dist-ssr/
+
+# Build del launcher (generado por scripts/build-launcher.sh)
+backend/static/
+backend/data/bearer.txt
+backend/data/restart_requested.flag
 frontend/.vite/
 
 # ═══════════════════════════════════════

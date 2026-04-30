@@ -92,6 +92,20 @@ class Settings(BaseSettings):
     # /api/v1/fixtures/* operan sobre este directorio.
     fixtures_dir: str = Field(default="fixtures")
 
+    # Modo launcher (ejecutable único · v1):
+    # - `static_dir`: si está set, FastAPI sirve `frontend/dist/` en `/`.
+    # - `frontend_bearer_token`: si está set, se inyecta como `<meta>` en
+    #   `index.html` para que el frontend lo guarde en localStorage al
+    #   primer arranque (sin pegar a mano).
+    # - `ws_idle_shutdown_s`: si está set, cuando el contador de WS llega
+    #   a 0, schedula SIGINT al proceso tras esa cantidad de segundos.
+    # - `restart_flag_path`: archivo que el launcher lee al detectar exit
+    #   para decidir restart vs shutdown limpio.
+    static_dir: str | None = Field(default=None)
+    frontend_bearer_token: str | None = Field(default=None)
+    ws_idle_shutdown_s: float | None = Field(default=None)
+    restart_flag_path: str = Field(default="data/restart_requested.flag")
+
     @field_validator("log_level")
     @classmethod
     def _normalize_log_level(cls, v: str) -> str:

@@ -18,6 +18,8 @@ Tres funciones públicas:
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -45,11 +47,36 @@ def default_url(path: str = "data/scanner.db") -> str:
 def make_engine(url: str, *, echo: bool = False) -> AsyncEngine:
     """Crea un `AsyncEngine` con la configuración estándar del proyecto.
 
+    Si `url` apunta a un archivo SQLite local (no `:memory:`), garantiza
+    que el directorio padre exista — SQLite no crea directorios
+    automáticamente y `init_db()` reventaría con `unable to open
+    database file` al primer arranque sobre un clone limpio.
+
     Args:
         url: URL del engine (ver `default_url()`).
         echo: si `True`, loguea cada query (útil para debug).
     """
+    _ensure_sqlite_dir(url)
     return create_async_engine(url, echo=echo, future=True)
+
+
+_SQLITE_FILE_PREFIX = "sqlite+aiosqlite:///"
+
+
+def _ensure_sqlite_dir(url: str) -> None:
+    """Crea el dir padre del archivo SQLite si la URL apunta a uno.
+
+    No-op para `:memory:`, otros dialects, o paths sin parent (`.db`
+    en el cwd).
+    """
+    if not url.startswith(_SQLITE_FILE_PREFIX):
+        return
+    raw_path = url[len(_SQLITE_FILE_PREFIX):]
+    if not raw_path or raw_path == ":memory:":
+        return
+    parent = Path(raw_path).expanduser().parent
+    if str(parent) and str(parent) != ".":
+        parent.mkdir(parents=True, exist_ok=True)
 
 
 def make_session_factory(

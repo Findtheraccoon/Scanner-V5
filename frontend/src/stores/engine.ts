@@ -41,10 +41,14 @@ interface EngineState {
 }
 
 export const useEngineStore = create<EngineState>((set) => ({
-  data: "green",
-  scoring: "green",
-  database: "green",
-  validator: "green",
+  // Defaults "offline" — el backend solo confirma estado al primer
+  // heartbeat / WS event. Mostrar "green" sin info confirmada engaña
+  // al usuario. El piloto del footer arranca offline (gris/rojo)
+  // hasta que el motor reporte su estado real.
+  data: "offline",
+  scoring: "offline",
+  database: "offline",
+  validator: "offline",
   dataPaused: false,
   messages: {},
   errorCodes: {},

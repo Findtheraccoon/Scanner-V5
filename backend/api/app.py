@@ -56,6 +56,10 @@ def create_app(
     db_size_limit_mb: int = 5000,
     last_config_path_file: str = "data/last_config_path.json",
     fixtures_dir: str = "fixtures",
+    static_dir: str | None = None,
+    frontend_bearer: str | None = None,
+    restart_flag_path: str = "data/restart_requested.flag",
+    ws_idle_shutdown_s: float | None = None,
 ) -> FastAPI:
     """Construye una `FastAPI` lista para correr.
 
@@ -119,17 +123,38 @@ def create_app(
                 await init_db(archive_engine)
         workers: list[asyncio.Task] = []
         if enable_heartbeat:
+            # Heartbeat del scoring engine (con healthcheck mini-parity).
             workers.append(
                 asyncio.create_task(
                     heartbeat_worker(
                         session_factory,
                         broadcaster,
+                        engine_name="scoring",
                         interval_s=heartbeat_interval_s,
                         healthcheck_fn=heartbeat_healthcheck_fn,
                     ),
-                    name="heartbeat_worker",
+                    name="heartbeat_worker_scoring",
                 ),
             )
+            # Heartbeats simples para data + database — sin healthcheck
+            # propio. Reportan green mientras el lifespan corre. Si los
+            # motores fallan, el lifespan se cae y los heartbeats dejan
+            # de emitirse → el endpoint /engine/health los reporta
+            # offline tras el TTL natural (24h con rotate_expired). Es
+            # el mecanismo más simple sin agregar hooks específicos.
+            for sub_engine in ("data", "database"):
+                workers.append(
+                    asyncio.create_task(
+                        heartbeat_worker(
+                            session_factory,
+                            broadcaster,
+                            engine_name=sub_engine,
+                            interval_s=heartbeat_interval_s,
+                            healthcheck_fn=None,
+                        ),
+                        name=f"heartbeat_worker_{sub_engine}",
+                    ),
+                )
         if enable_auto_scheduler:
             workers.append(
                 asyncio.create_task(
@@ -183,8 +208,16 @@ def create_app(
     app.state.last_config_path_file = _Path(last_config_path_file)
     app.state.key_pool = None
     app.state.fixtures_dir = _Path(fixtures_dir)
+    app.state.restart_flag_path = _Path(restart_flag_path)
+    # WS idle shutdown — si `ws_idle_shutdown_s` está set, cuando el
+    # contador de conexiones WS llega a 0, dispara un timer y mata el
+    # backend tras esa cantidad de segundos sin reconexión.
+    app.state.ws_count = 0
+    app.state.ws_idle_shutdown_s = ws_idle_shutdown_s
+    app.state.ws_idle_timer: object | None = None
 
     _register_routes(app)
+    _mount_frontend(app, static_dir, frontend_bearer)
     return app
 
 
@@ -215,6 +248,7 @@ def _register_routes(app: FastAPI) -> None:
     from api.routes.scan import router as scan_router
     from api.routes.signals import router as signals_router
     from api.routes.slots import router as slots_router
+    from api.routes.system import router as system_router
     from api.routes.validator import router as validator_router
     from api.routes.websocket import router as websocket_router
 
@@ -226,7 +260,71 @@ def _register_routes(app: FastAPI) -> None:
     app.include_router(database_router, prefix="/api/v1")
     app.include_router(config_router, prefix="/api/v1")
     app.include_router(fixtures_router, prefix="/api/v1")
+    app.include_router(system_router, prefix="/api/v1")
     app.include_router(websocket_router)  # `/ws` sin prefijo /api/v1
+
+
+def _mount_frontend(app: FastAPI, static_dir: str | None, bearer: str | None) -> None:
+    """Monta `frontend/dist/` (si existe) en `/` con SPA fallback.
+
+    El index.html se sirve desde un handler custom que inyecta el
+    bearer como `<meta name="scanner-bearer" content="...">` cuando el
+    launcher provee uno. El frontend lo lee al primer load y lo guarda
+    en localStorage.
+
+    Si `static_dir` es None o no existe, el mount queda fuera y el
+    backend funciona solo como API (modo dev clásico con Vite proxy).
+    """
+    from pathlib import Path as _Path
+
+    from fastapi import HTTPException
+    from fastapi.responses import FileResponse, HTMLResponse, Response
+    from fastapi.staticfiles import StaticFiles
+
+    if static_dir is None:
+        return
+    base = _Path(static_dir)
+    if not base.is_dir():
+        return
+    index_path = base / "index.html"
+    if not index_path.is_file():
+        return
+
+    # Cache del index.html con el meta inyectado (sólo se calcula una
+    # vez al arrancar — el bearer no cambia en runtime).
+    raw_index = index_path.read_text(encoding="utf-8")
+    if bearer:
+        meta = (
+            f'<meta name="scanner-bearer" content="{bearer}">\n'
+        )
+        # Inyectar en el <head> — buscamos el primer <head> y lo
+        # ampliamos. Si no hay, prepend al body.
+        if "<head>" in raw_index:
+            raw_index = raw_index.replace("<head>", f"<head>\n    {meta}", 1)
+    cached_index = raw_index
+
+    @app.get("/", response_class=HTMLResponse, include_in_schema=False)
+    async def serve_index() -> HTMLResponse:
+        return HTMLResponse(content=cached_index)
+
+    # Static mount para todos los assets (CSS, JS, etc).
+    app.mount("/assets", StaticFiles(directory=str(base / "assets")), name="assets")
+
+    # SPA fallback: cualquier path que no matchee API/WS/static cae
+    # en el index.html para que React Router maneje el routing.
+    @app.get("/{path:path}", include_in_schema=False)
+    async def spa_fallback(path: str) -> Response:
+        # Excluir paths de API/WS — esos ya tienen sus rutas y devuelven
+        # 404 si no matchean. La regex no aplica acá; FastAPI matchea
+        # primero las rutas registradas con prefijo.
+        if path.startswith("api/") or path.startswith("ws"):
+            raise HTTPException(status_code=404)
+        # Si el path apunta a un archivo real (favicon, manifest), servirlo.
+        candidate = base / path
+        if candidate.is_file():
+            return FileResponse(str(candidate))
+        # Cualquier otro path → React Router lo maneja.
+        return HTMLResponse(content=cached_index)
 
 
 # Helpers exportados para testing (evitan replicar el acceso a state).

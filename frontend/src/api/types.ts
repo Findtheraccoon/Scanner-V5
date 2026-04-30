@@ -1,19 +1,35 @@
 /* Tipos del backend Scanner V5. Mantener en sync con
    `backend/api/routes/*.py` y `backend/modules/db/models.py`. */
 
-export type EngineStatusLevel = "green" | "yellow" | "red" | "paused";
+export type EngineStatusLevel = "green" | "yellow" | "red" | "paused" | "offline";
 export type SlotRuntimeStatus = "active" | "warming_up" | "degraded" | "disabled";
 export type SignalConfidence = "REVISAR" | "B" | "A" | "A+" | "S" | "S+";
 export type SignalDirection = "CALL" | "PUT";
 export type SignalLabel = "SETUP" | "REVISAR" | "NEUTRAL";
 
+/* Health agregado de los 4 motores · `GET /api/v1/engine/health`.
+
+   Cada sub-motor (scoring, data, database, validator) tiene su propio
+   sub-objeto con status + message + error_code. El overall `status`
+   es la agregación (green / yellow / red / offline). El frontend usa
+   este endpoint al cargar y luego refresca por WS `engine.status` en
+   tiempo real. */
+export interface EngineSubStatus {
+  status: EngineStatusLevel;
+  message: string | null;
+  error_code: string | null;
+  last_heartbeat_at?: string | null;
+  last_run_at?: string | null;
+}
+
 export interface EngineHealth {
   status: EngineStatusLevel;
-  scoring: { status: EngineStatusLevel; message?: string; error_code?: string };
-  data: { status: EngineStatusLevel; message?: string };
-  database: { status: EngineStatusLevel; message?: string };
-  uptime_seconds?: number;
-  last_heartbeat_at?: string;
+  scoring: EngineSubStatus;
+  data: EngineSubStatus;
+  database: EngineSubStatus;
+  validator: EngineSubStatus;
+  engine_version: string;
+  ts: string;
 }
 
 export interface SlotInfo {

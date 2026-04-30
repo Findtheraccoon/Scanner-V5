@@ -1,15 +1,15 @@
 import type { ApiError } from "@/api/client";
 import {
-  useEngineHealth,
   useValidatorConnectivity,
   useValidatorReportLatest,
   useValidatorReports,
   useValidatorRun,
 } from "@/api/queries";
-import type { ValidatorTestStatus } from "@/api/types";
+import type { EngineStatusLevel, ValidatorTestStatus } from "@/api/types";
 import { useToast } from "@/components/Toast/ToastProvider";
 import { Badge } from "@/components/ui/Badge";
-import { Pilot } from "@/components/ui/Pilot";
+import { Pilot, type PilotState } from "@/components/ui/Pilot";
+import { useEngineStore } from "@/stores/engine";
 import {
   type ValidatorTestRuntimeStatus,
   useValidatorProgressStore,
@@ -63,8 +63,15 @@ export function Box5Validator(): ReactElement {
   const run = useValidatorRun();
   const conn = useValidatorConnectivity();
   const progress = useValidatorProgressStore();
-  const health = useEngineHealth();
+  const engineState = useEngineStore();
   const { push: toast } = useToast();
+
+  const enginePilot = (level: EngineStatusLevel): PilotState => {
+    if (level === "green") return "ok";
+    if (level === "red") return "err";
+    if (level === "offline") return "pend";
+    return "warn";
+  };
 
   const errMsg = (e: unknown): string => {
     const err = e as ApiError;
@@ -159,7 +166,6 @@ export function Box5Validator(): ReactElement {
   };
 
   const reportsList = reports.data?.items ?? [];
-  const healthData = health.data;
 
   return (
     <Box
@@ -306,50 +312,27 @@ export function Box5Validator(): ReactElement {
             <div className="engines-mini">
               <div className="engine-row">
                 <div className="engine-row__nm">
-                  data engine{" "}
-                  <Pilot
-                    state={
-                      healthData?.data.status === "green"
-                        ? "ok"
-                        : healthData?.data.status === "red"
-                          ? "err"
-                          : "warn"
-                    }
-                  />
-                </div>
-                <div className="engine-row__ms">{healthData?.data.message ?? "—"}</div>
-              </div>
-              <div className="engine-row">
-                <div className="engine-row__nm">
-                  scoring{" "}
-                  <Pilot
-                    state={
-                      healthData?.scoring.status === "green"
-                        ? "ok"
-                        : healthData?.scoring.status === "red"
-                          ? "err"
-                          : "warn"
-                    }
-                  />
+                  data engine <Pilot state={enginePilot(engineState.data)} />
                 </div>
                 <div className="engine-row__ms">
-                  {healthData?.scoring.message ?? "healthcheck OK"}
+                  {engineState.messages.data || engineState.data}
                 </div>
               </div>
               <div className="engine-row">
                 <div className="engine-row__nm">
-                  database{" "}
-                  <Pilot
-                    state={
-                      healthData?.database.status === "green"
-                        ? "ok"
-                        : healthData?.database.status === "red"
-                          ? "err"
-                          : "warn"
-                    }
-                  />
+                  scoring <Pilot state={enginePilot(engineState.scoring)} />
                 </div>
-                <div className="engine-row__ms">{healthData?.database.message ?? "—"}</div>
+                <div className="engine-row__ms">
+                  {engineState.messages.scoring || engineState.scoring}
+                </div>
+              </div>
+              <div className="engine-row">
+                <div className="engine-row__nm">
+                  database <Pilot state={enginePilot(engineState.database)} />
+                </div>
+                <div className="engine-row__ms">
+                  {engineState.messages.database || engineState.database}
+                </div>
               </div>
             </div>
           </div>
