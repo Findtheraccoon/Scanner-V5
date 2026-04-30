@@ -367,6 +367,10 @@ def main() -> int:
         db_size_limit_mb=settings.db_size_limit_mb,
         last_config_path_file=settings.last_config_path_file,
         fixtures_dir=settings.fixtures_dir,
+        static_dir=settings.static_dir,
+        frontend_bearer=settings.frontend_bearer_token,
+        ws_idle_shutdown_s=settings.ws_idle_shutdown_s,
+        restart_flag_path=settings.restart_flag_path,
     )
 
     if (

@@ -1,5 +1,13 @@
-import { useEngineHealth, useSlots, useValidatorReportLatest } from "@/api/queries";
+import type { ApiError } from "@/api/client";
+import {
+  useEngineHealth,
+  useSlots,
+  useSystemRestart,
+  useSystemShutdown,
+  useValidatorReportLatest,
+} from "@/api/queries";
 import type { EngineStatusLevel } from "@/api/types";
+import { useToast } from "@/components/Toast/ToastProvider";
 import { Pilot } from "@/components/ui/Pilot";
 import { useEngineStore } from "@/stores/engine";
 import type { ReactElement } from "react";
@@ -79,6 +87,46 @@ export function Box1Engines(): ReactElement {
   const slotsQuery = useSlots();
   const lastReport = useValidatorReportLatest();
   const dataPaused = useEngineStore((s) => s.dataPaused);
+  const shutdown = useSystemShutdown();
+  const restart = useSystemRestart();
+  const { push: toast } = useToast();
+
+  const errMsg = (e: unknown): string => {
+    const err = e as ApiError;
+    return typeof err.body === "string"
+      ? err.body
+      : err.body
+        ? JSON.stringify(err.body)
+        : err.message;
+  };
+
+  const onShutdown = async () => {
+    if (
+      !confirm(
+        "¿detener el backend? Esto cierra todos los procesos asociados y la pestaña dejará de funcionar.",
+      )
+    )
+      return;
+    try {
+      await shutdown.mutateAsync();
+      toast("backend deteniéndose…", "warn");
+    } catch (e) {
+      toast(`shutdown falló — ${errMsg(e)}`, "error");
+    }
+  };
+
+  const onRestart = async () => {
+    if (
+      !confirm("¿reiniciar el backend? El proceso se cerrará y volverá a arrancar (~3 segundos).")
+    )
+      return;
+    try {
+      await restart.mutateAsync();
+      toast("backend reiniciándose…", "info");
+    } catch (e) {
+      toast(`restart falló — ${errMsg(e)}`, "error");
+    }
+  };
 
   const data = health.data;
   const slots = slotsQuery.data ?? [];
@@ -132,6 +180,31 @@ export function Box1Engines(): ReactElement {
       }
       statusText={`${okCount} / ${total} operativos`}
     >
+      <div className="toolbar">
+        <span className="toolbar__left">
+          control del proceso del backend · usar con cuidado · cerrar la pestaña también detiene el
+          backend tras 60s sin reconexión
+        </span>
+        <div className="toolbar__right">
+          <button
+            type="button"
+            className="btn"
+            onClick={onRestart}
+            disabled={restart.isPending || shutdown.isPending}
+          >
+            {restart.isPending ? "reiniciando…" : "reiniciar backend"}
+          </button>
+          <button
+            type="button"
+            className="btn is-danger"
+            onClick={onShutdown}
+            disabled={shutdown.isPending || restart.isPending}
+          >
+            {shutdown.isPending ? "deteniendo…" : "detener backend"}
+          </button>
+        </div>
+      </div>
+
       <div className="eng-cards">
         <EngCard
           name="database"

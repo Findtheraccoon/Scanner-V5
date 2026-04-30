@@ -495,4 +495,26 @@ export function usePatchSlot() {
   });
 }
 
+/* ════════════════════════════════════════════════════════════════════
+   SYSTEM — shutdown + restart (modo launcher · v1)
+   ════════════════════════════════════════════════════════════════════ */
+
+export function useSystemShutdown() {
+  return useMutation<{ shutdown: boolean; message: string }, ApiError, void>({
+    mutationFn: () =>
+      api<{ shutdown: boolean; message: string }>("/system/shutdown", {
+        method: "POST",
+      }),
+  });
+}
+
+export function useSystemRestart() {
+  return useMutation<{ restart: boolean; flag_path: string; message: string }, ApiError, void>({
+    mutationFn: () =>
+      api<{ restart: boolean; flag_path: string; message: string }>("/system/restart", {
+        method: "POST",
+      }),
+  });
+}
+
 export { enabled };
