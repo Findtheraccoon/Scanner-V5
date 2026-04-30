@@ -62,8 +62,8 @@ export function Box2Config(): ReactElement {
   const cfg = current.data?.config ?? null;
   const currentPath = current.data?.path ?? null;
 
-  // Estado del box: si hay config cargado → ok; si no → pend.
-  const state: BoxState = loaded ? "ok" : "pend";
+  // Semáforo (UX-001): rojo si no hay .config cargado · verde si sí.
+  const state: BoxState = loaded ? "ok" : "err";
   const statusText = loaded ? "cargado" : "sin cargar";
 
   const errMsg = (e: unknown): string => {

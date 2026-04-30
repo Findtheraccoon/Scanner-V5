@@ -48,11 +48,16 @@ function statusToCellState(
   return "pend";
 }
 
+/* Semáforo (UX-001):
+   - pend si nunca corrió (todas las celdas pend = sin reporte previo).
+   - err  si alguna celda fail.
+   - warn si alguna celda warn o running.
+   - ok   si todas las celdas ok.
+   - warn por default (mix de pend + ok = parcial, conservador). */
 function aggregateState(cells: ("ok" | "run" | "warn" | "fail" | "pend")[]): BoxState {
   if (cells.every((c) => c === "pend")) return "pend";
   if (cells.some((c) => c === "fail")) return "err";
-  if (cells.some((c) => c === "warn")) return "warn";
-  if (cells.some((c) => c === "run")) return "warn";
+  if (cells.some((c) => c === "warn" || c === "run")) return "warn";
   if (cells.every((c) => c === "ok")) return "ok";
   return "warn";
 }

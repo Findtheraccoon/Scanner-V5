@@ -859,42 +859,65 @@ input.inp { width: 100%; }
    BOX 4 — Slots + biblioteca + upload
    ═══════════════════════════════════════════════════════════════════ */
 
-.slots-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-family: var(--font-mono);
-  font-size: 11px;
+/* UX-002: 6 slots como tarjetas individuales (no tabla).
+   Grid responsive 3 columnas en desktop, 2 en tablet, 1 en mobile.
+   Flow vertical dentro de cada card: head (id + status) → ticker →
+   fixture → toggle. */
+.slot-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--gap-2);
+}
+@media (max-width: 1100px) {
+  .slot-cards { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 720px) {
+  .slot-cards { grid-template-columns: 1fr; }
+}
+.slot-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
   background: rgba(0,0,0,0.28);
   border: 1px solid var(--hair-2);
   border-radius: var(--r-sm);
-  overflow: hidden;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t-90);
+  transition: opacity 0.2s ease, border-color 0.2s ease;
 }
-.slots-table th {
+.slot-card.is-disabled { opacity: 0.55; }
+.slot-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--hair-2);
+}
+.slot-card__id {
   font-size: 9px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+  color: var(--t-55);
+  font-weight: 600;
+}
+.slot-card .field { gap: 4px; }
+.slot-card .field label {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
   color: var(--t-38);
-  font-weight: 500;
-  text-align: left;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--hair-3);
-  background: rgba(255,255,255,0.018);
 }
-.slots-table td {
-  padding: 10px 12px;
-  border-bottom: 1px dashed var(--hair-2);
-  vertical-align: middle;
-  color: var(--t-90);
+.slot-card .field .inp { padding: 6px 8px; font-size: 11px; }
+.slot-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-top: 6px;
+  border-top: 1px dashed var(--hair-2);
 }
-.slots-table tr:last-child td { border-bottom: none; }
-.slots-table tr.is-disabled td { opacity: 0.5; }
-.slots-table .col-id  { width: 48px; font-weight: 600; color: var(--t-55); text-align: center; font-size: 13px; }
-.slots-table .col-tk  { width: 110px; }
-.slots-table .col-fix { width: 290px; }
-.slots-table .col-en  { width: 84px; }
-.slots-table .col-st  { width: 240px; }
-.slots-table .col-tk input.inp { padding: 5px 8px; font-size: 11px; }
-.slots-table .col-fix select.inp { padding: 5px 8px; font-size: 11px; width: 100%; }
 
 .runtime-status {
   display: inline-flex;

@@ -55,18 +55,28 @@ export function Box3Keys(): ReactElement {
   const probedOk = Object.values(probeResults).filter((r) => r.ok).length;
   const probedTotal = Object.keys(probeResults).length;
 
+  // Semáforo (UX-001):
+  // - rojo si 0 keys configuradas (no funciona el data engine).
+  // - verde si ≥1 key configurada y al menos 1 probada OK (1 sola es suficiente).
+  // - verde si ≥1 key configurada y nunca se probó (asumimos OK hasta probar).
+  // - warn si todas las keys probadas fallaron (TODO probaron y NINGUNA OK).
+  // - warn si al menos una falló pero alguna OK (parcial).
   let state: BoxState;
-  if (keys.length === 0) state = "pend";
-  else if (probedTotal > 0 && probedOk < keys.length) state = "warn";
-  else if (probedTotal > 0 && probedOk === keys.length) state = "ok";
-  else state = "warn"; // hay keys pero todavía no se probaron — por defecto warn
+  if (keys.length === 0) state = "err";
+  else if (probedTotal === 0)
+    state = "ok"; // sin probar pero configurado
+  else if (probedOk === 0)
+    state = "err"; // todas las probadas fallaron
+  else if (probedOk < probedTotal)
+    state = "warn"; // parcial
+  else state = "ok"; // ≥1 OK
 
   const statusText =
     keys.length === 0
       ? "0 keys"
       : probedTotal === 0
         ? `${keys.length} / 5 · sin probar`
-        : `${probedOk} / ${keys.length} ok`;
+        : `${probedOk} / ${probedTotal} ok`;
 
   const errMsg = (e: unknown): string => {
     const err = e as ApiError;

@@ -11,7 +11,7 @@ import { useToast } from "@/components/Toast/ToastProvider";
 import { Dropzone } from "@/components/ui/Dropzone";
 import { Pilot } from "@/components/ui/Pilot";
 import { Toggle } from "@/components/ui/Toggle";
-import type { ReactElement } from "react";
+import { type ReactElement, useEffect, useState } from "react";
 import { Box, type BoxState } from "../Box";
 
 /* Box 4 — Slot Registry + fixtures.
@@ -38,21 +38,42 @@ function statusLabel(st: SlotRuntimeStatus): string {
 }
 
 function aggregateSlotsState(slots: SlotInfo[]): BoxState {
-  if (slots.length === 0) return "pend";
-  if (slots.some((s) => s.status === "degraded")) return "err";
-  if (slots.some((s) => s.status === "warming_up")) return "warn";
-  if (slots.every((s) => s.status === "disabled")) return "pend";
+  // Semáforo (UX-001):
+  // - rojo si NO hay slots habilitados (todos disabled o lista vacía).
+  // - rojo si todos los habilitados están degraded.
+  // - warn si algún slot warming o degraded pero hay activos.
+  // - verde si al menos 1 active y ningún degraded.
+  if (slots.length === 0) return "err";
+  const enabled = slots.filter((s) => s.status !== "disabled");
+  if (enabled.length === 0) return "err"; // todos disabled = no configurado
+  const allDegraded = enabled.every((s) => s.status === "degraded");
+  if (allDegraded) return "err";
+  const someWarming = enabled.some((s) => s.status === "warming_up");
+  const someDegraded = enabled.some((s) => s.status === "degraded");
+  if (someWarming || someDegraded) return "warn";
   return "ok";
 }
 
-interface SlotRowProps {
+interface SlotCardProps {
   slot: SlotInfo;
   fixtures: { id: string; version?: string; compatible: boolean }[];
 }
 
-function SlotRow({ slot, fixtures }: SlotRowProps): ReactElement {
+/* UX-002: cada slot es una tarjeta individual con flujo
+   "ticker → fixture → toggle enable" en lugar de fila de tabla.
+   El ticker es editable inline (commit on blur o Enter); el fixture
+   es un select; el toggle dispara PATCH con validación. */
+function SlotCard({ slot, fixtures }: SlotCardProps): ReactElement {
   const patch = usePatchSlot();
   const { push: toast } = useToast();
+
+  // Estado local del ticker — input editable; commit on blur o Enter.
+  const [tickerDraft, setTickerDraft] = useState(slot.ticker ?? "");
+  // Re-sync cuando el slot cambia desde el backend (ej. tras PATCH).
+  useEffect(() => {
+    setTickerDraft(slot.ticker ?? "");
+  }, [slot.ticker]);
+
   const errMsg = (e: unknown): string => {
     const err = e as ApiError;
     return typeof err.body === "string"
@@ -60,6 +81,57 @@ function SlotRow({ slot, fixtures }: SlotRowProps): ReactElement {
       : err.body
         ? JSON.stringify(err.body)
         : err.message;
+  };
+
+  const commitTicker = async () => {
+    const next = tickerDraft.trim().toUpperCase();
+    if (next === (slot.ticker ?? "")) return;
+    if (!next) {
+      // Borrar ticker → deshabilitar slot.
+      try {
+        await patch.mutateAsync({
+          slotId: slot.slot_id,
+          body: { enabled: false },
+        });
+        toast(`slot ${slot.slot_id}: ticker borrado · deshabilitado`, "info");
+      } catch (e) {
+        toast(`slot ${slot.slot_id}: ${errMsg(e)}`, "error");
+        setTickerDraft(slot.ticker ?? "");
+      }
+      return;
+    }
+    // Si ya tenía fixture, mantener config con nuevo ticker; sino solo guardar
+    // el ticker (el slot quedará pendiente de fixture).
+    try {
+      await patch.mutateAsync({
+        slotId: slot.slot_id,
+        body: {
+          enabled: slot.enabled && !!slot.fixture_id,
+          ticker: next,
+          fixture: slot.fixture_id ?? "",
+        },
+      });
+      toast(`slot ${slot.slot_id}: ticker → ${next}`, "success");
+    } catch (e) {
+      toast(`slot ${slot.slot_id}: ${errMsg(e)}`, "error");
+      setTickerDraft(slot.ticker ?? "");
+    }
+  };
+
+  const onChangeFixture = async (fid: string) => {
+    if (!slot.ticker) {
+      toast(`slot ${slot.slot_id}: ingresá ticker primero`, "warn");
+      return;
+    }
+    try {
+      await patch.mutateAsync({
+        slotId: slot.slot_id,
+        body: { enabled: slot.enabled, ticker: slot.ticker, fixture: fid },
+      });
+      toast(`slot ${slot.slot_id}: fixture → ${fid}`, "success");
+    } catch (e) {
+      toast(`slot ${slot.slot_id}: ${errMsg(e)}`, "error");
+    }
   };
 
   const onToggle = async (enabled: boolean) => {
@@ -80,45 +152,47 @@ function SlotRow({ slot, fixtures }: SlotRowProps): ReactElement {
     }
   };
 
-  const onChangeFixture = async (fid: string) => {
-    if (!slot.ticker) {
-      toast(`slot ${slot.slot_id}: ingresá ticker primero`, "warn");
-      return;
-    }
-    try {
-      await patch.mutateAsync({
-        slotId: slot.slot_id,
-        body: { enabled: slot.enabled, ticker: slot.ticker, fixture: fid },
-      });
-      toast(`slot ${slot.slot_id}: fixture → ${fid}`, "success");
-    } catch (e) {
-      toast(`slot ${slot.slot_id}: ${errMsg(e)}`, "error");
-    }
-  };
-
   const stateClass = statusToState(slot.status);
-  const rowClass = slot.enabled ? "" : "is-disabled";
+  const cardClass = slot.enabled ? "slot-card" : "slot-card is-disabled";
+  const slotIdStr = String(slot.slot_id).padStart(2, "0");
 
   return (
-    <tr className={rowClass}>
-      <td className="col-id">{String(slot.slot_id).padStart(2, "0")}</td>
-      <td className="col-tk">
+    <div className={cardClass}>
+      <div className="slot-card__head">
+        <span className="slot-card__id">slot {slotIdStr}</span>
+        <span className={`runtime-status${stateClass !== "ok" ? ` is-${stateClass}` : ""}`}>
+          <Pilot state={stateClass} />
+          {statusLabel(slot.status)}
+          {slot.error_code ? <span className="num"> · {slot.error_code}</span> : null}
+        </span>
+      </div>
+
+      <div className="field">
+        <label htmlFor={`ticker-${slot.slot_id}`}>ticker</label>
         <input
+          id={`ticker-${slot.slot_id}`}
           className="inp"
           type="text"
-          value={slot.ticker ?? ""}
-          placeholder="—"
-          aria-label={`ticker slot ${slot.slot_id}`}
-          readOnly
+          value={tickerDraft}
+          placeholder="ej. SPY"
+          maxLength={10}
+          onChange={(e) => setTickerDraft(e.target.value)}
+          onBlur={commitTicker}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+          }}
+          disabled={patch.isPending}
         />
-      </td>
-      <td className="col-fix">
+      </div>
+
+      <div className="field">
+        <label htmlFor={`fixture-${slot.slot_id}`}>fixture</label>
         <select
+          id={`fixture-${slot.slot_id}`}
           className="inp"
           value={slot.fixture_id ?? ""}
           onChange={(e) => onChangeFixture(e.target.value)}
-          disabled={patch.isPending || fixtures.length === 0}
-          aria-label={`fixture slot ${slot.slot_id}`}
+          disabled={patch.isPending || !slot.ticker || fixtures.length === 0}
         >
           <option value="">— elegir —</option>
           {fixtures.map((f) => (
@@ -128,23 +202,17 @@ function SlotRow({ slot, fixtures }: SlotRowProps): ReactElement {
             </option>
           ))}
         </select>
-      </td>
-      <td className="col-en">
+      </div>
+
+      <div className="slot-card__foot">
         <Toggle
           on={slot.enabled}
           onChange={onToggle}
           disabled={patch.isPending}
           ariaLabel={`enable slot ${slot.slot_id}`}
         />
-      </td>
-      <td className="col-st">
-        <span className={`runtime-status${stateClass !== "ok" ? ` is-${stateClass}` : ""}`}>
-          <Pilot state={stateClass} />
-          {statusLabel(slot.status)}
-          {slot.error_code ? <span className="num"> · {slot.error_code}</span> : null}
-        </span>
-      </td>
-    </tr>
+      </div>
+    </div>
   );
 }
 
@@ -219,28 +287,17 @@ export function Box4Slots(): ReactElement {
       }
       statusText={statusText}
     >
-      <table className="slots-table">
-        <thead>
-          <tr>
-            <th className="col-id">#</th>
-            <th className="col-tk">ticker</th>
-            <th className="col-fix">fixture</th>
-            <th className="col-en">enabled</th>
-            <th className="col-st">runtime</th>
-          </tr>
-        </thead>
-        <tbody>
-          {slotList.length === 0 ? (
-            <tr>
-              <td colSpan={5} style={{ textAlign: "center", color: "var(--t-55)", padding: 20 }}>
-                {slots.isLoading ? "cargando slots…" : "sin slots configurados"}
-              </td>
-            </tr>
-          ) : (
-            slotList.map((s) => <SlotRow key={s.slot_id} slot={s} fixtures={fixturesForSelect} />)
-          )}
-        </tbody>
-      </table>
+      {slotList.length === 0 ? (
+        <div style={{ textAlign: "center", color: "var(--t-55)", padding: 20 }}>
+          {slots.isLoading ? "cargando slots…" : "sin slots configurados"}
+        </div>
+      ) : (
+        <div className="slot-cards">
+          {slotList.map((s) => (
+            <SlotCard key={s.slot_id} slot={s} fixtures={fixturesForSelect} />
+          ))}
+        </div>
+      )}
 
       {/* Biblioteca de fixtures */}
       <div className="lib-wrap">
