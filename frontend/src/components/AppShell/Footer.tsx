@@ -12,8 +12,8 @@ const PILL_LABEL: Record<"data" | "scoring" | "database", string> = {
 
 function statusClass(status: EngineStatusLevel): string {
   if (status === "green") return "ok";
-  if (status === "yellow") return "warn";
-  if (status === "paused") return "warn";
+  if (status === "yellow" || status === "paused") return "warn";
+  if (status === "offline") return "pend";
   return "err";
 }
 

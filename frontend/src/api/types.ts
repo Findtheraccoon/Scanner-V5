@@ -1,19 +1,24 @@
 /* Tipos del backend Scanner V5. Mantener en sync con
    `backend/api/routes/*.py` y `backend/modules/db/models.py`. */
 
-export type EngineStatusLevel = "green" | "yellow" | "red" | "paused";
+export type EngineStatusLevel = "green" | "yellow" | "red" | "paused" | "offline";
 export type SlotRuntimeStatus = "active" | "warming_up" | "degraded" | "disabled";
 export type SignalConfidence = "REVISAR" | "B" | "A" | "A+" | "S" | "S+";
 export type SignalDirection = "CALL" | "PUT";
 export type SignalLabel = "SETUP" | "REVISAR" | "NEUTRAL";
 
+/* Health del motor de scoring · `GET /api/v1/engine/health`.
+   El backend hoy solo expone scoring (lee del último heartbeat). El
+   estado de los otros motores (data, database, validator) llega por
+   WS `engine.status` y vive en `useEngineStore`. Componentes que
+   necesiten estado multi-motor deben leer del store, no de este hook. */
 export interface EngineHealth {
   status: EngineStatusLevel;
-  scoring: { status: EngineStatusLevel; message?: string; error_code?: string };
-  data: { status: EngineStatusLevel; message?: string };
-  database: { status: EngineStatusLevel; message?: string };
-  uptime_seconds?: number;
-  last_heartbeat_at?: string;
+  engine: "scoring";
+  engine_version: string;
+  memory_pct: number | null;
+  error_code: string | null;
+  ts: string;
 }
 
 export interface SlotInfo {

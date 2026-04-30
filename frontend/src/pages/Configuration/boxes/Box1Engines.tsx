@@ -31,7 +31,7 @@ import { Box, type BoxState } from "../Box";
 */
 
 function levelToState(level: EngineStatusLevel | undefined): BoxState {
-  if (level === undefined) return "pend";
+  if (level === undefined || level === "offline") return "pend";
   if (level === "green") return "ok";
   if (level === "yellow" || level === "paused") return "warn";
   if (level === "red") return "err";
@@ -39,7 +39,7 @@ function levelToState(level: EngineStatusLevel | undefined): BoxState {
 }
 
 function aggregateState(levels: (EngineStatusLevel | undefined)[]): BoxState {
-  if (levels.some((l) => l === undefined)) return "pend";
+  if (levels.some((l) => l === undefined || l === "offline")) return "pend";
   if (levels.some((l) => l === "red")) return "err";
   if (levels.some((l) => l === "yellow" || l === "paused")) return "warn";
   return "ok";
@@ -135,16 +135,25 @@ export function Box1Engines(): ReactElement {
   const slotsDegraded = slots.filter((s) => s.status === "degraded").length;
   const slotsDisabled = slots.filter((s) => s.status === "disabled").length;
 
-  const dbState = levelToState(data?.database.status);
-  const dataState = levelToState(data?.data.status);
+  // Estado de motores live desde el store (alimentado por WS engine.status).
+  // Defaults "offline" hasta que el backend reporte. Scoring se sincroniza
+  // también desde el REST /engine/health al cargar.
+  const engineState = useEngineStore();
+  const dbState = levelToState(engineState.database);
+  const dataState = levelToState(engineState.data);
+  const scoringState = levelToState(engineState.scoring);
+  const dbMessage = engineState.messages.database;
+  const dataMessage = engineState.messages.data;
+  const scoringMessage = engineState.messages.scoring;
+  const scoringErrorCode = engineState.errorCodes.scoring;
+
   const slotRegistryState = aggregateState(
     slots.length === 0
-      ? [undefined]
+      ? ["offline"]
       : slots.map((s) => (s.status === "degraded" ? "red" : "green")),
   );
-  const scoringState = levelToState(data?.scoring.status);
-  // El Validator no expone status global directo en /engine/health hoy;
-  // tomamos el overall_status del último reporte como proxy.
+  // El Validator no tiene WS status hoy; tomamos el overall_status del
+  // último reporte como proxy.
   const validatorState: BoxState =
     lastReport.data === null || lastReport.data === undefined
       ? "pend"
@@ -155,11 +164,11 @@ export function Box1Engines(): ReactElement {
           : "err";
 
   const overall = aggregateState([
-    data?.database.status,
-    data?.data.status,
-    slots.length === 0 ? undefined : "green",
-    data?.scoring.status,
-    lastReport.data === undefined ? undefined : "green",
+    engineState.database,
+    engineState.data,
+    slots.length === 0 ? "offline" : "green",
+    engineState.scoring,
+    lastReport.data === undefined ? "offline" : "green",
   ]);
 
   const total = 5;
@@ -214,11 +223,11 @@ export function Box1Engines(): ReactElement {
             <>
               SQLite operativa + archive
               <br />
-              heartbeat <span className="num">{formatRel(data?.last_heartbeat_at)}</span>
-              {data?.database.message ? (
+              heartbeat <span className="num">{formatRel(data?.ts)}</span>
+              {dbMessage ? (
                 <>
                   <br />
-                  <span className="num">{data.database.message}</span>
+                  <span className="num">{dbMessage}</span>
                 </>
               ) : null}
             </>
@@ -238,13 +247,13 @@ export function Box1Engines(): ReactElement {
                 <span className="num">auto-scan en pausa</span>
               ) : (
                 <>
-                  estado: <span className="num">{data?.data.status ?? "—"}</span>
+                  estado: <span className="num">{engineState.data}</span>
                 </>
               )}
-              {data?.data.message ? (
+              {dataMessage ? (
                 <>
                   <br />
-                  <span className="num">{data.data.message}</span>
+                  <span className="num">{dataMessage}</span>
                 </>
               ) : null}
             </>
@@ -275,13 +284,19 @@ export function Box1Engines(): ReactElement {
           state={scoringState}
           body={
             <>
-              motor v5.2.0
+              motor {data?.engine_version ?? "v5.2.0"}
               <br />
-              healthcheck: <span className="num">{data?.scoring.status ?? "—"}</span>
-              {data?.scoring.error_code ? (
+              healthcheck: <span className="num">{engineState.scoring}</span>
+              {scoringMessage ? (
                 <>
                   <br />
-                  <span className="num">{data.scoring.error_code}</span>
+                  <span className="num">{scoringMessage}</span>
+                </>
+              ) : null}
+              {scoringErrorCode ? (
+                <>
+                  <br />
+                  <span className="num">{scoringErrorCode}</span>
                 </>
               ) : null}
             </>
