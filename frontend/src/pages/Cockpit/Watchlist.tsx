@@ -10,9 +10,18 @@ import type { SlotData } from "./data";
    ticker pero no signal, dejamos band/score/sparkline en null. La
    sparkline real llegará con Lightweight Charts en una iteración
    posterior; mientras tanto se renderiza vacía. */
+interface WatchlistSignalSlim {
+  conf: SignalConfidence;
+  dir: SignalDirection | null;
+  score: number;
+  // BUG-023: WR@30 del backtest training para la banda de la signal,
+  // inyectado por el backend desde `<fixture>.metrics.json`.
+  wr_pct?: number | null;
+}
+
 function buildSlotData(
   registrySlots: SlotInfo[],
-  signals: Record<number, { conf: SignalConfidence; dir: SignalDirection | null; score: number }>,
+  signals: Record<number, WatchlistSignalSlim>,
 ): SlotData[] {
   if (registrySlots.length === 0) {
     return Array.from({ length: 6 }, (_, idx) => ({
@@ -35,7 +44,12 @@ function buildSlotData(
       band: sig ? sig.conf : null,
       direction: sig?.dir ?? null,
       score: sig?.score ?? null,
-      winRate: null,
+      // BUG-023: pasamos el WR del backtest si vino en la signal.
+      // Slot.tsx lo renderiza como `{wr}%` cuando hay setup.
+      winRate:
+        sig?.wr_pct !== null && sig?.wr_pct !== undefined
+          ? Math.round(sig.wr_pct)
+          : null,
       selected: false,
       metallic: sig?.conf === "S+",
       sparkline: null,
@@ -54,7 +68,7 @@ export function Watchlist() {
     Object.fromEntries(
       Object.entries(signals).map(([k, v]) => [
         Number(k),
-        { conf: v.conf, dir: v.dir, score: v.score },
+        { conf: v.conf, dir: v.dir, score: v.score, wr_pct: v.wr_pct },
       ]),
     ),
   ).map((s) => ({ ...s, selected: s.id === selectedId }));

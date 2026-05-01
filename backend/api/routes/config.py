@@ -398,9 +398,43 @@ async def config_put_td_keys(
     request: Request,
     _token: str = Depends(require_auth),
 ) -> dict:
-    """Edita las TD keys del runtime + reload del KeyPool."""
+    """Edita las TD keys del runtime + reload del KeyPool.
+
+    BUG-029: el endpoint `/config/current` enmascara los secrets con
+    "***" para no exponerlos en la UI. Cuando el usuario agrega una
+    key nueva (slot N+1), el frontend re-envía la lista completa,
+    incluyendo entries previas con `secret="***"` (el valor masked
+    que recibió). Antes el backend tomaba ese "***" literal y lo
+    guardaba como secret real → la key vieja quedaba inválida (TD
+    rechazaba con 401: "**apikey** parameter is incorrect").
+
+    Fix: si el body trae `secret == "***"` para un `key_id` que ya
+    existe en runtime, se preserva el secret original. El usuario
+    puede sobrescribirlo enviando un secret distinto explícitamente.
+    """
     current = _get_runtime_or_empty(request)
-    new_cfg = current.model_copy(update={"twelvedata_keys": req.twelvedata_keys})
+
+    # Mapa key_id → secret existente para preservar secretos masked
+    existing_secrets = {
+        k.key_id: k.secret for k in current.twelvedata_keys
+    }
+
+    merged_keys: list[TDKeyConfig] = []
+    preserved_count = 0
+    for incoming in req.twelvedata_keys:
+        # `_REDACTED` es el placeholder que `_redact_user_config` emite
+        # en GET /config/current. Si llega de vuelta significa que el
+        # frontend está re-enviándonos el masked sin haberlo cambiado.
+        if incoming.secret == _REDACTED and incoming.key_id in existing_secrets:
+            preserved = incoming.model_copy(
+                update={"secret": existing_secrets[incoming.key_id]},
+            )
+            merged_keys.append(preserved)
+            preserved_count += 1
+        else:
+            merged_keys.append(incoming)
+
+    new_cfg = current.model_copy(update={"twelvedata_keys": merged_keys})
     _set_runtime(
         request, new_cfg, getattr(request.app.state, "user_config_path", None),
     )
@@ -409,6 +443,7 @@ async def config_put_td_keys(
         "updated": True,
         "count": len(new_cfg.twelvedata_keys),
         "key_pool_reloaded": pool_reloaded,
+        "preserved_redacted": preserved_count,
     }
 
 

@@ -5,6 +5,7 @@ import { useSignalsStore } from "@/stores/signals";
 import { useSlotsStore } from "@/stores/slots";
 import { useValidatorProgressStore } from "@/stores/validatorProgress";
 import { useEffect } from "react";
+import { queryClient } from "./queryClient";
 import type {
   ApiUsageTickPayload,
   EngineStatusPayload,
@@ -83,9 +84,18 @@ function dispatch(env: WsEnvelope): void {
   switch (env.event) {
     case "signal.new":
       useSignalsStore.getState().applySignal(env.payload as SignalPayload);
+      // BUG-030: signal.new significa que el scan_loop terminó un ciclo
+      // y persistió velas nuevas en DB (15m/1h/daily). El chart del
+      // Cockpit refresca solo cuando invalidamos la query family.
+      queryClient.invalidateQueries({ queryKey: ["candles"] });
       break;
     case "slot.status":
       useSlotsStore.getState().applySlotStatus(env.payload as SlotStatusPayload);
+      // BUG-020: además de actualizar el zustand store, invalidamos la
+      // query ["slots"] para que componentes que leen de TanStack Query
+      // (Box4 SlotCard) refleje el cambio (warming_up → active sin
+      // tener que esperar al staleTime de 30s/60s).
+      queryClient.invalidateQueries({ queryKey: ["slots"] });
       break;
     case "engine.status":
       useEngineStore.getState().applyEngineStatus(env.payload as EngineStatusPayload);

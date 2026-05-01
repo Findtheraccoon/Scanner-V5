@@ -93,6 +93,11 @@ def setup_env(bearer: str) -> None:
     """Setea env vars que `main()` lee via Settings."""
     os.environ.setdefault("SCANNER_API_KEYS", bearer)
     os.environ.setdefault("SCANNER_FRONTEND_BEARER_TOKEN", bearer)
+    # BUG-014: el backend usa este env var para detectar que está
+    # corriendo bajo el launcher (= /system/restart va a relanzarlo).
+    # Sin esto, el frontend deshabilita el botón "reiniciar" porque
+    # SIGINT mataría el proceso sin retorno.
+    os.environ["SCANNER_LAUNCHER_PID"] = str(os.getpid())
     if STATIC_DIR.is_dir():
         os.environ.setdefault("SCANNER_STATIC_DIR", str(STATIC_DIR))
     else:

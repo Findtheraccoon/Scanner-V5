@@ -415,6 +415,31 @@ class TestEnableSlot:
         assert slot1["fixture"] == fx_rel
 
     @pytest.mark.asyncio
+    async def test_enable_autofills_benchmark_from_fixture(
+        self, tmp_path,
+    ) -> None:
+        """BUG-013: si el caller no pasa `benchmark` (la UI Box4 nunca lo
+        manda — design dice "benchmark lo define el fixture"), se debe
+        derivar de `fixture.ticker_info.benchmark` antes de validar para
+        que no falle con REG-013.
+        """
+        fx_rel = self._write_fixture(tmp_path, benchmark="SPY")
+        rt = RegistryRuntime(
+            _registry([_slot(1, status="DISABLED", ticker=None, with_fixture=False)]),
+            registry_path=tmp_path / "slot_registry.json",
+        )
+        new_slot = await rt.enable_slot(
+            1,
+            ticker="QQQ",
+            fixture_path=fx_rel,
+            benchmark=None,  # caller no especifica → auto-fill
+            fixtures_root=tmp_path,
+            engine_version="5.2.0",
+        )
+        # El benchmark del slot quedó con el del fixture, sin REG-013.
+        assert new_slot.benchmark == "SPY"
+
+    @pytest.mark.asyncio
     async def test_enable_rejects_ticker_mismatch(self, tmp_path) -> None:
         from modules.slot_registry import REG_012, RegistryError
         fx_rel = self._write_fixture(tmp_path, ticker="QQQ")

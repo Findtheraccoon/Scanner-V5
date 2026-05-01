@@ -3,7 +3,10 @@
 
 export type EngineStatusLevel = "green" | "yellow" | "red" | "paused" | "offline";
 export type SlotRuntimeStatus = "active" | "warming_up" | "degraded" | "disabled";
-export type SignalConfidence = "REVISAR" | "B" | "A" | "A+" | "S" | "S+";
+// BUG-018: el backend usa "—" (em-dash) como valor para señales NEUTRAL
+// (sin suficiente score para asignar banda). Lo agregamos al union para
+// que TypeScript no force casts forzados en los componentes.
+export type SignalConfidence = "—" | "REVISAR" | "B" | "A" | "A+" | "S" | "S+";
 export type SignalDirection = "CALL" | "PUT";
 export type SignalLabel = "SETUP" | "REVISAR" | "NEUTRAL";
 
@@ -30,6 +33,31 @@ export interface EngineHealth {
   validator: EngineSubStatus;
   engine_version: string;
   ts: string;
+  // BUG-008: si el bootstrap del registry usó el fallback in-memory,
+  // este campo trae el código + detalle del error de load para que la
+  // UI muestre el motivo exacto al usuario.
+  registry_load_error?: string;
+  // BUG-014: true si el backend está corriendo bajo `backend/launcher.py`
+  // (que reinicia el subprocess al detectar el flag). false en modo
+  // dev (`python main.py` directo) — la UI deshabilita el botón
+  // "reiniciar backend" porque /system/restart dejaría el proceso muerto.
+  launcher_attached?: boolean;
+}
+
+/* Vela OHLC para charting. Formato espejo del backend (modules/db/models). */
+export interface Candle {
+  dt: string;
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  v: number;
+}
+
+export interface CandlesResponse {
+  ticker: string;
+  tf: "daily" | "1h" | "15m";
+  candles: Candle[];
 }
 
 export interface SlotInfo {
@@ -37,10 +65,32 @@ export interface SlotInfo {
   ticker: string | null;
   status: SlotRuntimeStatus;
   fixture_id?: string | null;
+  // BUG-010: el PATCH /slots/{id} espera `fixture` = path relativo
+  // ("fixtures/qqq_canonical_v1.json"), no fixture_id. La UI necesita
+  // tener el path a mano para mandarlo correctamente.
+  fixture_path?: string | null;
   benchmark?: string | null;
+  // BUG-012: derivado del adapter (`base_state !== "DISABLED"`).
+  // El backend no manda `enabled` directo en /slots; lo computamos
+  // desde el `base_state` para que la UI siga teniendo un boolean
+  // limpio sin mirar status.
   enabled: boolean;
   message?: string;
   error_code?: string;
+}
+
+/* Shape crudo del backend `/api/v1/slots`. La UI consume `SlotInfo`
+   tras pasar por `adaptSlot()` en `api/queries.ts`. */
+export interface RawSlotInfo {
+  slot: number;
+  ticker: string | null;
+  status: SlotRuntimeStatus;
+  fixture_id: string | null;
+  fixture_path: string | null;
+  benchmark: string | null;
+  base_state: "OPERATIVE" | "DEGRADED" | "DISABLED";
+  error_code?: string | null;
+  error_detail?: string | null;
 }
 
 export interface KeyUsage {
@@ -58,7 +108,11 @@ export interface SignalPayload {
   slot_id: number | null;
   ticker: string;
   conf: SignalConfidence;
-  signal: SignalLabel;
+  // BUG-018: el backend serializa `signal` como boolean (¿se emitió
+  // señal?). Antes tipábamos esto como `SignalLabel` (string) y el
+  // Banner crasheaba al hacer `signal.toLowerCase()`. La etiqueta
+  // visible (NEUTRAL/SETUP/REVISAR) se deriva en la UI desde `conf`.
+  signal: boolean;
   dir: SignalDirection | null;
   score: number;
   candle_timestamp: string;
@@ -69,6 +123,10 @@ export interface SignalPayload {
   layers?: Record<string, unknown>;
   chat_format?: string;
   snapshot_b64?: string;
+  // BUG-023: WR del backtest training del canonical para la banda
+  // de la señal. Inyectado por el backend en `/signals/latest|history|{id}`
+  // leyendo `<fixture>.metrics.json:metrics_training.by_band[BAND].wr_pct`.
+  wr_pct?: number | null;
 }
 
 export interface AutoScanStatus {
@@ -78,7 +136,8 @@ export interface AutoScanStatus {
 export interface ScanManualResponse {
   id: number | null;
   conf: SignalConfidence;
-  signal: SignalLabel;
+  // BUG-018: backend devuelve boolean (igual que SignalPayload.signal).
+  signal: boolean;
   dir: SignalDirection | null;
   score: number;
   ticker: string;
@@ -320,18 +379,20 @@ export interface ValidatorConnectivityResult {
    ════════════════════════════════════════════════════════════════════ */
 
 export interface DatabaseStatsTable {
-  name: string;
-  rows: number;
+  rows_operative: number;
   retention_seconds: number | null;
-  last_rotated_at?: string;
+  archives_to_disk: boolean;
+  rows_archive: number | null;
 }
 
 export interface DatabaseStatsResponse {
   archive_configured: boolean;
-  tables: {
-    operative: DatabaseStatsTable[];
-    archive?: DatabaseStatsTable[];
-  };
+  // Map keyed by table name → stats. Backend devuelve dict[str, table_stats].
+  // BUG-009: el shape previo declaraba {operative:[], archive:[]} que
+  // nunca existió en el backend. La hook `useDatabaseStats` no estaba
+  // consumida, así que era contract latente — corregido para que cuando
+  // se implemente el panel de DB stats no haya regresión silenciosa.
+  tables: Record<string, DatabaseStatsTable>;
   size_mb_operative: number | null;
   size_limit_mb: number;
 }
@@ -394,8 +455,8 @@ export interface SlotPatchBody {
   benchmark?: string | null;
 }
 
-export interface SlotPatchResponse {
-  slot_id: number;
-  status: SlotRuntimeStatus;
-  message?: string;
-}
+/* PATCH /slots/{id} devuelve la misma shape que /slots (ver `RawSlotInfo`).
+   La UI invalida la query `slots` tras el PATCH, así que no consume
+   este response — pero si en el futuro alguien lo lee directo, debe
+   pasar por `adaptSlot()` antes de tratarlo como `SlotInfo`. */
+export type SlotPatchResponse = RawSlotInfo;

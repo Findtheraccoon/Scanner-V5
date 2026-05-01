@@ -105,6 +105,12 @@ class Settings(BaseSettings):
     frontend_bearer_token: str | None = Field(default=None)
     ws_idle_shutdown_s: float | None = Field(default=None)
     restart_flag_path: str = Field(default="data/restart_requested.flag")
+    # BUG-014: lo setea `backend/launcher.py` para que el backend pueda
+    # informarle al frontend ("launcher_attached" en /engine/health) si
+    # /system/restart va a tener efecto. Sin launcher el SIGINT mata el
+    # proceso sin que nadie lo levante de vuelta — la UI deshabilita el
+    # botón en ese caso.
+    launcher_pid: int | None = Field(default=None)
 
     @field_validator("log_level")
     @classmethod

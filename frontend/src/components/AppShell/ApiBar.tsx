@@ -1,8 +1,9 @@
+import type { ApiError } from "@/api/client";
 import {
   useAutoScanPause,
   useAutoScanResume,
   useAutoScanStatus,
-  useScanManual,
+  useScanSlot,
 } from "@/api/queries";
 import { useToast } from "@/components/Toast/ToastProvider";
 import { useApiUsageStore } from "@/stores/apiUsage";
@@ -57,7 +58,7 @@ export function ApiBar() {
   const autoStatus = useAutoScanStatus();
   const pauseMut = useAutoScanPause();
   const resumeMut = useAutoScanResume();
-  const scanMut = useScanManual();
+  const scanSlotMut = useScanSlot();
 
   const [pulseScan, setPulseScan] = useState(false);
   // Default OFF cuando no hay info confiable del backend (loading inicial,
@@ -89,6 +90,22 @@ export function ApiBar() {
   };
 
   const selectedSlotId = useSlotsStore((s) => s.selectedSlotId);
+  const allSlots = useSlotsStore((s) => s.slots);
+
+  // BUG-019: el default selectedSlotId es 2 (legacy del Hi-Fi v2). Si
+  // el usuario tiene solo slot 1 activo, click SCAN AHORA dispararía
+  // sobre slot 2 (disabled) → 409. Resolvemos al primer slot operativo
+  // del registry; si el seleccionado lo es, lo respetamos.
+  const resolveScannableSlot = (): number | null => {
+    const isScannable = (s: { status: string }): boolean =>
+      s.status === "active" || s.status === "warming_up";
+    if (selectedSlotId !== null) {
+      const sel = allSlots.find((s) => s.slot_id === selectedSlotId);
+      if (sel && isScannable(sel)) return selectedSlotId;
+    }
+    const first = allSlots.find(isScannable);
+    return first ? first.slot_id : null;
+  };
 
   const handleScan = async () => {
     setPulseScan(true);
@@ -97,17 +114,55 @@ export function ApiBar() {
       toast.push("scan local — backend no conectado", "warn");
       return;
     }
-    // El endpoint requiere body completo (ticker + fixture + candles).
-    // Sin esos inputs es esperable que el backend devuelva 422; el botón
-    // del Cockpit es realmente útil cuando hay slot seleccionado y
-    // fixture cargada — por ahora lanzamos un dry-run y reportamos.
+    // BUG-015 + BUG-019: el botón usa el endpoint /scan/slot/{id} y
+    // resuelve sobre el primer slot operativo si el seleccionado no
+    // está activo. Antes pegaba directo al selectedSlotId aunque fuera
+    // disabled → 409 sistemático.
+    const targetSlot = resolveScannableSlot();
+    if (targetSlot === null) {
+      toast.push(
+        "no hay slots operativos · habilitá uno en Configuración Box 4",
+        "warn",
+      );
+      return;
+    }
     try {
-      await scanMut.mutateAsync({ slotId: selectedSlotId });
-      toast.push("scan disparado", "success");
+      const result = await scanSlotMut.mutateAsync({ slotId: targetSlot });
+      const tickerLabel = allSlots.find((s) => s.slot_id === targetSlot)?.ticker ?? "?";
+      const r = result as {
+        score?: number;
+        conf?: string;
+        signal?: boolean;
+        dir?: string;
+        fetch_meta?: {
+          candles_daily_n: number;
+          candles_1h_n: number;
+          candles_15m_n: number;
+        };
+      };
+      const fm = r.fetch_meta;
+      const candlesPart = fm
+        ? ` · ${fm.candles_daily_n}D/${fm.candles_1h_n}H/${fm.candles_15m_n}m`
+        : "";
+      const scorePart =
+        r.score !== undefined && r.conf
+          ? ` · ${r.conf} ${r.dir ?? ""} ${r.score.toFixed(1)}`
+          : "";
+      toast.push(
+        `scan ${tickerLabel} (slot ${targetSlot})${scorePart}${candlesPart}`,
+        "success",
+      );
     } catch (e) {
-      const status = (e as { status?: number }).status;
-      if (status === 422) toast.push("scan manual requiere body completo", "warn");
-      else toast.push("error al disparar el scan", "error");
+      const err = e as ApiError;
+      const detail =
+        typeof err.body === "object" && err.body !== null && "detail" in err.body
+          ? String((err.body as { detail: unknown }).detail)
+          : err.message;
+      if (err.status === 503) toast.push(`scan no disponible — ${detail}`, "warn");
+      else if (err.status === 409) toast.push(`scan rechazado — ${detail}`, "warn");
+      else if (err.status === 502)
+        toast.push(`fetch falló — ${detail.slice(0, 80)}`, "error");
+      else toast.push(`scan falló — ${detail.slice(0, 80)}`, "error");
     }
   };
 

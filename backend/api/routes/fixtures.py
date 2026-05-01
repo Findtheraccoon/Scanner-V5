@@ -116,13 +116,17 @@ def _slots_using_fixture(request: Request, fixture_id: str) -> list[int]:
     """Lista los slot_ids que tienen este `fixture_id` cargado.
 
     Lee del runtime registry. Si no hay registry, devuelve `[]`.
+
+    BUG-005: el código previo llamaba `runtime._registry.snapshot()`
+    que no existe — `SlotRegistry` es un Pydantic model con campo
+    `slots: list[SlotRecord]`. Reemplazado por iteración directa.
+    Lectura sync sobre lista de un model `frozen=True` es safe.
     """
     runtime = getattr(request.app.state, "registry_runtime", None)
     if runtime is None:
         return []
-    snapshot = runtime._registry.snapshot()
     out: list[int] = []
-    for rec in snapshot:
+    for rec in runtime._registry.slots:
         if rec.fixture is None:
             continue
         if rec.fixture.metadata.fixture_id == fixture_id:

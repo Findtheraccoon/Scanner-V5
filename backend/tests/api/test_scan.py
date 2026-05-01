@@ -106,6 +106,25 @@ class TestScanManualAuth:
         assert r.status_code == 401
 
 
+class TestScanSlotBug015:
+    """BUG-015: nuevo endpoint POST /scan/slot/{slot_id} que reemplaza
+    al botón scan del Cockpit. El frontend antes pegaba /scan/manual con
+    body vacío y siempre fallaba 422.
+    """
+
+    @pytest.mark.asyncio
+    async def test_unauthenticated_returns_401(self, client) -> None:
+        r = await client.post("/api/v1/scan/slot/1")
+        assert r.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_no_registry_runtime_returns_503(self, client) -> None:
+        # El client del fixture no inyecta registry_runtime → 503 limpio.
+        r = await client.post("/api/v1/scan/slot/1", headers=AUTH)
+        assert r.status_code == 503
+        assert "registry runtime" in r.json()["detail"].lower()
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Validation
 # ═══════════════════════════════════════════════════════════════════════════

@@ -241,6 +241,7 @@ async def _run_shutdown_rotation(
 
 def _register_routes(app: FastAPI) -> None:
     """Registra los routers REST + WebSocket."""
+    from api.routes.candles import router as candles_router
     from api.routes.config import router as config_router
     from api.routes.database import router as database_router
     from api.routes.fixtures import router as fixtures_router
@@ -260,6 +261,7 @@ def _register_routes(app: FastAPI) -> None:
     app.include_router(database_router, prefix="/api/v1")
     app.include_router(config_router, prefix="/api/v1")
     app.include_router(fixtures_router, prefix="/api/v1")
+    app.include_router(candles_router, prefix="/api/v1")
     app.include_router(system_router, prefix="/api/v1")
     app.include_router(websocket_router)  # `/ws` sin prefijo /api/v1
 

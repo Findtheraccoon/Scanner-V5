@@ -277,16 +277,12 @@ class TestDelete:
                     },
                 )()
 
-        class _FakeSnapshot:
-            def __init__(self) -> None:
-                self.records = [_FakeRecord()]
-
-            def __iter__(self):
-                return iter(self.records)
-
+        # BUG-005: el código previo del endpoint llamaba
+        # `runtime._registry.snapshot()` que no existe en `SlotRegistry`.
+        # Ahora itera directamente `runtime._registry.slots`. El fake
+        # se actualizó para reflejar el shape real.
         class _FakeRegistry:
-            def snapshot(self) -> _FakeSnapshot:
-                return _FakeSnapshot()
+            slots = [_FakeRecord()]
 
         class _FakeRuntime:
             _registry = _FakeRegistry()

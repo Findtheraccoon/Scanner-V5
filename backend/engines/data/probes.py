@@ -33,11 +33,25 @@ def build_td_probe(
     """
 
     async def probe() -> list[dict[str, Any]]:
+        import asyncio
+
         results: list[dict[str, Any]] = []
-        for key in keys:
+        for idx, key in enumerate(keys):
+            # BUG-028: pequeño espaciado entre keys para descartar que
+            # TD nos rate-limite N keys consecutivas desde la misma IP
+            # como sospechoso. 200ms es transparente para el usuario y
+            # más que suficiente para que TD no nos asocie con scraping.
+            if idx > 0:
+                await asyncio.sleep(0.2)
             try:
-                ok = await client.test_key(key)
-                results.append({"key_id": key.key_id, "ok": ok})
+                # BUG-026: usar test_key_diag para reportar al frontend
+                # el motivo específico del fallo (rate_limit, invalid_key,
+                # http_xxx, etc.) en lugar de solo `ok=False`.
+                ok, reason = await client.test_key_diag(key)
+                entry: dict[str, Any] = {"key_id": key.key_id, "ok": ok}
+                if not ok and reason:
+                    entry["error"] = reason
+                results.append(entry)
             except Exception as e:
                 results.append(
                     {

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiError, api } from "./client";
 import type {
   AutoScanStatus,
+  CandlesResponse,
   ConfigCurrentResponse,
   ConfigLastInfo,
   ConfigLoadResponse,
@@ -25,6 +26,7 @@ import type {
   S3RestoreResponse,
   ScanManualResponse,
   SignalPayload,
+  RawSlotInfo,
   SlotInfo,
   SlotPatchBody,
   SlotPatchResponse,
@@ -51,19 +53,76 @@ export function useEngineHealth() {
   });
 }
 
+/* Adapter del shape crudo de `/api/v1/slots` al `SlotInfo` que consume
+   la UI. El backend serializa `slot` (no `slot_id`), `base_state` (no
+   `enabled`), e incluye `fixture_path` que la UI necesita para el PATCH.
+   BUG-010/011/012: el código previo trataba el response como `SlotInfo`
+   directo y todos los componentes veían `slot_id=undefined`,
+   `enabled=undefined`, sin acceso a fixture_path. */
+function adaptSlot(raw: RawSlotInfo): SlotInfo {
+  return {
+    slot_id: raw.slot,
+    ticker: raw.ticker,
+    status: raw.status,
+    fixture_id: raw.fixture_id,
+    fixture_path: raw.fixture_path,
+    benchmark: raw.benchmark,
+    enabled: raw.base_state !== "DISABLED",
+    error_code: raw.error_code ?? undefined,
+  };
+}
+
 /* Lista de slots — alimenta la watchlist del Cockpit. */
 export function useSlots() {
   const token = useAuthStore((s) => s.token);
   return useQuery<SlotInfo[]>({
     queryKey: ["slots"],
-    queryFn: () => api<SlotInfo[]>("/slots"),
+    queryFn: async () => {
+      const raw = await api<RawSlotInfo[]>("/slots");
+      return raw.map(adaptSlot);
+    },
     enabled: token !== null,
     staleTime: 60_000,
   });
 }
 
-/* Última señal por slot. Si el slot todavía no tiene señal, el endpoint
-   devuelve 404 — se atrapa y se devuelve null. */
+/* Velas para chart del Cockpit. Trae las últimas N velas del timeframe
+   especificado desde la DB del backend (transparent-reads sobre op +
+   archive si está configurado). BUG-022: alimenta el sparkline OHLC. */
+export function useCandles(
+  ticker: string | null,
+  tf: "daily" | "1h" | "15m" = "15m",
+  n = 50,
+) {
+  const token = useAuthStore((s) => s.token);
+  return useQuery<CandlesResponse | null>({
+    queryKey: ["candles", ticker, tf, n],
+    queryFn: async () => {
+      if (!ticker) return null;
+      try {
+        return await api<CandlesResponse>(`/candles/${ticker}`, {
+          query: { tf, n },
+        });
+      } catch (e) {
+        const status = (e as { status?: number }).status;
+        if (status === 404) return { ticker, tf, candles: [] };
+        throw e;
+      }
+    },
+    enabled: token !== null && ticker !== null,
+    staleTime: 10_000,
+  });
+}
+
+/* Última señal por slot. El endpoint backend `/signals/latest` devuelve
+   list[dict] (array). Tomamos el primer elemento — ya viene ordenado
+   por compute_timestamp DESC LIMIT 1. Si el slot todavía no tiene
+   señales, devolvemos null.
+
+   BUG-017: el código previo tipaba el response como `SignalPayload`
+   (objeto) e hacía `applySignal(latestQuery.data)` con el array →
+   `sig.slot_id` undefined → el store nunca se actualizaba → Banner
+   se quedaba en "ESPERANDO SEÑAL" aunque hubiera signals reales en DB. */
 export function useLatestSignal(slotId: number | null) {
   const token = useAuthStore((s) => s.token);
   return useQuery<SignalPayload | null>({
@@ -71,9 +130,10 @@ export function useLatestSignal(slotId: number | null) {
     queryFn: async () => {
       if (slotId === null) return null;
       try {
-        return await api<SignalPayload>("/signals/latest", {
+        const items = await api<SignalPayload[]>("/signals/latest", {
           query: { slot_id: slotId },
         });
+        return items.length > 0 ? items[0] : null;
       } catch (e) {
         const status = (e as { status?: number }).status;
         if (status === 404) return null;
@@ -124,6 +184,34 @@ export function useScanManual() {
         const { useScanningStore } = await import("@/stores/scanning");
         useScanningStore.getState().finish(slotId);
       }
+    },
+  });
+}
+
+/* BUG-015: scan one-shot de un slot operativo. El backend resuelve
+   ticker + fixture + candles desde el registry y data_engine; el
+   frontend solo manda el slot_id. Reemplaza el botón scan del Cockpit
+   que antes pegaba /scan/manual con body vacío y siempre fallaba 422. */
+export function useScanSlot() {
+  const qc = useQueryClient();
+  return useMutation<ScanManualResponse, ApiError, { slotId: number }>({
+    mutationFn: ({ slotId }) =>
+      api<ScanManualResponse>(`/scan/slot/${slotId}`, { method: "POST" }),
+    onMutate: async ({ slotId }) => {
+      const { useScanningStore } = await import("@/stores/scanning");
+      useScanningStore.getState().start(slotId);
+    },
+    onSettled: async (_data, _err, { slotId }) => {
+      const { useScanningStore } = await import("@/stores/scanning");
+      useScanningStore.getState().finish(slotId);
+      // Refresh de la última señal del slot — el backend la persistió.
+      qc.invalidateQueries({ queryKey: ["signals.latest", slotId] });
+      // BUG-030: el scan trae candles nuevas (el backend hace fetch_for_scan
+      // que persiste 15m/1h/daily). El chart del Cockpit debe refrescar
+      // — sino sigue mostrando las candles viejas hasta `staleTime` (10s)
+      // o hasta el próximo refetch. Invalidamos toda la query family
+      // `["candles", ...]` para que el ticker afectado refresque.
+      qc.invalidateQueries({ queryKey: ["candles"] });
     },
   });
 }

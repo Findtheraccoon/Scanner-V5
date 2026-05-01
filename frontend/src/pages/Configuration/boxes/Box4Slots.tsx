@@ -54,9 +54,19 @@ function aggregateSlotsState(slots: SlotInfo[]): BoxState {
   return "ok";
 }
 
+interface FixtureSelectItem {
+  /* `path` es el value del <option> y se manda como `fixture` al PATCH
+     (BUG-010: el backend espera path relativo, no fixture_id). */
+  path: string;
+  /* `id` se muestra como label y matchea slot.fixture_id para preselección. */
+  id: string;
+  version?: string;
+  compatible: boolean;
+}
+
 interface SlotCardProps {
   slot: SlotInfo;
-  fixtures: { id: string; version?: string; compatible: boolean }[];
+  fixtures: FixtureSelectItem[];
 }
 
 /* UX-002 + BUG-003: cada slot es una tarjeta individual con flujo
@@ -78,13 +88,16 @@ function SlotCard({ slot, fixtures }: SlotCardProps): ReactElement {
   const { push: toast } = useToast();
 
   const [tickerDraft, setTickerDraft] = useState(slot.ticker ?? "");
-  const [fixtureDraft, setFixtureDraft] = useState(slot.fixture_id ?? "");
+  // BUG-010: el draft del fixture es el PATH relativo (lo que el backend
+  // espera en `fixture`), no el fixture_id. Usamos slot.fixture_path
+  // como source-of-truth para preselección.
+  const [fixtureDraft, setFixtureDraft] = useState(slot.fixture_path ?? "");
 
   // Re-sync cuando el slot cambia desde el backend (refetch tras PATCH).
   useEffect(() => {
     setTickerDraft(slot.ticker ?? "");
-    setFixtureDraft(slot.fixture_id ?? "");
-  }, [slot.ticker, slot.fixture_id]);
+    setFixtureDraft(slot.fixture_path ?? "");
+  }, [slot.ticker, slot.fixture_path]);
 
   const errMsg = (e: unknown): string => {
     const err = e as ApiError;
@@ -174,7 +187,7 @@ function SlotCard({ slot, fixtures }: SlotCardProps): ReactElement {
             {fixtures.length === 0 ? "— subí un fixture abajo —" : "— elegir —"}
           </option>
           {fixtures.map((f) => (
-            <option key={f.id} value={f.id} disabled={!f.compatible}>
+            <option key={f.path} value={f.path} disabled={!f.compatible}>
               {f.id} {f.version ? `· ${f.version}` : ""}
               {!f.compatible ? " · incompatible" : ""}
             </option>
@@ -203,9 +216,13 @@ export function Box4Slots(): ReactElement {
 
   const slotList = slots.data ?? [];
   const fixtureList = fixtures.data?.items ?? [];
-  const fixturesForSelect = fixtureList
-    .filter((f) => f.fixture_id !== undefined)
+  const fixturesForSelect: FixtureSelectItem[] = fixtureList
+    .filter((f) => f.fixture_id !== undefined && f.path !== undefined)
     .map((f) => ({
+      // BUG-010: el value del <option> es el path relativo. El path
+      // viene como absoluto/relativo según OS — el backend lo resuelve
+      // contra fixtures_root, así que sirve cualquiera de los dos.
+      path: f.path as string,
       id: f.fixture_id as string,
       version: f.fixture_version,
       compatible: f.engine_compatible !== false,
