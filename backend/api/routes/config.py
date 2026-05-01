@@ -193,12 +193,21 @@ async def _reload_key_pool(request: Request, cfg: UserConfig) -> bool:
     pool: KeyPool | None = getattr(request.app.state, "key_pool", None)
     if pool is None:
         # Bootstrap: el lifespan no creó scan_context al startup.
-        # Construimos KeyPool + TwelveDataClient ahora.
+        # Construimos KeyPool + TwelveDataClient + DataEngine ahora
+        # para que el Validator pueda probar las keys + el enable_slot
+        # de Box 4 pueda disparar warmup sin restart (BUG-002 cierre).
+        from engines.data.engine import DataEngine
         from engines.data.fetcher import TwelveDataClient
 
         pool = KeyPool(api_keys)
+        client = TwelveDataClient(pool)
         request.app.state.key_pool = pool
-        request.app.state.td_client = TwelveDataClient(pool)
+        request.app.state.td_client = client
+        request.app.state.data_engine = DataEngine(
+            pool=pool,
+            client=client,
+            session_factory=request.app.state.session_factory,
+        )
     else:
         await pool.reload(api_keys)
     _rebuild_validator_td_probe(request, api_keys)

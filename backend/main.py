@@ -33,7 +33,9 @@ engine.
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import uvicorn
@@ -237,6 +239,80 @@ def _try_load_last_config(app, settings: Settings) -> None:
     logger.info(f"LAST config loaded: {cfg_path} ({cfg.name})")
 
 
+def _ensure_registry_file(path: Path) -> None:
+    """Crea un `slot_registry.json` default con 6 slots disabled si el
+    archivo no existe.
+
+    BUG-002: el clone fresco no incluye el archivo (es runtime data,
+    no shippeado), entonces sin esta función el backend arrancado
+    sin `SCANNER_TWELVEDATA_KEYS` falla al cargar el registry y los
+    endpoints `/slots` + `/fixtures` quedan en 503 para siempre.
+    """
+    if path.exists():
+        return
+    payload = {
+        "registry_metadata": {
+            "registry_version": "1.0.0",
+            "engine_version_required": f">={ENGINE_VERSION},<6.0.0",
+            "generated_at": datetime.now(tz=UTC).isoformat(),
+            "generated_by": "scanner-v5 bootstrap (auto-created)",
+            "description": (
+                "Default registry — slots vacíos. Configurar desde la "
+                "pestaña Configuración → Box 4 Slots."
+            ),
+        },
+        "slots": [
+            {
+                "slot": i,
+                "enabled": False,
+                "ticker": None,
+                "fixture": None,
+                "benchmark": None,
+                "priority": None,
+                "notes": None,
+            }
+            for i in range(1, 7)
+        ],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    logger.info(f"bootstrapped default slot_registry at {path}")
+
+
+def _bootstrap_registry_runtime(app, settings: Settings) -> None:
+    """Crea el archivo si falta + intenta load + asigna runtime a app.state.
+
+    Silencioso ante fallos: si el archivo está corrupto o el load lanza
+    `RegistryError`, app.state.registry_runtime queda en None y los
+    endpoints siguen devolviendo 503 (estado anterior al fix).
+
+    BUG-002: el registry no requiere TD keys ni scan_context. Es info
+    puramente local — debe inicializarse independientemente del provider.
+    """
+    path = Path(settings.registry_path)
+    try:
+        _ensure_registry_file(path)
+    except OSError as e:
+        logger.warning(f"could not bootstrap registry file {path}: {e}")
+        return
+    try:
+        registry = load_registry(str(path), engine_version=ENGINE_VERSION)
+    except RegistryError as e:
+        logger.warning(
+            f"could not load slot_registry: {e.code} · {e.detail}",
+        )
+        return
+    except Exception:
+        logger.exception(f"unexpected error loading {path}")
+        return
+    app.state.registry_runtime = RegistryRuntime(
+        registry, registry_path=str(path),
+    )
+
+
 def _build_aggressive_watchdog_factory(app, settings: Settings):
     """Factory del watchdog automático de rotación agresiva (§9.4).
 
@@ -363,6 +439,13 @@ def main() -> int:
         extra_workers.append(
             _build_aggressive_watchdog_factory(app, settings),
         )
+
+    # BUG-002: registry_runtime se cablea SIEMPRE, no sólo cuando hay
+    # scan_context. El registry es info local y los endpoints /slots y
+    # /fixtures deben funcionar antes de que el usuario cargue las TD
+    # keys. Si el archivo no existe, _ensure_registry_file lo crea
+    # vacío (6 slots disabled) — el usuario lo configura desde la UI.
+    _bootstrap_registry_runtime(app, settings)
 
     if use_real_scan_loop:
         # `running` por default empieza set → loop corre sin pausa. El
