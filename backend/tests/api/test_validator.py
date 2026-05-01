@@ -203,6 +203,71 @@ class TestRunConnectivity:
         assert result["td_keys"][0]["key_id"] == "k1"
         assert result["td_keys"][0]["ok"] is True
 
+    @pytest.mark.asyncio
+    async def test_bootstrap_from_scratch_when_no_scan_context(
+        self, app_with_validator, monkeypatch,
+    ) -> None:
+        """BUG-001 cierre real: cuando el backend arranca SIN
+        SCANNER_TWELVEDATA_KEYS env var, no hay key_pool ni td_client
+        en app.state. El primer PUT /config/twelvedata_keys debe
+        bootstrapear ambos + reconstruir el probe del Validator. Antes,
+        `_reload_key_pool` early-returneaba False y el botón "probar"
+        del frontend quedaba silencioso."""
+        # Patcheamos test_key sobre TwelveDataClient para evitar la red.
+        from engines.data.fetcher import TwelveDataClient
+        from modules.config import TDKeyConfig
+
+        async def fake_test_key(self, key) -> bool:
+            return True
+
+        monkeypatch.setattr(TwelveDataClient, "test_key", fake_test_key)
+
+        # Estado bootstrap real: no hay key_pool ni td_client ni probe.
+        assert getattr(app_with_validator.state, "key_pool", None) is None
+        assert getattr(app_with_validator.state, "td_client", None) is None
+        assert app_with_validator.state.validator._td_probe is None
+
+        td_keys = [
+            TDKeyConfig(
+                key_id="bootstrap-k1",
+                secret="sk-bootstrap",
+                credits_per_minute=8,
+                credits_per_day=800,
+                enabled=True,
+            ),
+        ]
+        async with AsyncClient(
+            transport=ASGITransport(app=app_with_validator),
+            base_url="http://test",
+        ) as client:
+            r = await client.put(
+                "/api/v1/config/twelvedata_keys",
+                headers=AUTH,
+                json={"twelvedata_keys": [k.model_dump() for k in td_keys]},
+            )
+        assert r.status_code == 200
+        assert r.json()["key_pool_reloaded"] is True
+
+        # Tras el bootstrap, app.state debe tener pool + client.
+        assert app_with_validator.state.key_pool is not None
+        assert app_with_validator.state.td_client is not None
+        assert app_with_validator.state.validator._td_probe is not None
+
+        # Y el endpoint /connectivity debe correr el probe sobre la key
+        # nueva — antes devolvía td_keys=[] silenciosamente.
+        async with AsyncClient(
+            transport=ASGITransport(app=app_with_validator),
+            base_url="http://test",
+        ) as client:
+            r2 = await client.post(
+                "/api/v1/validator/connectivity", headers=AUTH,
+            )
+        assert r2.status_code == 200
+        result = r2.json()
+        assert len(result["td_keys"]) == 1
+        assert result["td_keys"][0]["key_id"] == "bootstrap-k1"
+        assert result["td_keys"][0]["ok"] is True
+
 
 class TestLatestReport:
     @pytest.mark.asyncio
