@@ -351,10 +351,16 @@ class TestPutTwelvedataKeys:
         assert r.status_code == 200
         body = r.json()
         assert body["count"] == 1
-        # Sin KeyPool wired, reload no aplica.
-        assert body["key_pool_reloaded"] is False
+        # BUG-001 cierre: sin KeyPool wired al startup, el endpoint
+        # ahora bootstrapea KeyPool + TwelveDataClient para que el
+        # Validator pueda correr Check G. Antes este flag era False y
+        # el probe quedaba sin construir, dejando el botón "probar"
+        # del frontend silencioso.
+        assert body["key_pool_reloaded"] is True
         assert app.state.user_config is not None
         assert len(app.state.user_config.twelvedata_keys) == 1
+        assert app.state.key_pool is not None
+        assert app.state.td_client is not None
 
     async def test_reloads_key_pool_when_present(
         self, client: AsyncClient, app,

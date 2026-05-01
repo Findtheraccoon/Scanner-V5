@@ -59,20 +59,32 @@ interface SlotCardProps {
   fixtures: { id: string; version?: string; compatible: boolean }[];
 }
 
-/* UX-002: cada slot es una tarjeta individual con flujo
-   "ticker → fixture → toggle enable" en lugar de fila de tabla.
-   El ticker es editable inline (commit on blur o Enter); el fixture
-   es un select; el toggle dispara PATCH con validación. */
+/* UX-002 + BUG-003: cada slot es una tarjeta individual con flujo
+   "ticker → fixture → toggle enable".
+
+   Ticker y fixture son state LOCAL (drafts) hasta que el usuario
+   activa el toggle. Antes los hacíamos commit-on-blur, pero el
+   backend `disable_slot` wipea ticker+fixture al recibir
+   `enabled: false`, así que cada autosave borraba lo recién tipeado
+   y dejaba el select de fixture permanentemente disabled. Ahora:
+   - drafts viven en local state hasta que enable=true.
+   - re-sync con el slot del backend cuando llega data fresca (ej.
+     tras un PATCH exitoso).
+   - toggle ON valida ticker + fixture y manda un único PATCH con
+     todo. Toggle OFF dispara disable_slot (wipea, igual que antes).
+*/
 function SlotCard({ slot, fixtures }: SlotCardProps): ReactElement {
   const patch = usePatchSlot();
   const { push: toast } = useToast();
 
-  // Estado local del ticker — input editable; commit on blur o Enter.
   const [tickerDraft, setTickerDraft] = useState(slot.ticker ?? "");
-  // Re-sync cuando el slot cambia desde el backend (ej. tras PATCH).
+  const [fixtureDraft, setFixtureDraft] = useState(slot.fixture_id ?? "");
+
+  // Re-sync cuando el slot cambia desde el backend (refetch tras PATCH).
   useEffect(() => {
     setTickerDraft(slot.ticker ?? "");
-  }, [slot.ticker]);
+    setFixtureDraft(slot.fixture_id ?? "");
+  }, [slot.ticker, slot.fixture_id]);
 
   const errMsg = (e: unknown): string => {
     const err = e as ApiError;
@@ -83,70 +95,35 @@ function SlotCard({ slot, fixtures }: SlotCardProps): ReactElement {
         : err.message;
   };
 
-  const commitTicker = async () => {
-    const next = tickerDraft.trim().toUpperCase();
-    if (next === (slot.ticker ?? "")) return;
-    if (!next) {
-      // Borrar ticker → deshabilitar slot.
+  const onToggle = async (enabled: boolean) => {
+    if (enabled) {
+      const ticker = tickerDraft.trim().toUpperCase();
+      if (!ticker) {
+        toast(`slot ${slot.slot_id}: ingresá un ticker`, "warn");
+        return;
+      }
+      if (!fixtureDraft) {
+        toast(`slot ${slot.slot_id}: elegí un fixture`, "warn");
+        return;
+      }
       try {
         await patch.mutateAsync({
           slotId: slot.slot_id,
-          body: { enabled: false },
+          body: { enabled: true, ticker, fixture: fixtureDraft },
         });
-        toast(`slot ${slot.slot_id}: ticker borrado · deshabilitado`, "info");
+        toast(`slot ${slot.slot_id} (${ticker}) habilitado · warming up`, "success");
       } catch (e) {
         toast(`slot ${slot.slot_id}: ${errMsg(e)}`, "error");
-        setTickerDraft(slot.ticker ?? "");
       }
       return;
     }
-    // Si ya tenía fixture, mantener config con nuevo ticker; sino solo guardar
-    // el ticker (el slot quedará pendiente de fixture).
+    // enabled = false → disable_slot wipea ticker + fixture en el backend.
     try {
       await patch.mutateAsync({
         slotId: slot.slot_id,
-        body: {
-          enabled: slot.enabled && !!slot.fixture_id,
-          ticker: next,
-          fixture: slot.fixture_id ?? "",
-        },
+        body: { enabled: false },
       });
-      toast(`slot ${slot.slot_id}: ticker → ${next}`, "success");
-    } catch (e) {
-      toast(`slot ${slot.slot_id}: ${errMsg(e)}`, "error");
-      setTickerDraft(slot.ticker ?? "");
-    }
-  };
-
-  const onChangeFixture = async (fid: string) => {
-    if (!slot.ticker) {
-      toast(`slot ${slot.slot_id}: ingresá ticker primero`, "warn");
-      return;
-    }
-    try {
-      await patch.mutateAsync({
-        slotId: slot.slot_id,
-        body: { enabled: slot.enabled, ticker: slot.ticker, fixture: fid },
-      });
-      toast(`slot ${slot.slot_id}: fixture → ${fid}`, "success");
-    } catch (e) {
-      toast(`slot ${slot.slot_id}: ${errMsg(e)}`, "error");
-    }
-  };
-
-  const onToggle = async (enabled: boolean) => {
-    if (enabled && (!slot.ticker || !slot.fixture_id)) {
-      toast(`slot ${slot.slot_id}: completá ticker y fixture antes de habilitar`, "warn");
-      return;
-    }
-    try {
-      await patch.mutateAsync({
-        slotId: slot.slot_id,
-        body: enabled
-          ? { enabled: true, ticker: slot.ticker ?? "", fixture: slot.fixture_id ?? "" }
-          : { enabled: false },
-      });
-      toast(`slot ${slot.slot_id} ${enabled ? "habilitado" : "deshabilitado"}`, "info");
+      toast(`slot ${slot.slot_id} deshabilitado`, "info");
     } catch (e) {
       toast(`slot ${slot.slot_id}: ${errMsg(e)}`, "error");
     }
@@ -155,6 +132,9 @@ function SlotCard({ slot, fixtures }: SlotCardProps): ReactElement {
   const stateClass = statusToState(slot.status);
   const cardClass = slot.enabled ? "slot-card" : "slot-card is-disabled";
   const slotIdStr = String(slot.slot_id).padStart(2, "0");
+  // Editing está bloqueado mientras hay PATCH activo o el slot ya
+  // está habilitado (cambios in-flight requieren disable + re-enable).
+  const editingDisabled = patch.isPending || slot.enabled;
 
   return (
     <div className={cardClass}>
@@ -177,11 +157,7 @@ function SlotCard({ slot, fixtures }: SlotCardProps): ReactElement {
           placeholder="ej. SPY"
           maxLength={10}
           onChange={(e) => setTickerDraft(e.target.value)}
-          onBlur={commitTicker}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-          }}
-          disabled={patch.isPending}
+          disabled={editingDisabled}
         />
       </div>
 
@@ -190,11 +166,13 @@ function SlotCard({ slot, fixtures }: SlotCardProps): ReactElement {
         <select
           id={`fixture-${slot.slot_id}`}
           className="inp"
-          value={slot.fixture_id ?? ""}
-          onChange={(e) => onChangeFixture(e.target.value)}
-          disabled={patch.isPending || !slot.ticker || fixtures.length === 0}
+          value={fixtureDraft}
+          onChange={(e) => setFixtureDraft(e.target.value)}
+          disabled={editingDisabled}
         >
-          <option value="">— elegir —</option>
+          <option value="">
+            {fixtures.length === 0 ? "— subí un fixture abajo —" : "— elegir —"}
+          </option>
           {fixtures.map((f) => (
             <option key={f.id} value={f.id} disabled={!f.compatible}>
               {f.id} {f.version ? `· ${f.version}` : ""}

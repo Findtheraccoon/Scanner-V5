@@ -90,6 +90,13 @@ export function Box3Keys(): ReactElement {
   const onProbeAll = async () => {
     try {
       const r = await probe.mutateAsync();
+      // El backend devuelve td_keys=[] cuando el Validator no tiene
+      // probe configurado (caso histórico del BUG-001 — debería estar
+      // cerrado, pero defendemos para no quedar silenciosos).
+      if (r.td_keys.length === 0) {
+        toast("el backend no devolvió resultado de probe — ¿guardaste las keys?", "warn");
+        return;
+      }
       const results: Record<string, ProbeResult> = {};
       for (const k of r.td_keys) {
         results[k.key_id] = { ok: k.ok, error: k.error };
@@ -109,14 +116,20 @@ export function Box3Keys(): ReactElement {
     setProbingId(keyId);
     try {
       const r = await probe.mutateAsync();
-      const found = r.td_keys.find((k) => k.key_id === keyId);
-      if (found) {
-        setProbeResults((prev) => ({ ...prev, [keyId]: { ok: found.ok, error: found.error } }));
-        toast(
-          `${keyId} · ${found.ok ? "ok" : `fail · ${found.error ?? "?"}`}`,
-          found.ok ? "success" : "error",
-        );
+      if (r.td_keys.length === 0) {
+        toast("el backend no devolvió resultado de probe — ¿guardaste las keys?", "warn");
+        return;
       }
+      const found = r.td_keys.find((k) => k.key_id === keyId);
+      if (!found) {
+        toast(`${keyId} · no aparece en la respuesta del probe`, "warn");
+        return;
+      }
+      setProbeResults((prev) => ({ ...prev, [keyId]: { ok: found.ok, error: found.error } }));
+      toast(
+        `${keyId} · ${found.ok ? "ok" : `fail · ${found.error ?? "?"}`}`,
+        found.ok ? "success" : "error",
+      );
     } catch (e) {
       toast(`probe falló — ${errMsg(e)}`, "error");
     } finally {

@@ -165,15 +165,19 @@ def _get_runtime_or_empty(request: Request) -> UserConfig:
 
 
 async def _reload_key_pool(request: Request, cfg: UserConfig) -> bool:
-    """Hot-reload del KeyPool con las TD keys del config runtime.
+    """Hot-reload (o bootstrap) del KeyPool con las TD keys del runtime.
 
     También reconstruye el `td_probe` del Validator si hay un client
     disponible — sin eso, `POST /validator/connectivity` sigue
-    devolviendo `skip` aun después de cargar keys (BUG-001 capa 2).
+    devolviendo `td_keys: []` aun después de cargar keys (BUG-001).
+
+    Caso bootstrap: si `app.state.key_pool` es `None` (backend
+    arrancó sin `SCANNER_TWELVEDATA_KEYS` env var), se crea un
+    `KeyPool` + `TwelveDataClient` ahora con las keys del UserConfig
+    y se exponen en `app.state`. Sin esto el Validator quedaría con
+    `td_probe=None` para siempre y el botón "probar" del frontend
+    quedaría silencioso.
     """
-    pool: KeyPool | None = getattr(request.app.state, "key_pool", None)
-    if pool is None:
-        return False
     if not cfg.twelvedata_keys:
         return False
     api_keys = [
@@ -186,7 +190,26 @@ async def _reload_key_pool(request: Request, cfg: UserConfig) -> bool:
         )
         for k in cfg.twelvedata_keys
     ]
-    await pool.reload(api_keys)
+    pool: KeyPool | None = getattr(request.app.state, "key_pool", None)
+    if pool is None:
+        # Bootstrap: el lifespan no creó scan_context al startup.
+        # Construimos KeyPool + TwelveDataClient + DataEngine ahora
+        # para que el Validator pueda probar las keys + el enable_slot
+        # de Box 4 pueda disparar warmup sin restart (BUG-002 cierre).
+        from engines.data.engine import DataEngine
+        from engines.data.fetcher import TwelveDataClient
+
+        pool = KeyPool(api_keys)
+        client = TwelveDataClient(pool)
+        request.app.state.key_pool = pool
+        request.app.state.td_client = client
+        request.app.state.data_engine = DataEngine(
+            pool=pool,
+            client=client,
+            session_factory=request.app.state.session_factory,
+        )
+    else:
+        await pool.reload(api_keys)
     _rebuild_validator_td_probe(request, api_keys)
     return True
 
