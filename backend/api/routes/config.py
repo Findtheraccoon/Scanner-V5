@@ -165,7 +165,12 @@ def _get_runtime_or_empty(request: Request) -> UserConfig:
 
 
 async def _reload_key_pool(request: Request, cfg: UserConfig) -> bool:
-    """Hot-reload del KeyPool con las TD keys del config runtime."""
+    """Hot-reload del KeyPool con las TD keys del config runtime.
+
+    También reconstruye el `td_probe` del Validator si hay un client
+    disponible — sin eso, `POST /validator/connectivity` sigue
+    devolviendo `skip` aun después de cargar keys (BUG-001 capa 2).
+    """
     pool: KeyPool | None = getattr(request.app.state, "key_pool", None)
     if pool is None:
         return False
@@ -182,7 +187,28 @@ async def _reload_key_pool(request: Request, cfg: UserConfig) -> bool:
         for k in cfg.twelvedata_keys
     ]
     await pool.reload(api_keys)
+    _rebuild_validator_td_probe(request, api_keys)
     return True
+
+
+def _rebuild_validator_td_probe(
+    request: Request, api_keys: list[ApiKeyConfig],
+) -> None:
+    """Reasigna `validator.td_probe` con las keys actuales.
+
+    Silencioso ante ausencia de validator/client en `app.state` — el
+    backend puede arrancar sin scan_context (sin keys vía env var) y
+    en ese caso el probe queda como estaba (None). Cuando el usuario
+    cargue keys + reinicie, el lifespan reconstruye todo. La función
+    se usa para keep-it-fresh en runtime cuando ya hay un client.
+    """
+    validator = getattr(request.app.state, "validator", None)
+    td_client = getattr(request.app.state, "td_client", None)
+    if validator is None or td_client is None:
+        return
+    from engines.data.probes import build_td_probe
+
+    validator.set_td_probe(build_td_probe(api_keys, td_client))
 
 
 # ────────────────────────────────────────────────────────────────────

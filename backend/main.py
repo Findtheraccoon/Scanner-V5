@@ -164,25 +164,6 @@ def build_scan_loop_factory_for_app(
     return factory
 
 
-def _build_td_probe(keys: list[ApiKeyConfig], client: TwelveDataClient):
-    """Construye un callable async que prueba cada key via `test_key`."""
-
-    async def probe() -> list[dict]:
-        results: list[dict] = []
-        for key in keys:
-            try:
-                ok = await client.test_key(key)
-                results.append({"key_id": key.key_id, "ok": ok})
-            except Exception as e:
-                results.append(
-                    {"key_id": key.key_id, "ok": False,
-                     "error": f"{type(e).__name__}: {e}"},
-                )
-        return results
-
-    return probe
-
-
 def _build_validator(
     settings: Settings,
     app,
@@ -194,11 +175,13 @@ def _build_validator(
     - `scan_context` None → validator stand-alone (D + F funcionan con
       paths default; A/B/C/E/G harán `skip` por falta de inputs).
     """
+    from engines.data.probes import build_td_probe
+
     registry_runtime = scan_context["registry"] if scan_context else None
     registry_path = settings.registry_path if scan_context else None
     td_probe = None
     if scan_context is not None:
-        td_probe = _build_td_probe(
+        td_probe = build_td_probe(
             scan_context["key_configs"], scan_context["client"],
         )
 
@@ -395,10 +378,14 @@ def main() -> int:
             running=running,
         )
         extra_workers.append(factory)
-        # Expose registry + data_engine + key_pool + running event via app.state.
+        # Expose registry + data_engine + key_pool + td_client + running.
         app.state.registry_runtime = scan_context["registry"]
         app.state.data_engine = scan_context["data_engine"]
         app.state.key_pool = scan_context["pool"]
+        # td_client se expone para que `PUT /config/twelvedata_keys`
+        # pueda reconstruir el probe del Validator al hot-reload de
+        # keys (BUG-001 capa 2).
+        app.state.td_client = scan_context["client"]
         app.state.auto_scan_running = running
 
     # Carga del LAST .config si el archivo existe y el path apunta a un

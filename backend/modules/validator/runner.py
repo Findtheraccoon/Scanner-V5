@@ -104,6 +104,15 @@ class Validator:
         self._td_probe = td_probe
         self._s3_probe = s3_probe
 
+    def set_td_probe(self, td_probe: TDProbe | None) -> None:
+        """Reasigna el probe de TD keys en runtime (BUG-001 capa 2).
+
+        Se llama desde `PUT /config/twelvedata_keys` tras hot-reload
+        del KeyPool para que el Check G corra contra las keys nuevas
+        sin reiniciar el backend.
+        """
+        self._td_probe = td_probe
+
     async def run_full_battery(self) -> ValidatorReport:
         """Corre los 7 tests en orden y devuelve el reporte."""
         run_id = str(uuid.uuid4())
