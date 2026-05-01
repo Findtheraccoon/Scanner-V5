@@ -30,18 +30,25 @@ import { Box, type BoxState } from "../Box";
    - pend  si no hay datos todavía.
 */
 
+/* Semáforo (UX-001):
+   - red    si motor red.
+   - warn   si motor yellow / paused.
+   - warn   si motor offline (no info aún o caído).
+   - ok     si motor green. */
 function levelToState(level: EngineStatusLevel | undefined): BoxState {
-  if (level === undefined || level === "offline") return "pend";
   if (level === "green") return "ok";
-  if (level === "yellow" || level === "paused") return "warn";
   if (level === "red") return "err";
-  return "pend";
+  // offline / undefined / yellow / paused → warn (no rojo, pero no verde).
+  return "warn";
 }
 
+/* Agregado del overall (UX-001):
+   - red    si algún motor red.
+   - warn   si alguno yellow / paused / offline / undefined.
+   - ok     si todos green. */
 function aggregateState(levels: (EngineStatusLevel | undefined)[]): BoxState {
-  if (levels.some((l) => l === undefined || l === "offline")) return "pend";
   if (levels.some((l) => l === "red")) return "err";
-  if (levels.some((l) => l === "yellow" || l === "paused")) return "warn";
+  if (levels.some((l) => l !== "green")) return "warn";
   return "ok";
 }
 

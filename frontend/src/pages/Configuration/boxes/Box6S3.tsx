@@ -66,6 +66,10 @@ export function Box6S3(): ReactElement {
   const isConfigured = !!cfg.data?.config?.s3_config;
   const objects = list.data?.objects ?? [];
 
+  // Semáforo (UX-001): S3 es OPCIONAL — sin configurar no es error.
+  // - pend (gris) si no configurado nunca (estado por defecto, opcional).
+  // - warn si configurado pero el último probe falló.
+  // - ok si configurado y probe OK.
   let state: BoxState;
   if (!isConfigured) state = "pend";
   else if (list.isError) state = "warn";
