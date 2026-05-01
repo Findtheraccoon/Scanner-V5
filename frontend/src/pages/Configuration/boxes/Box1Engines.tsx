@@ -123,13 +123,22 @@ export function Box1Engines(): ReactElement {
   };
 
   const onRestart = async () => {
-    if (
-      !confirm("¿reiniciar el backend? El proceso se cerrará y volverá a arrancar (~3 segundos).")
-    )
-      return;
+    // BUG-014: si no hay launcher supervisando el subprocess, el
+    // SIGINT que dispara /system/restart deja el backend muerto sin
+    // que nadie lo levante. Avisamos al usuario antes de proceder.
+    const launcherAttached = health.data?.launcher_attached !== false;
+    const msg = launcherAttached
+      ? "¿reiniciar el backend? El proceso se cerrará y volverá a arrancar (~3 segundos)."
+      : "MODO DEV — no hay launcher supervisando el backend. Si confirmás, " +
+        "el proceso se va a cerrar y NO se relanzará automáticamente. " +
+        "Vas a tener que correrlo a mano (`python backend/main.py`). ¿Continuar?";
+    if (!confirm(msg)) return;
     try {
       await restart.mutateAsync();
-      toast("backend reiniciándose…", "info");
+      toast(
+        launcherAttached ? "backend reiniciándose…" : "backend deteniéndose (modo dev)",
+        launcherAttached ? "info" : "warn",
+      );
     } catch (e) {
       toast(`restart falló — ${errMsg(e)}`, "error");
     }
@@ -207,8 +216,17 @@ export function Box1Engines(): ReactElement {
             className="btn"
             onClick={onRestart}
             disabled={restart.isPending || shutdown.isPending}
+            title={
+              health.data?.launcher_attached === false
+                ? "modo dev — no hay launcher supervisando: el backend NO se relanzará solo"
+                : "reinicia el backend a través del launcher"
+            }
           >
-            {restart.isPending ? "reiniciando…" : "reiniciar backend"}
+            {restart.isPending
+              ? "reiniciando…"
+              : health.data?.launcher_attached === false
+                ? "reiniciar (modo dev)"
+                : "reiniciar backend"}
           </button>
           <button
             type="button"

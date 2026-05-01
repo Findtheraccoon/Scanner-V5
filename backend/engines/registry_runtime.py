@@ -262,6 +262,12 @@ class RegistryRuntime:
         # El lock solo protege la mutación en memoria + persist.
         full_fixture_path = fixtures_root / fixture_path
         fixture = load_fixture(full_fixture_path)
+        # BUG-013: design dice "benchmark lo define el fixture" (Box 4
+        # sub-text). Si el caller no especifica benchmark, lo derivamos
+        # del fixture en vez de fallar con REG-013. Si el caller manda
+        # un valor explícito, se valida igual que antes.
+        if benchmark is None:
+            benchmark = fixture.ticker_info.benchmark
         self._validate_fixture_coherence(
             fixture,
             ticker=ticker,

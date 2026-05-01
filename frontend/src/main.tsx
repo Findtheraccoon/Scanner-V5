@@ -1,21 +1,12 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider } from "react-router-dom";
+import { queryClient } from "./api/queryClient";
 import { ToastProvider } from "./components/Toast/ToastProvider";
 import { router } from "./router";
 import { useAuthStore } from "./stores/auth";
 import "./styles/global.css";
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 30_000,
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
-  },
-});
 
 /* Auto-inject del bearer cuando el backend lo sirve via <meta>.
    Modo launcher (ejecutable único): el backend genera un bearer al

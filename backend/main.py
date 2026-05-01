@@ -282,32 +282,102 @@ def _ensure_registry_file(path: Path) -> None:
     logger.info(f"bootstrapped default slot_registry at {path}")
 
 
+def _build_empty_registry() -> "SlotRegistry":
+    """Construye un `SlotRegistry` in-memory con 6 slots DISABLED.
+
+    Usado como fallback cuando el archivo en disco está corrupto o
+    falla la validación del loader. Permite que `/api/v1/slots` y
+    `/api/v1/fixtures` respondan 200 con los slots vacíos en lugar
+    de 503 — el usuario puede ver el problema en la UI vía
+    `/engine/health` y operar sobre los demás slots.
+    """
+    from modules.slot_registry.models import (
+        RegistryMetadata,
+        SlotRecord,
+        SlotRegistry,
+    )
+
+    metadata = RegistryMetadata(
+        registry_version="1.0.0",
+        engine_version_required=f">={ENGINE_VERSION},<6.0.0",
+        generated_at=datetime.now(tz=UTC),
+        generated_by="scanner-v5 in-memory fallback (load failed)",
+        description=(
+            "Synthetic empty registry — el archivo en disco no se pudo "
+            "cargar. Ver app.state.registry_load_error y /engine/health."
+        ),
+    )
+    slots = [
+        SlotRecord(
+            slot=i,
+            status="DISABLED",
+            ticker=None,
+            fixture_path=None,
+            fixture=None,
+            benchmark=None,
+        )
+        for i in range(1, 7)
+    ]
+    return SlotRegistry(metadata=metadata, slots=slots, warnings=[])
+
+
 def _bootstrap_registry_runtime(app, settings: Settings) -> None:
     """Crea el archivo si falta + intenta load + asigna runtime a app.state.
 
-    Silencioso ante fallos: si el archivo está corrupto o el load lanza
-    `RegistryError`, app.state.registry_runtime queda en None y los
-    endpoints siguen devolviendo 503 (estado anterior al fix).
+    Lifecycle del fallback (BUG-007):
+        1. Si el archivo no existe → `_ensure_registry_file` crea uno
+           default con 6 slots disabled.
+        2. Si `load_registry` levanta `RegistryError` (REG-002 schema
+           inválido, REG-020 hash mismatch, REG-030 engine version, …):
+           se construye un `SlotRegistry` synthetic in-memory con 6
+           slots DISABLED y se publica como runtime, **sin** tocar el
+           archivo en disco. El error se persiste en
+           `app.state.registry_load_error` para que `/engine/health`
+           lo exponga al frontend.
+
+    Resultado: `/api/v1/slots` y `/api/v1/fixtures` siempre responden
+    200 mientras el backend esté arriba. La UI puede mostrar el motivo
+    del error y permitir al usuario corregirlo (ej. desabilitar el
+    slot que tiene fixture corrupta).
 
     BUG-002: el registry no requiere TD keys ni scan_context. Es info
     puramente local — debe inicializarse independientemente del provider.
     """
     path = Path(settings.registry_path)
+    app.state.registry_load_error = None
+
     try:
         _ensure_registry_file(path)
     except OSError as e:
-        logger.warning(f"could not bootstrap registry file {path}: {e}")
+        msg = f"could not write default registry file at {path}: {e}"
+        logger.warning(msg)
+        app.state.registry_load_error = msg
+        app.state.registry_runtime = RegistryRuntime(
+            _build_empty_registry(), registry_path=str(path),
+        )
         return
+
     try:
         registry = load_registry(str(path), engine_version=ENGINE_VERSION)
     except RegistryError as e:
-        logger.warning(
-            f"could not load slot_registry: {e.code} · {e.detail}",
+        msg = f"{e.code}: {e.detail}"
+        logger.error(
+            f"slot_registry load failed — falling back to in-memory empty "
+            f"registry. Error: {msg}",
+        )
+        app.state.registry_load_error = msg
+        app.state.registry_runtime = RegistryRuntime(
+            _build_empty_registry(), registry_path=str(path),
         )
         return
-    except Exception:
+    except Exception as e:
         logger.exception(f"unexpected error loading {path}")
+        app.state.registry_load_error = f"{type(e).__name__}: {e}"
+        app.state.registry_runtime = RegistryRuntime(
+            _build_empty_registry(), registry_path=str(path),
+        )
         return
+
     app.state.registry_runtime = RegistryRuntime(
         registry, registry_path=str(path),
     )
@@ -390,6 +460,20 @@ def main() -> int:
         )
         return 1
 
+    # BUG-004: el registry file se crea ANTES de construir el scan
+    # context. Caso contrario, en clone fresco con TD keys vía env var
+    # `_build_scan_loop_factory` falla con REG-001 (file not found),
+    # devuelve None, y aunque después se bootstrappee el archivo el
+    # scan_loop ya quedó en stub para esta sesión. Idempotente: si el
+    # archivo ya existe, no se toca.
+    try:
+        _ensure_registry_file(Path(settings.registry_path))
+    except OSError as e:
+        logger.warning(
+            f"could not pre-create registry file at {settings.registry_path}: "
+            f"{e}. Scan loop will not start; bootstrap fallback en lifespan.",
+        )
+
     # Scan loop real si el config lo permite
     scan_context = _build_scan_loop_factory(settings)
     use_real_scan_loop = scan_context is not None
@@ -448,10 +532,11 @@ def main() -> int:
     _bootstrap_registry_runtime(app, settings)
 
     if use_real_scan_loop:
-        # `running` por default empieza set → loop corre sin pausa. El
-        # endpoint /scan/auto/{pause,resume} lo alterna en tiempo real.
+        # BUG-016: el auto-scan arranca PAUSADO (`running` clear). El
+        # usuario lo activa explícitamente desde el toggle AUTO del
+        # Cockpit cuando esté listo. Antes arrancaba corriendo y
+        # consumía TD credits sin que el usuario lo pidiera.
         running = asyncio.Event()
-        running.set()
         factory = build_scan_loop_factory_for_app(
             app_broadcaster=app.state.broadcaster,
             data_engine=scan_context["data_engine"],

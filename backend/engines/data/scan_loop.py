@@ -238,7 +238,7 @@ async def _run_scan_cycle(
 
     if not scannable:
         logger.info("No scannable slots — cycle idle")
-        await _broadcast_api_usage(broadcaster, data_engine)
+        await broadcast_api_usage(broadcaster, data_engine)
         return
 
     tasks = []
@@ -269,11 +269,11 @@ async def _run_scan_cycle(
 
     # Post-ciclo: emitir snapshot del KeyPool al WebSocket para que el
     # banner de 5 barras del Cockpit (spec §5.5) refleje el uso actual.
-    await _broadcast_api_usage(broadcaster, data_engine)
+    await broadcast_api_usage(broadcaster, data_engine)
     logger.info(f"Scan cycle done at {candle_timestamp.isoformat()}")
 
 
-async def _broadcast_api_usage(
+async def broadcast_api_usage(
     broadcaster: Broadcaster,
     data_engine: DataEngine,
 ) -> None:

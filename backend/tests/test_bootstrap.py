@@ -113,11 +113,14 @@ def test_bootstrap_registry_runtime_idempotent(
     assert first_mtime == second_mtime
 
 
-def test_bootstrap_registry_runtime_silent_on_invalid_file(
+def test_bootstrap_registry_runtime_falls_back_on_invalid_file(
     tmp_path: Path, fake_app: SimpleNamespace,
 ) -> None:
-    """Si el archivo está corrupto, deja `app.state.registry_runtime`
-    en None (no crashea el lifespan)."""
+    """BUG-007: ante archivo corrupto, en lugar de dejar registry_runtime
+    en None y retornar 503 en /slots, se construye un fallback in-memory
+    con 6 slots DISABLED. El error se persiste en `registry_load_error`
+    para que /engine/health lo exponga.
+    """
     from main import _bootstrap_registry_runtime
     from settings import Settings
 
@@ -127,5 +130,13 @@ def test_bootstrap_registry_runtime_silent_on_invalid_file(
 
     _bootstrap_registry_runtime(fake_app, settings)
 
-    # No debe haber registry_runtime — el archivo es inválido.
-    assert getattr(fake_app.state, "registry_runtime", None) is None
+    # registry_runtime existe (fallback), 6 slots DISABLED.
+    runtime = getattr(fake_app.state, "registry_runtime", None)
+    assert runtime is not None, (
+        "BUG-007: el fallback in-memory debe poblar registry_runtime"
+    )
+    assert len(runtime._registry.slots) == 6
+    assert all(s.status == "DISABLED" for s in runtime._registry.slots)
+    # registry_load_error captura el código + detalle para la UI.
+    err = getattr(fake_app.state, "registry_load_error", None)
+    assert err is not None and "REG-" in err, err

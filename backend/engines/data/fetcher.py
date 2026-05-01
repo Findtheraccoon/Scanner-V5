@@ -302,19 +302,78 @@ class TwelveDataClient:
             timeout del cliente. False en cualquier otro caso (timeout,
             4xx/5xx, status=error, JSON malformado).
         """
+        ok, _reason = await self.test_key_diag(key)
+        return ok
+
+    async def test_key_diag(
+        self, key: ApiKeyConfig,
+    ) -> tuple[bool, str | None]:
+        """Variante de `test_key` que reporta el motivo del fallo.
+
+        BUG-026: cuando el usuario agrega 2 keys y una falla, el frontend
+        antes solo veía `ok=False` sin saber por qué. Este helper
+        clasifica el fallo:
+
+        - "rate_limit" — TD devolvió 429 (cuota por minuto/día agotada).
+        - "invalid_key" — TD devolvió 401/200+status=error con mensaje
+          de "Invalid API key" o similar.
+        - "http_<code>" — otros 4xx/5xx.
+        - "network" — timeout o error de red.
+        - "malformed_response" — body no parseable como JSON.
+        - None cuando ok=True.
+
+        El segundo elemento de la tupla es un string corto que el
+        frontend puede mostrar al lado del key_id en el badge.
+
+        BUG-028: para descartar pollution de connection-pool entre keys
+        consecutivas, esta variante usa un `httpx.AsyncClient` fresco
+        por llamada — connections cerradas, sin TLS session reuse, sin
+        compartir headers ni state entre keys. Usar el cliente compartido
+        está OK para fetches normales pero para el probe de N keys
+        distintas consecutivas vimos que TD devolvía 401 en la 2da key
+        cuando ambas eran válidas.
+        """
         params = {"symbol": "SPY", "apikey": key.secret}
         try:
-            response = await self._client.get("/quote", params=params)
-        except httpx.HTTPError:
-            return False
+            async with httpx.AsyncClient(
+                base_url=str(self._client.base_url),
+                timeout=self._client.timeout,
+            ) as fresh:
+                response = await fresh.get("/quote", params=params)
+        except httpx.HTTPError as e:
+            return False, f"network: {type(e).__name__}"
+
+        if response.status_code == 429:
+            return False, "rate_limit (429)"
+        if response.status_code == 401:
+            return False, "invalid_key (401)"
         if response.status_code != 200:
-            return False
+            return False, f"http_{response.status_code}"
+
         try:
             payload = response.json()
         except ValueError:
-            return False
-        # TD devuelve 200 con `status: "error"` cuando la key es inválida.
-        return payload.get("status") != "error"
+            return False, "malformed_response"
+
+        if payload.get("status") == "error":
+            msg = str(payload.get("message", "")).strip().lower()
+            # TD el message usa `**apikey**` (markdown bold, una palabra)
+            # cuando la key es inválida; también usa "credentials". El
+            # `code` numérico (401, 429) es la señal más confiable cuando
+            # TD lo incluye en el body 200+status=error.
+            code = payload.get("code")
+            if code == 429:
+                return False, "rate_limit (TD code 429)"
+            if code == 401:
+                return False, "invalid_key (TD code 401)"
+            if "apikey" in msg or "api key" in msg or "credentials" in msg:
+                return False, "invalid_key"
+            if "credit" in msg or "limit" in msg or "quota" in msg:
+                return False, "rate_limit"
+            short = str(payload.get("message", "error"))[:80]
+            return False, f"td_error: {short}"
+
+        return True, None
 
 
 # ═══════════════════════════════════════════════════════════════════════════

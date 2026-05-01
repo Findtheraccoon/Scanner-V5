@@ -77,7 +77,14 @@ export function Slot({ slot, onSelect }: SlotProps) {
             </span>
             <span className="slot__metrics">
               <span className="slot__score">{slot.score?.toFixed(1)}</span>
-              {slot.winRate !== null ? <span className="slot__wr">{slot.winRate}%</span> : null}
+              {slot.winRate !== null ? (
+                <span
+                  className="slot__wr"
+                  title="WR @ banda · backtest training del canonical"
+                >
+                  {slot.winRate}% <small style={{ opacity: 0.6 }}>prob</small>
+                </span>
+              ) : null}
             </span>
           </div>
         ) : (

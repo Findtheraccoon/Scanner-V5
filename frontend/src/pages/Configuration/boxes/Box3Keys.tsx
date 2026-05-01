@@ -120,12 +120,21 @@ export function Box3Keys(): ReactElement {
         toast("el backend no devolvió resultado de probe — ¿guardaste las keys?", "warn");
         return;
       }
+      // BUG-027: el backend SIEMPRE prueba todas las keys (no solo la
+      // que el usuario clickeó). Actualizamos los resultados de TODAS
+      // así la UI no queda con "no probada" para las otras cards aunque
+      // ya tenemos sus resultados. Antes solo se actualizaba `keyId`.
+      const allResults: Record<string, ProbeResult> = {};
+      for (const k of r.td_keys) {
+        allResults[k.key_id] = { ok: k.ok, error: k.error };
+      }
+      setProbeResults((prev) => ({ ...prev, ...allResults }));
+
       const found = r.td_keys.find((k) => k.key_id === keyId);
       if (!found) {
         toast(`${keyId} · no aparece en la respuesta del probe`, "warn");
         return;
       }
-      setProbeResults((prev) => ({ ...prev, [keyId]: { ok: found.ok, error: found.error } }));
       toast(
         `${keyId} · ${found.ok ? "ok" : `fail · ${found.error ?? "?"}`}`,
         found.ok ? "success" : "error",

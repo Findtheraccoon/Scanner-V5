@@ -1,0 +1,15 @@
+# BUG-006 — fixtures + canonicals deben tener line endings determinísticos.
+#
+# El integrity check del registry compara `sha256(file_bytes)` contra el
+# `.sha256` sibling. Si Git en Windows aplica `core.autocrlf=true`, los
+# JSON cambian LF→CRLF al checkout y el hash deja de coincidir → REG-020
+# bloquea el scan_loop. Forzamos `eol=lf` para todos los archivos donde
+# el hash importa: canonicals, sus siblings .sha256 y .metrics.json, y
+# fixtures sub-directorio entero.
+
+backend/fixtures/**/*.json    text eol=lf
+backend/fixtures/**/*.sha256  text eol=lf
+backend/fixtures/**           text eol=lf
+
+# Para el resto del repo dejamos auto-detección (default).
+* text=auto

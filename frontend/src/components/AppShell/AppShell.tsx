@@ -29,7 +29,22 @@ function useBackendWiring(): void {
   const applyEngine = useEngineStore((s) => s.applyEngineStatus);
 
   useEffect(() => {
-    if (slotsQuery.data) setSlots(slotsQuery.data);
+    if (!slotsQuery.data) return;
+    setSlots(slotsQuery.data);
+    // BUG-019: si el slot seleccionado actualmente no es operativo,
+    // cambiamos a el primer slot operativo del registry para que el
+    // Cockpit muestre datos reales y SCAN AHORA funcione sin que el
+    // usuario tenga que clickear primero la watchlist.
+    const store = useSlotsStore.getState();
+    const current = slotsQuery.data.find((s) => s.slot_id === store.selectedSlotId);
+    const isOperative = (s: { status: string } | undefined): boolean =>
+      !!s && (s.status === "active" || s.status === "warming_up");
+    if (!isOperative(current)) {
+      const firstOp = slotsQuery.data.find(isOperative);
+      if (firstOp && firstOp.slot_id !== store.selectedSlotId) {
+        store.selectSlot(firstOp.slot_id);
+      }
+    }
   }, [slotsQuery.data, setSlots]);
 
   useEffect(() => {

@@ -160,58 +160,148 @@ def build_ws_payload(
     }
 
 
+def _fmt_signal_label(signal: Any, blocked: Any, conf: Any) -> str:
+    """Convierte el flag boolean `signal` del backend a label humano.
+
+    BUG-024 cierre real: antes la f-string serializaba `True`/`False`
+    crudo (ej. "score 0.0 (—) · False"), confuso para el usuario.
+    """
+    if blocked:
+        return "BLOQUEADO"
+    if signal is True or (isinstance(signal, str) and signal.upper() == "SETUP"):
+        # Heuristic: REVISAR vs SETUP por la banda
+        if conf in ("REVISAR", "B"):
+            return "REVISAR"
+        return "SETUP"
+    return "NEUTRAL"
+
+
 def build_chat_format(
     out: dict,
     *,
     candle_timestamp: _dt.datetime,
 ) -> str:
-    """Template v0 del `chat_format` — texto multilinea listo para pegar
+    """Template del `chat_format` — texto multilinea listo para pegar
     al chat con Claude.
 
-    El template rico (v1.1.0) lo define el frontend y se implementa en
-    una fase posterior. Esta versión mínima cubre los bloques básicos.
+    Bloques (en orden):
+        1. HEADER  — ticker · dir · score (band) · LABEL
+        2. PRECIO  — último cierre + ATR si disponibles (BUG-024)
+        3. ESTADO  — bloqueo con motivo + conflict info (BUG-024)
+        4. CONTEXTO — alignment + trends
+        5. TRIGGERS / CONFIRMS / RISKS — listas con weight
+        6. META — engine, fixture, candle ts
     """
     lines: list[str] = []
     ticker = out.get("ticker", "?")
     score = out.get("score")
     conf = out.get("conf", "—")
     dir_ = out.get("dir") or "—"
-    signal = out.get("signal", "NEUTRAL")
+    blocked = out.get("blocked")
+    label = _fmt_signal_label(out.get("signal"), blocked, conf)
 
-    header = f"[{ticker}] {dir_} · score {score} ({conf}) · {signal}"
-    lines.append(header)
+    score_str = f"{score:.1f}" if isinstance(score, (int, float)) else "—"
+    lines.append(f"[{ticker}] {dir_} · score {score_str} ({conf}) · {label}")
     lines.append(f"Candle: {candle_timestamp.isoformat()}")
+    lines.append("")
 
     if out.get("error"):
         lines.append(f"ERROR: {out.get('error_code')}")
         return "\n".join(lines)
 
-    if out.get("blocked"):
-        lines.append(f"Blocked: {out['blocked']}")
+    # PRECIO — del bloque `ind` (BUG-024 cierre real: el usuario quiere
+    # comparar con su gráfico, así que el precio es lo primero útil).
+    ind = out.get("ind") or {}
+    price = ind.get("price")
+    if isinstance(price, (int, float)):
+        lines.append(f"PRECIO  ${price:.2f}")
+        atr15 = ind.get("atr_15m")
+        if isinstance(atr15, (int, float)):
+            atr_pct = (atr15 / price * 100.0) if price else 0.0
+            lines.append(f"  ATR15M  {atr_pct:.2f}% (${atr15:.2f})")
+        bb1h = ind.get("bb_1h")
+        if isinstance(bb1h, list) and len(bb1h) == 3:
+            lines.append(f"  BB1H    sup ${bb1h[0]:.2f} · mid ${bb1h[1]:.2f} · inf ${bb1h[2]:.2f}")
+        bbd = ind.get("bb_daily")
+        if isinstance(bbd, list) and len(bbd) == 3:
+            lines.append(f"  BBD     sup ${bbd[0]:.2f} · mid ${bbd[1]:.2f} · inf ${bbd[2]:.2f}")
+        lines.append("")
 
-    layers = out.get("layers", {})
+    # ESTADO — bloqueo + conflict info (BUG-024 cierre real).
+    layers = out.get("layers") or {}
+    risk = layers.get("risk") or {}
+    if blocked:
+        items = risk.get("items") or []
+        if items:
+            lines.append("BLOQUEO")
+            for it in items[:5]:
+                if isinstance(it, dict):
+                    desc = it.get("desc") or it.get("reason") or it.get("name") or "?"
+                    code = it.get("code") or it.get("error_code")
+                    lines.append(f"  {desc}{' [' + code + ']' if code else ''}")
+                else:
+                    lines.append(f"  {it}")
+        else:
+            lines.append("BLOQUEO  (motivo no detallado en risk.items)")
+        conflict = risk.get("conflictInfo") or {}
+        if conflict:
+            put = conflict.get("put")
+            call = conflict.get("call")
+            diff = conflict.get("diff")
+            if put is not None and call is not None:
+                lines.append(
+                    f"  conflicto put/call: PUT {put} vs CALL {call}"
+                    f"{f' · diff {diff}' if diff is not None else ''}",
+                )
+        lines.append("")
+
+    # CONTEXTO
     aln = layers.get("alignment") or {}
     if aln:
-        lines.append(f"Alignment: {aln.get('dir', '?')} {aln.get('n', 0)}/3")
-
+        lines.append(
+            f"CONTEXTO  {aln.get('dir', '?')} {aln.get('n', 0)}/3 alineados",
+        )
     trends = layers.get("trends") or {}
     if trends:
         lines.append(
-            f"Trends: 15M={trends.get('t15m', '?')} "
-            f"1H={trends.get('t1h', '?')} "
-            f"D={trends.get('tdaily', '?')}"
+            f"  Trends   15M={trends.get('t15m', '?')} · "
+            f"1H={trends.get('t1h', '?')} · D={trends.get('tdaily', '?')}",
         )
+    if aln or trends:
+        lines.append("")
 
+    # TRIGGERS / CONFIRMS / RISKS
     triggers = [p for p in out.get("patterns") or [] if p.get("cat") == "TRIGGER"]
     if triggers:
-        lines.append("Triggers:")
-        for t in triggers[:5]:
-            lines.append(f"  {t.get('d', '?')} (+{t.get('w', 0)})")
+        lines.append("TRIGGERS")
+        for t in triggers[:8]:
+            lines.append(f"  {t.get('d', '?')}  (+{t.get('w', 0)})")
+        lines.append("")
 
     confirm_items = (layers.get("confirm") or {}).get("items") or []
     if confirm_items:
-        lines.append("Confirms:")
-        for c in confirm_items[:5]:
-            lines.append(f"  {c.get('desc', '?')} (+{c.get('weight', 0)})")
+        lines.append("CONFIRMS")
+        for c in confirm_items[:8]:
+            lines.append(f"  {c.get('desc', '?')}  (+{c.get('weight', 0)})")
+        lines.append("")
 
-    return "\n".join(lines)
+    risk_items = risk.get("items") or []
+    if risk_items and not blocked:
+        # Solo mostramos riesgos no-bloqueantes acá (los bloqueantes
+        # ya salieron en el bloque ESTADO arriba).
+        lines.append("RIESGOS")
+        for r in risk_items[:5]:
+            if isinstance(r, dict):
+                desc = r.get("desc") or r.get("reason") or "?"
+                lines.append(f"  {desc}")
+        lines.append("")
+
+    # META
+    fid = out.get("fixture_id", "—")
+    fver = out.get("fixture_version") or ""
+    eng = out.get("engine_version", "—")
+    lines.append("─" * 40)
+    lines.append(
+        f"Fixture: {fid}{' v' + fver if fver else ''} · Engine: {eng}",
+    )
+    return "\n".join(lines).rstrip()

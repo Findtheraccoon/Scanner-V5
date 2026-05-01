@@ -33,7 +33,9 @@ row por motor). El `validator` se deriva del `overall_status` del
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+import os
+
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -137,10 +139,17 @@ async def _validator_status(session: AsyncSession) -> dict:
 
 @router.get("/engine/health")
 async def engine_health(
+    request: Request,
     session: AsyncSession = Depends(get_session),
     _token: str = Depends(require_auth),
 ) -> dict:
-    """Estado consolidado de los 4 motores del backend."""
+    """Estado consolidado de los 4 motores del backend.
+
+    BUG-008: incluye `registry_load_error` cuando el bootstrap del
+    registry usó el fallback in-memory por un load fallido (REG-020,
+    REG-002, etc.). Permite a la UI mostrar el error al usuario en
+    vez de quedarse mudo con un registry vacío.
+    """
     sub_engines: dict[str, dict] = {}
     for name in _TRACKED_ENGINES:
         sub_engines[name] = await _last_heartbeat(session, name)
@@ -148,7 +157,7 @@ async def engine_health(
 
     overall = _compute_overall([sub["status"] for sub in sub_engines.values()])
 
-    return {
+    payload: dict = {
         "status": overall,
         "scoring": sub_engines["scoring"],
         "data": sub_engines["data"],
@@ -156,4 +165,15 @@ async def engine_health(
         "validator": sub_engines["validator"],
         "engine_version": ENGINE_VERSION,
         "ts": now_et().isoformat(),
+        # BUG-014: si hay un launcher supervisando el subprocess, el
+        # botón "reiniciar backend" en Box1 funciona como espera el
+        # usuario (mata + relanza). Sin launcher, /system/restart deja
+        # el proceso muerto. El frontend usa este flag para decidir
+        # si habilitar el botón. Detección: env var `SCANNER_LAUNCHER_PID`
+        # que el launcher.py setea antes de importar main.
+        "launcher_attached": os.environ.get("SCANNER_LAUNCHER_PID") is not None,
     }
+    registry_error = getattr(request.app.state, "registry_load_error", None)
+    if registry_error:
+        payload["registry_load_error"] = registry_error
+    return payload

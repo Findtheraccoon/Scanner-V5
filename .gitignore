@@ -152,3 +152,13 @@ setup-*.exe
 *.orig
 tmp/
 .scratch/
+
+# ═══════════════════════════════════════
+# Runtime data del scanner (per-user)
+# ═══════════════════════════════════════
+# Slot registry — auto-creado por _ensure_registry_file. Cada usuario
+# configura sus slots vía UI; el archivo no debe ir al repo.
+backend/slot_registry.json
+# .config files que el usuario guarda con sus credenciales
+backend/*.config
+backend/data/*.config
