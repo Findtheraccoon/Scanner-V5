@@ -233,6 +233,22 @@ export function Box4Slots(): ReactElement {
       compatible: f.engine_compatible !== false,
     }));
 
+  // UX-002: siempre 6 tarjetas (slot 01–06). Cuando el backend devuelve
+  // datos para un slot, los usamos; si el slot no existe todavía
+  // (backend offline o nunca configurado) mostramos placeholder para
+  // que el usuario pueda ingresar ticker + fixture directamente.
+  const SLOT_IDS = [1, 2, 3, 4, 5, 6] as const;
+  const placeholderSlot = (id: number): SlotInfo => ({
+    slot_id: id,
+    ticker: null,
+    status: "disabled",
+    fixture_id: null,
+    enabled: false,
+  });
+  const slotsForRender: SlotInfo[] = SLOT_IDS.map(
+    (id) => slotList.find((s) => s.slot_id === id) ?? placeholderSlot(id),
+  );
+
   const counts = {
     active: slotList.filter((s) => s.status === "active").length,
     warming: slotList.filter((s) => s.status === "warming_up").length,
@@ -287,17 +303,11 @@ export function Box4Slots(): ReactElement {
       }
       statusText={statusText}
     >
-      {slotList.length === 0 ? (
-        <div style={{ textAlign: "center", color: "var(--t-55)", padding: 20 }}>
-          {slots.isLoading ? "cargando slots…" : "sin slots configurados"}
-        </div>
-      ) : (
-        <div className="slot-cards">
-          {slotList.map((s) => (
-            <SlotCard key={s.slot_id} slot={s} fixtures={fixturesForSelect} />
-          ))}
-        </div>
-      )}
+      <div className="slot-cards">
+        {slotsForRender.map((s) => (
+          <SlotCard key={s.slot_id} slot={s} fixtures={fixturesForSelect} />
+        ))}
+      </div>
 
       {/* Biblioteca de fixtures */}
       <div className="lib-wrap">

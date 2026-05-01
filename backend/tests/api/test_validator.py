@@ -100,7 +100,13 @@ class TestRunFullBattery:
 
 class TestRunConnectivity:
     @pytest.mark.asyncio
-    async def test_runs_only_g(self, app_with_validator) -> None:
+    async def test_returns_frontend_contract_shape(
+        self, app_with_validator,
+    ) -> None:
+        """BUG-001 capa 1: el endpoint debe devolver
+        `{run_id, trigger, overall_status, td_keys, s3}` en lugar del
+        `TestResult` crudo del Check G — sino el frontend revienta al
+        hacer `r.td_keys.find(...)`."""
         async with AsyncClient(
             transport=ASGITransport(app=app_with_validator),
             base_url="http://test",
@@ -110,9 +116,92 @@ class TestRunConnectivity:
             )
         assert r.status_code == 200
         result = r.json()
-        assert result["test_id"] == "G"
-        # Sin probes configurados → skip
-        assert result["status"] == "skip"
+        # Shape esperado por frontend/src/api/types.ts:ValidatorConnectivityResult
+        assert "run_id" in result
+        assert isinstance(result["run_id"], str)
+        assert result["trigger"] == "connectivity"
+        assert result["overall_status"] in ("pass", "warning", "fail")
+        assert isinstance(result["td_keys"], list)
+        # Sin probes configurados → status warning + listas vacías
+        assert result["overall_status"] == "warning"
+        assert result["td_keys"] == []
+        # El shape viejo NO debe estar (el frontend rompía con esto).
+        assert "test_id" not in result
+        assert "details" not in result
+
+    @pytest.mark.asyncio
+    async def test_hot_reload_rebuilds_td_probe(
+        self, app_with_validator, monkeypatch,
+    ) -> None:
+        """BUG-001 capa 2: tras `PUT /config/twelvedata_keys`, el
+        Validator debe correr Check G contra las keys nuevas. Antes,
+        `td_probe` quedaba como estaba al startup (None si las keys
+        venían por UI) y el endpoint seguía devolviendo `skip`."""
+        from engines.data import ApiKeyConfig, KeyPool
+        from modules.config import TDKeyConfig
+
+        # Simulamos un client TD inyectado en app.state — el wiring
+        # productivo lo hace `main._setup_app_state()` cuando hay
+        # scan_context. Acá usamos un fake con `test_key` que devuelve
+        # True para evitar la red.
+        class FakeTDClient:
+            async def test_key(self, key: ApiKeyConfig) -> bool:
+                return True
+
+        app_with_validator.state.td_client = FakeTDClient()
+        # Necesitamos un KeyPool real para que `_reload_key_pool`
+        # ejecute el reload (else retorna False sin tocar el probe).
+        # KeyPool no acepta lista vacía — usamos un seed key que se
+        # reemplazará por el reload.
+        seed = ApiKeyConfig(
+            key_id="seed",
+            secret="sk-seed",
+            credits_per_minute=8,
+            credits_per_day=800,
+            enabled=True,
+        )
+        app_with_validator.state.key_pool = KeyPool([seed])
+
+        # Estado inicial: no hay probe.
+        assert app_with_validator.state.validator._td_probe is None
+
+        td_keys = [
+            TDKeyConfig(
+                key_id="k1",
+                secret="sk-fake",
+                credits_per_minute=8,
+                credits_per_day=800,
+                enabled=True,
+            ),
+        ]
+        async with AsyncClient(
+            transport=ASGITransport(app=app_with_validator),
+            base_url="http://test",
+        ) as client:
+            r = await client.put(
+                "/api/v1/config/twelvedata_keys",
+                headers=AUTH,
+                json={"twelvedata_keys": [k.model_dump() for k in td_keys]},
+            )
+        assert r.status_code == 200
+        assert r.json()["key_pool_reloaded"] is True
+
+        # Tras el hot-reload, validator debe tener un probe que apunta
+        # a las keys nuevas — corremos Check G y confirmamos que ya no
+        # devuelve `skip`.
+        async with AsyncClient(
+            transport=ASGITransport(app=app_with_validator),
+            base_url="http://test",
+        ) as client:
+            r2 = await client.post(
+                "/api/v1/validator/connectivity", headers=AUTH,
+            )
+        assert r2.status_code == 200
+        result = r2.json()
+        # td_keys debe tener al menos un entry — el probe corrió.
+        assert len(result["td_keys"]) == 1
+        assert result["td_keys"][0]["key_id"] == "k1"
+        assert result["td_keys"][0]["ok"] is True
 
 
 class TestLatestReport:

@@ -1,6 +1,7 @@
+import type { SignalConfidence } from "@/api/types";
 import { useScanningStore } from "@/stores/scanning";
 import { Sparkline } from "./Sparkline";
-import type { Band, SlotData } from "./data";
+import type { SlotData } from "./data";
 
 interface SlotProps {
   slot: SlotData;
@@ -10,9 +11,9 @@ interface SlotProps {
 /* Spec del Hi-Fi v2: el bookmark de tier sólo aparece para setups
    destacados (A / A+ / S / S+). En B y REVISAR el tier se infiere del
    score numérico que ya está visible en la métrica de la card. */
-const BOOKMARK_BANDS: ReadonlySet<Band> = new Set(["A", "A+", "S", "S+"]);
+const BOOKMARK_BANDS: ReadonlySet<SignalConfidence> = new Set(["A", "A+", "S", "S+"]);
 
-function showsBookmark(band: Band | null): band is Band {
+function showsBookmark(band: SignalConfidence | null): band is SignalConfidence {
   return band !== null && BOOKMARK_BANDS.has(band);
 }
 
@@ -34,6 +35,9 @@ export function Slot({ slot, onSelect }: SlotProps) {
     .filter(Boolean)
     .join(" ");
   const renderBookmark = showsBookmark(slot.band);
+  // UX-003: si no hay signal cargada, no inventamos dir/score/winRate;
+  // mostramos un caption "esperando señal" en lugar del bottom row.
+  const hasSignalData = slot.band !== null && slot.direction !== null && slot.score !== null;
 
   return (
     <article
@@ -63,18 +67,24 @@ export function Slot({ slot, onSelect }: SlotProps) {
           <span className="slot__id">{String(slot.id).padStart(2, "0")}</span>
           <span className="slot__ticker">{slot.ticker}</span>
         </div>
-        <div className="slot__bottom">
-          <span className="slot__dirline">
-            <span className="slot__dir" data-dir={slot.direction}>
-              <span className="slot__dir-arrow">{slot.direction === "PUT" ? "▼" : "▲"}</span>{" "}
-              {slot.direction}
+        {hasSignalData ? (
+          <div className="slot__bottom">
+            <span className="slot__dirline">
+              <span className="slot__dir" data-dir={slot.direction}>
+                <span className="slot__dir-arrow">{slot.direction === "PUT" ? "▼" : "▲"}</span>{" "}
+                {slot.direction}
+              </span>
             </span>
-          </span>
-          <span className="slot__metrics">
-            <span className="slot__score">{slot.score?.toFixed(1)}</span>
-            <span className="slot__wr">{slot.winRate}%</span>
-          </span>
-        </div>
+            <span className="slot__metrics">
+              <span className="slot__score">{slot.score?.toFixed(1)}</span>
+              {slot.winRate !== null ? <span className="slot__wr">{slot.winRate}%</span> : null}
+            </span>
+          </div>
+        ) : (
+          <div className="slot__bottom slot__bottom--empty">
+            <span className="slot__waiting">esperando señal</span>
+          </div>
+        )}
       </div>
       {slot.sparkline ? (
         <div className="slot__spark">

@@ -30,6 +30,7 @@ el lifespan. Sin él, los endpoints retornan 503.
 from __future__ import annotations
 
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from loguru import logger
@@ -129,10 +130,37 @@ async def run_connectivity(
     request: Request,
     _token: str = Depends(require_auth),
 ) -> dict:
-    """Corre solo el Check G — conectividad externa."""
+    """Corre solo el Check G — conectividad externa.
+
+    BUG-001 capa 1: el frontend espera el shape
+    `{run_id, trigger, overall_status, td_keys, s3}` (ver
+    `frontend/src/api/types.ts:ValidatorConnectivityResult`). Antes
+    devolvíamos el `TestResult` crudo del Check G y el frontend
+    crasheaba al hacer `r.td_keys.find(...)` — se aplastaba `details`
+    en `td_keys` + `s3` y se mapea el status del check al
+    `overall_status` del contrato.
+    """
     validator = _get_validator(request)
     result = await validator.run_single_check("G")
-    return result.model_dump()
+    details = result.details or {}
+    td_keys = list(details.get("twelvedata", []))
+    s3 = details.get("s3")
+    # Map del status del TestResult al overall_status del contrato.
+    if result.status == "pass":
+        overall_status = "pass"
+    elif result.status == "fail" and result.severity == "fatal":
+        overall_status = "fail"
+    else:
+        # warning incluye: severity warning, skip (sin probes configurados),
+        # y casos parciales (algunas keys ok, otras no).
+        overall_status = "warning"
+    return {
+        "run_id": uuid4().hex,
+        "trigger": "connectivity",
+        "overall_status": overall_status,
+        "td_keys": td_keys,
+        "s3": s3,
+    }
 
 
 @router.get("/report/latest")

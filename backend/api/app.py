@@ -312,6 +312,16 @@ def _mount_frontend(app: FastAPI, static_dir: str | None, bearer: str | None) ->
 
     # SPA fallback: cualquier path que no matchee API/WS/static cae
     # en el index.html para que React Router maneje el routing.
+    #
+    # SEC-001: el handler valida containment del path antes de servir
+    # un archivo real. Sin esa validación, `/..%2Fdata%2Fbearer.txt`
+    # leería `data/bearer.txt` (relativo al cwd del backend) y filtraría
+    # el token al caller anónimo. Defensa en 2 capas:
+    #   1. rechazo explícito de `..` y rutas absolutas en path segments.
+    #   2. resolve()+relative_to(base) — si el resolved escapa del
+    #      static_dir, fallback al SPA index.
+    base_resolved = base.resolve()
+
     @app.get("/{path:path}", include_in_schema=False)
     async def spa_fallback(path: str) -> Response:
         # Excluir paths de API/WS — esos ya tienen sus rutas y devuelven
@@ -319,8 +329,14 @@ def _mount_frontend(app: FastAPI, static_dir: str | None, bearer: str | None) ->
         # primero las rutas registradas con prefijo.
         if path.startswith("api/") or path.startswith("ws"):
             raise HTTPException(status_code=404)
-        # Si el path apunta a un archivo real (favicon, manifest), servirlo.
-        candidate = base / path
+        # SEC-001: rechazar traversal antes de tocar el filesystem.
+        if path.startswith("/") or ".." in path.split("/"):
+            return HTMLResponse(content=cached_index)
+        try:
+            candidate = (base / path).resolve()
+            candidate.relative_to(base_resolved)
+        except (ValueError, OSError):
+            return HTMLResponse(content=cached_index)
         if candidate.is_file():
             return FileResponse(str(candidate))
         # Cualquier otro path → React Router lo maneja.

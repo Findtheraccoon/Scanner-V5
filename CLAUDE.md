@@ -473,6 +473,81 @@ Hoy el panel del Cockpit (Banner + Exec chips + Chart + Detail) muestra **valore
 
 **Test de regresión:** test del Cockpit que verifica que sin signal cargada, los `$` y `%` no aparecen en el DOM, solo `—`.
 
+##### BUG-001 · Probe de TD keys (`POST /validator/connectivity`) — contract mismatch + probe nunca corre tras hot-reload (HIGH · pendiente)
+
+**Reportado por usuario tras smoke manual del Box 3 Keys con 1 key cargada desde la UI.** El botón "probar todas" o "probar individual" en `Box3Keys.tsx` rompe el frontend con `TypeError: cannot read properties of undefined (reading 'find')` y, aún arreglando el shape, el probe no corre porque el `td_probe` del Validator quedó en `None`.
+
+**Capa 1 — contract mismatch backend ↔ frontend (causa directa del crash):**
+
+- **Frontend espera** (`frontend/src/api/types.ts:310-316`):
+  ```ts
+  export interface ValidatorConnectivityResult {
+    run_id: string;
+    trigger: "connectivity";
+    overall_status: ValidatorOverallStatus;
+    td_keys: Array<{ key_id: string; ok: boolean; error?: string }>;
+    s3?: { ok: boolean; error?: string } | null;
+  }
+  ```
+- **Backend devuelve** el `TestResult` crudo del Check G (`backend/api/routes/validator.py:127-135`):
+  ```python
+  result = await validator.run_single_check("G")
+  return result.model_dump()
+  # → { "test_id": "G", "status": "skip"|"passed"|..., "severity": ..., "message": ...,
+  #     "details": { "twelvedata": [...], "s3": {...} }, "duration_ms": ... }
+  ```
+- **Curl directo confirma:** `{"test_id":"G","status":"skip","details":{}}`. Sin `td_keys` en el payload, `r.td_keys.find(...)` en `Box3Keys.tsx:112` revienta.
+
+**Capa 2 — probe nunca correría aunque el frontend leyera bien (bug latente):**
+
+- En `backend/main.py:199-203`, `td_probe` se construye solo si `scan_context` existe al arranque (= TD keys vía env var `SCANNER_TWELVEDATA_KEYS`). Cuando las keys se ingresan desde la UI, el backend ya arrancó con `td_probe=None`.
+- `PUT /config/twelvedata_keys` hot-reloadea el `KeyPool` pero **no reconstruye `validator.td_probe`** (`backend/api/routes/config.py` no lo toca). Por eso el endpoint sigue devolviendo `skip "sin probes de conectividad configuradas"` aun después de agregar keys.
+
+**Fix recomendado (2 capas):**
+
+1. **Backend** — adaptar la respuesta de `POST /validator/connectivity` al shape que espera el frontend:
+   ```python
+   @router.post("/connectivity")
+   async def run_connectivity(...) -> dict:
+       validator = _get_validator(request)
+       result = await validator.run_single_check("G")
+       td_details = (result.details or {}).get("twelvedata", []) if result.details else []
+       s3_details = (result.details or {}).get("s3") if result.details else None
+       return {
+           "run_id": str(uuid4()),
+           "trigger": "connectivity",
+           "overall_status": _result_to_overall(result.status),  # passed→pass, etc
+           "td_keys": td_details,   # esperar [{key_id, ok, error?}]
+           "s3": s3_details,
+       }
+   ```
+   Verificar primero el shape exacto que `Validator.run_single_check("G")` pone en `details["twelvedata"]` — puede que también necesite normalización.
+
+2. **Backend** — reconstruir `td_probe` al hot-reload:
+   - En `api/routes/config.py:put_twelvedata_keys` (donde se llama `key_pool.reload(keys)`), también reconstruir el probe del Validator y reasignarlo:
+     ```python
+     # Tras reload del KeyPool:
+     validator = request.app.state.validator
+     if validator is not None:
+         from main import _build_td_probe   # extraer a helper compartido
+         validator.td_probe = _build_td_probe(new_key_configs, td_client)
+     ```
+   - Alternativa más limpia: que el `Validator` consulte siempre `app.state.key_pool` + `app.state.td_client` al correr Check G, en lugar de capturar `td_probe` por inyección. Decisión a discutir con el usuario antes de refactorear.
+
+**Tests de regresión obligatorios:**
+- Backend: `tests/api/test_validator.py::test_connectivity_returns_td_keys_shape` — assert response.json() tiene `{run_id, trigger, overall_status, td_keys, s3}` con `td_keys` como `list`.
+- Backend: `tests/api/test_validator.py::test_connectivity_after_hot_reload` — arrancar sin keys, `PUT /config/twelvedata_keys`, `POST /validator/connectivity`, assert que el probe corrió (no `skip`).
+- Frontend: smoke manual de "probar todas" + "probar individual" sin crash, con feedback visible.
+
+**Workaround para el usuario hasta el fix:** arrancar el backend con `SCANNER_TWELVEDATA_KEYS="k1:sk-...:8:800"` env var → `td_probe` se construye al startup y el probe corre, aunque el frontend siga crasheando hasta que se cierre la capa 1.
+
+**Localización:**
+- `backend/api/routes/validator.py:127-135` — endpoint a re-shape.
+- `backend/main.py:199-203` + `backend/api/routes/config.py` — wiring del `td_probe` al hot-reload.
+- `backend/modules/validator/checks/g_connectivity.py` — verificar el shape del `details["twelvedata"]`.
+- `frontend/src/api/types.ts:310-316` — contrato esperado (no cambiar; el backend debe adaptarse).
+- `frontend/src/pages/Configuration/boxes/Box3Keys.tsx:108-125` — defensive guard `if (!r.td_keys) return;` sería un parche pero el fix correcto es backend.
+
 ---
 
 ### Para el siguiente chat

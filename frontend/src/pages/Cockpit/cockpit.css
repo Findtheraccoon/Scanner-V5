@@ -348,6 +348,16 @@
   gap: 10px;
   padding-top: 30px; /* deja ver el sparkline */
 }
+.slot__bottom--empty {
+  justify-content: flex-start;
+}
+.slot__waiting {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--t-38);
+}
 .slot__dirline {
   display: flex;
   align-items: baseline;
