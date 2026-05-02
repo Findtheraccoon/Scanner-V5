@@ -53,7 +53,7 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 
 ## Estado actual de la implementación
 
-**Rama activa:** `claude/review-project-status-OZyjj` — cierre de 9 de 11 deudas técnicas del backend identificadas en `frontend/wireframing/Configuracion specs.md` §6.2. La branch previa `LhwGj` fue mergeada a main vía PR #40 (commit `ab0182e`).
+**Rama activa:** `claude/plan-feature-development-qh7yJ` — sesión nueva (2026-05-02) sobre main post-PR #50. La rama previa `OZyjj` cerró con PRs #45→#48 (cierre de deudas técnicas backend + 3 BUGs del smoke manual); luego se mergearon PRs #49 (19 bugs BUG-013→BUG-031 en QA con backend live + Playwright) y PR #50 (script standalone `replay_canonical_parity.py`).
 
 ### Completado
 
@@ -70,9 +70,9 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 | D (Entrypoint) | `backend/main.py` + `backend/settings.py` + `backend/api/workers.py` — Pydantic Settings, lifecycle, worker factories, Validator wiring, archive wiring, shutdown rotation, healthcheck wired al heartbeat | ✅ |
 | Fixtures | `backend/modules/fixtures/` — loader + `api/routes/fixtures.py` con GET list / POST upload / DELETE (valida engine_compat_range, 409 si fixture_id duplicado o usado por slot) | ✅ wired |
 
-**Tests totales:** 1118 passing + 1 slow (parity regression guard) en `backend/tests/`. `ruff check .` limpio.
+**Tests totales:** **1132 passing** + 1 slow (parity regression guard) en `backend/tests/` (post PR #49 stability fixes). 77 archivos de test, 1112 funciones `def test_` (la diferencia con 1132 viene de `@pytest.mark.parametrize`). `ruff check .` limpio.
 
-**Frontend tests:** 6/6 passing (`pnpm test` en `frontend/`). Vite build limpio (~294KB JS gzip 93.6KB · 54KB CSS gzip 11KB). `pnpm lint` (Biome) limpio.
+**Frontend tests:** 7/7 passing (`pnpm test` en `frontend/`). Vite build limpio (~333KB JS gzip 104KB · 82KB CSS gzip 16KB). `pnpm lint` (Biome) limpio. `pnpm tsc --noEmit` limpio.
 
 ### Scoring Engine — detalle por fase
 
@@ -242,7 +242,24 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 | `api/routes/database.py:vacuum` | `POST /database/vacuum` — SQLite VACUUM bloqueante via `asyncio.to_thread`. 503 si DB locked |
 | `main.py:_try_load_last_config` | Carga silenciosa del LAST `.config` al arranque del backend si el path apuntado existe |
 
-### Frontend (Cockpit completo wired al backend · 2026-04-29)
+### Módulos nuevos del Launcher + Stability + Replay (sesiones OZyjj/stability/pre-alpha · PRs #46-#50)
+
+| Archivo | Rol |
+|---|---|
+| `backend/launcher.py` | Supervisor del proceso uvicorn · setea `SCANNER_LAUNCHER_PID` env · detecta `restart_requested.flag` y re-arranca · WS idle shutdown 60s · bearer auto-inject (PR #46) |
+| `scripts/build-launcher.sh` | Build wrapper · `pnpm build` → `frontend/dist/` → copia a `backend/static/` · verifica entrypoint para PyInstaller |
+| `api/routes/system.py` | `POST /api/v1/system/{shutdown,restart}` con flag file + signal SIGTERM · auth Bearer obligatorio (PR #46) |
+| `api/routes/candles.py` | `GET /api/v1/candles/{ticker}?tf=&n=` · alimenta el Panel.Chart OHLC SVG del Cockpit (PR #49 BUG-022) |
+| `api/routes/scan.py:scan_slot` | `POST /api/v1/scan/slot/{id}` · resuelve fixture+candles desde registry/data_engine + broadcast `api_usage.tick` post-scan (PR #49 BUG-015/021) |
+| `modules/fixtures/metrics_lookup.py` | Lookup de `wr_pct` por banda desde `.metrics.json` · usado por `signals.py` augment (PR #49 BUG-023) |
+| `engines/data/probes.py:_build_td_probe` | Helper compartido extraído de `main.py` · construye el probe TD para Validator Check G · llamado al startup y al hot-reload de keys (PR #47 BUG-001 capa 2) |
+| `Validator.set_td_probe(...)` | Setter para que `_reload_key_pool` reconstruya el probe sin reiniciar (PR #47) |
+| `scripts/replay_canonical_parity.py` | Standalone parity test · 1m → CandleBuilder → analyze → SQLite + MFE/MAE forward 30 min · compara con `.metrics.json:metrics_training.by_band` · 245/245 paridad bit-a-bit, S y S+ exactos (PR #50) |
+| `frontend/src/components/ui/{Pilot,Badge,Toggle,Dropzone}.tsx` | Componentes UI compartidos del Configuration · 4 estados/variantes c/u (sesión OZyjj) |
+| `frontend/src/api/queryClient.ts` | Singleton del QueryClient TanStack para uso fuera de hooks (ej. desde `ws.ts`) (PR #49 BUG-020) |
+| `frontend/src/pages/Configuration/boxes/{Box1Engines,Box2Config,Box3Keys,Box4Slots,Box5Validator,Box6S3}.tsx` | 6 boxes operativos del Configuration (sesión OZyjj · refinamientos UX-001/002/003 en PR #46) |
+
+### Frontend (Cockpit + Configuración wired al backend · 2026-04-30 · refinado PR #46-#49)
 
 | Capa | Detalle | Estado |
 |---|---|---|
@@ -258,10 +275,14 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 | Efectos UI | Reloj/fecha live ET, Toast component (4 tonos), Botón Copiar funcional con clipboard, Toggle AUTO cableado, Botón Scan + mutation | ✅ |
 | Bearer UI | Input compacto en footer con persistencia localStorage + reconexión WS al guardar | ✅ |
 | DevStateSwitcher | Switcher dev-only (botón ⚙ bottom-right) para forzar 8 estados sin backend. **Deuda técnica documentada** | ✅ |
-| Stubs | Configuración / Dashboard / Memento — placeholder unificado en `pages/_stub/StubPage.tsx` | ✅ |
-| API client | `src/api/client.ts` con bearer + `ApiError` + `getBearerToken`. Vite proxy `/api`+`/ws` → `VITE_BACKEND_URL` | ✅ |
-| Tests smoke | `src/test/router.test.tsx` — render + landmarks + 4 pestañas + active state + apibar + cockpit + 2 stubs (6/6) | ✅ |
-| Wireframes Configuración | `Configuracion specs.md` (spec funcional 6 secciones · 18 endpoints + 11 deudas técnicas) + `Configuracion Wireframes V2.html` + `V3.html` mid-fi paper-style con 6 boxes | ✅ |
+| Configuración wired | 6 boxes implementados (Engines/Config/Keys/Slots/Validator/S3) ~2227 líneas + 35 hooks TanStack + `configUi` + `validatorProgress` stores. Pilotos rojo/amarillo/verde reales (UX-001) · Box4 como tarjetas (UX-002) · `components/ui/{Pilot,Badge,Toggle,Dropzone}` | ✅ |
+| Stubs restantes | Dashboard / Memento — placeholder unificado en `pages/_stub/StubPage.tsx` (10 líneas cada uno) | ✅ |
+| Chart Cockpit | OHLC SVG real (50 candles 15m, bodies+wicks+línea de cierres+eje Y · BUG-022 PR #49). Lightweight Charts pendiente | ✅ shell |
+| Augmentations backend | `signals.py` augment con `wr_pct` desde `metrics_lookup.py` + `chat_format` regenerado en read time + `ind.price` desde candles_15m (BUG-023/024 PR #49) | ✅ |
+| Launcher exe | `backend/launcher.py` supervisor + `scripts/build-launcher.sh` (build frontend → static/ + verifica entrypoint) + bearer auto-inject + WS idle shutdown 60s + `launcher_attached` flag en `/engine/health` (BUG-014) | ✅ listo para PyInstaller |
+| API client | `src/api/client.ts` + `queryClient.ts` singleton (uso fuera de hooks · BUG-020) + bearer + `ApiError` + `getBearerToken`. Vite proxy `/api`+`/ws` → `VITE_BACKEND_URL` | ✅ |
+| Tests smoke | `src/test/router.test.tsx` — render + landmarks + 4 pestañas + active state + apibar + cockpit + Configuración (7/7) | ✅ |
+| Wireframes Configuración | `Configuracion specs.md` (spec funcional 6 secciones · 18 endpoints + 11 deudas técnicas) + `Configuracion Wireframes V2.html` + `V3.html` mid-fi paper-style + `Configuracion Hi-Fi v1.html` reference | ✅ |
 
 ### Módulos nuevos del Frontend (Cockpit + estados + wiring)
 
@@ -303,15 +324,19 @@ Cuando hay ambigüedad entre spec viejo y Observatory real (`docs/specs/Observat
 
 ### Pendiente
 
-- **Frontend (próximas iteraciones, Cockpit completo · faltan otras pestañas):**
-  - ~~Stores Zustand · TanStack Query · WebSocket listener~~ → **Cerrado 2026-04-29.** 5 stores + 7 hooks + `useScannerWS()` con auto-reconnect implementados (ver tabla "Frontend" arriba).
+- **Frontend (próximas iteraciones · Cockpit + Configuración wired · faltan Dashboard/Memento):**
+  - ~~Stores Zustand · TanStack Query · WebSocket listener~~ → **Cerrado 2026-04-29.** 8 stores + 35 hooks + `useScannerWS()` con auto-reconnect implementados.
   - ~~Estados degradados del Cockpit~~ → **Cerrado 2026-04-29.** 7 estados implementados con prioridad: error → splus → degraded → warmup → scanning → loading → normal.
-  - **Lightweight Charts** en el panel del Cockpit (reemplaza el SVG estático). Pendiente.
-  - **Hi-Fi de Configuración** — spec funcional `Configuracion specs.md` + wireframe mid-fi `V3.html` ya disponibles. Próximo paso: hi-fi Phoenix v1 sobre el V3 + scaffold React (reemplaza el stub).
-  - **Hi-Fi del Dashboard** — sin spec ni wireframe todavía. La persistencia DB + retención que se sacó de Configuración vive acá.
-  - **Hi-Fi de Memento** — sin spec ni wireframe todavía.
-  - ~~**11 deudas técnicas del backend**~~ → **9 cerradas 2026-04-30** (sesión OZyjj). Quedan 2 diferidas: `POST /system/restart` (alto riesgo, PR aparte) y `GET /system/open-folder` (descartado v1). Las de `master-key/*` se eliminaron por decisión de modelo (`.config` plaintext, sin master key).
+  - ~~**Hi-Fi de Configuración**~~ → **Cerrado 2026-04-30 sesión OZyjj.** 6 boxes (Engines/Config/Keys/Slots/Validator/S3) implementados ~2227 líneas. Pilotos reales + Box4 como tarjetas + Cockpit sin fake data refinados en PR #46 (UX-001/002/003).
+  - **Hi-Fi del Dashboard** — sin spec ni wireframe todavía. La persistencia DB + retención que se sacó de Configuración vive acá. Pendiente.
+  - **Hi-Fi de Memento** — sin spec ni wireframe todavía. Pendiente.
+  - **Lightweight Charts** en el panel del Cockpit. Por ahora hay OHLC SVG real (BUG-022 PR #49: 50 candles 15m, bodies+wicks+línea de cierres+eje Y) — listo para reemplazo cuando se decida la lib.
+  - ~~**11 deudas técnicas del backend**~~ → **Cerradas todas las viables.** 9 en sesión OZyjj (PRs #45-#47); BUG-001 cierre real + BUG-002 (registry sin scan_context) + BUG-003 (Box4 select fixture) en PR #48. `POST /system/restart` quedó wired vía launcher (PR #46). `GET /system/open-folder` descartado v1.
+  - ~~**SEC-001 path traversal SPA fallback**~~ → **Cerrado en PR #47.** Fix 2 capas (rechazo `..` + `resolve()` + `relative_to(base)`) + 8 tests de regresión en `tests/api/test_static.py`.
+  - ~~**UX-001/002/003**~~ → **Cerrados en PR #46:** semáforos reales por box · Box 4 Slots como 6 cards · Cockpit sin fake data hardcodeados.
+  - ~~**BUG-013 → BUG-031 (19 bugs)**~~ → **Cerrados en PR #49** (sesión QA con backend live + Playwright). Notable: `routes/candles.py` nuevo, `metrics_lookup.py` nuevo, broadcast `api_usage.tick` post-scan, hot-reload signals augment con `wr_pct`+`chat_format`+`last_price`, Box3Keys probe diagnostics, BUG-029 (preserva secret cuando frontend manda `***` masked).
   - ~~**Setting `auto_scan_run_at_startup`**~~ → **Eliminado por decisión.** El sistema arranca con auto-scan activo (lifespan); el toggle pause/resume se hace desde el Cockpit, no desde Configuración Paso 5.
+  - ~~**Auto-scan inicial PAUSED**~~ → **Cerrado en PR #49 (BUG-016).** Antes arrancaba consumiendo TD credits sin que el usuario lo pidiera; ahora el `running.clear()` inicial obliga a tocar Resume.
 - ~~**Fase 5.4 cierre**~~ → **Cerrado 2026-04-23 al 100%.** Post subida del `qqq_1min.json` original del Observatory, se identificaron 2 bugs reales del motor (ver gotchas #16 y #17): aggregator no resetaba al cambio de día + ORB gate usaba mean-cross-day en vez de median-intraday. Ambos arreglados → **245/245 match**. `DEFAULT_MIN_MATCH_RATE` subido a 0.99. Regression guard en `test_parity_regression.py` (slow, ~2min).
 - ~~**Healthcheck continuo spec §3.4**~~ → **Cerrado 2026-04-23.** `engines/scoring/healthcheck.py` wired al `heartbeat_worker` con `healthcheck_fn` opcional. Cada 2 min valida operativamente el motor (no-crash, shape, signal vocab) y reporta green/yellow+ENG-050/red+ENG-001 al Dashboard.
 - ~~**Watchdog automático AR.5**~~ → **Cerrado 2026-04-23.** `engines/database/watchdog.py:aggressive_rotation_watchdog` opt-in via `SCANNER_AGGRESSIVE_ROTATION_ENABLED=true`. Chequea tamaño DB cada `SCANNER_AGGRESSIVE_ROTATION_INTERVAL_S` (default 3600s) y dispara rotación agresiva. Default off por ser destructivo.
@@ -349,7 +374,7 @@ Adicionales wired en la sesión:
 
 #### Deudas técnicas de seguridad (sesión 2026-04-30 · post launcher)
 
-##### 🔴 SEC-001 · Path traversal en SPA fallback (HIGH · pendiente)
+##### 🟢 SEC-001 · Path traversal en SPA fallback — **CERRADO en PR #47**
 
 **Hallazgo del security-review skill** sobre el commit `1e2b159` (launcher / static mount).
 
@@ -419,7 +444,7 @@ El security-review skill que se corrió (2026-04-30) **solo cubrió el diff del 
 
 #### Deudas técnicas de UX · Configuración + Cockpit (sesión 2026-04-30)
 
-##### UX-001 · Pilotos por box con semáforo real (HIGH · pendiente)
+##### 🟢 UX-001 · Pilotos por box con semáforo real — **CERRADO en PR #46**
 
 Hoy el `BoxState` calcula `ok / warn / err / pend` con lógica ad-hoc por box. Los pilotos del rail (dot por box) y el badge de estado en el head no siempre reflejan el "configurado / parcial / no configurado" que el usuario espera. Modelo correcto:
 
@@ -438,7 +463,7 @@ Hoy el `BoxState` calcula `ok / warn / err / pend` con lógica ad-hoc por box. L
 
 **Test de regresión:** snapshot por box con cada estado de configuración representativo.
 
-##### UX-002 · Box 4 Slots como tarjetas en lugar de tabla (MEDIUM · pendiente)
+##### 🟢 UX-002 · Box 4 Slots como tarjetas en lugar de tabla — **CERRADO en PR #46**
 
 Hoy Box 4 muestra los 6 slots como filas de una tabla compacta (ticker · fixture · enabled · status). Decisión nueva: mostrarlos como **6 tarjetas** análogas a las cards de TD keys del Box 3, donde el usuario:
 
@@ -455,7 +480,7 @@ Hoy Box 4 muestra los 6 slots como filas de una tabla compacta (ticker · fixtur
 
 **Estimado:** ~150 LOC de refactor sin tocar wiring (`usePatchSlot` sigue igual).
 
-##### UX-003 · Cockpit sin fallback de valores fake en estado de loading (HIGH · pendiente)
+##### 🟢 UX-003 · Cockpit sin fallback de valores fake en estado de loading — **CERRADO en PR #46/#47**
 
 Hoy el panel del Cockpit (Banner + Exec chips + Chart + Detail) muestra **valores hardcodeados de QQQ** (`$485.32`, `+0.82%`, alineación, ATR, MA, etc) cuando no hay backend conectado o no hay señal cargada. Eso engaña: el usuario cree que el sistema está corriendo cuando en realidad no llegó dato real.
 
@@ -473,7 +498,7 @@ Hoy el panel del Cockpit (Banner + Exec chips + Chart + Detail) muestra **valore
 
 **Test de regresión:** test del Cockpit que verifica que sin signal cargada, los `$` y `%` no aparecen en el DOM, solo `—`.
 
-##### BUG-001 · Probe de TD keys (`POST /validator/connectivity`) — contract mismatch + probe nunca corre tras hot-reload (HIGH · pendiente)
+##### 🟢 BUG-001 · Probe de TD keys — **CERRADO en PR #47/#48** (contract + bootstrap-from-zero)
 
 **Reportado por usuario tras smoke manual del Box 3 Keys con 1 key cargada desde la UI.** El botón "probar todas" o "probar individual" en `Box3Keys.tsx` rompe el frontend con `TypeError: cannot read properties of undefined (reading 'find')` y, aún arreglando el shape, el probe no corre porque el `td_probe` del Validator quedó en `None`.
 
@@ -551,6 +576,47 @@ Hoy el panel del Cockpit (Banner + Exec chips + Chart + Detail) muestra **valore
 ---
 
 ### Para el siguiente chat
+
+**Estado al 2026-05-02 (post PRs #48-#50 mergeados a main):** backend completo + 31 BUGs cerrados (BUG-001 → BUG-031) + SEC-001 cerrado · **frontend con 2 pestañas wired**: Cockpit (Hi-Fi v2 Phoenix con chart OHLC SVG real) + Configuración (6 boxes operativos). Dashboard / Memento siguen como stubs (10 líneas cada uno). **1132 tests passing** + 1 slow (parity guard).
+
+**Sesión 2026-05-01 (PR #48):** cierre de los 3 bugs reportados durante el smoke manual del flujo "primer arranque sin TD keys vía env var":
+- **BUG-001 cierre real** (HIGH) · `_reload_key_pool` ahora bootstrapea `KeyPool` + `TwelveDataClient` cuando `app.state.key_pool is None` (caso real: backend arrancado sin `SCANNER_TWELVEDATA_KEYS`, usuario carga keys por primera vez vía UI). Defensive toast en `Box3Keys.tsx` cuando `r.td_keys.length === 0`.
+- **BUG-002** (HIGH) · `_bootstrap_registry_runtime` siempre carga el registry (antes solo si había TD keys vía env). `_ensure_registry_file` crea `slot_registry.json` con 6 slots disabled si no existe. `_reload_key_pool` bootstrap path extendido también construye `DataEngine`.
+- **BUG-003** (HIGH) · select de fixture en Box 4 nunca se habilitaba — root cause: ticker autosaveaba on-blur con `enabled:false` que wipea ticker+fixture. Fix: drafts locales hasta que el toggle activa, sin autosave on-blur. Validación local + un único PATCH al toggle ON. CSS `select.inp { width: 100% }`.
+- 6 tests nuevos para los 3 bugs.
+
+**Sesión 2026-05-01 (PR #49 · `claude/stability-fixes-BUG-013-031`):** sesión completa de QA + fixes con backend live (TD key real) + frontend Vite + Playwright para verificación visual E2E. **19 bugs cerrados (BUG-013 → BUG-031)**, todos con verificación E2E documentada en `CHANGELOG.md`.
+
+Backend:
+- **BUG-013** · `enable_slot` auto-fill de benchmark desde fixture cuando caller no especifica (REG-013 fix).
+- **BUG-014** · launcher.py setea `SCANNER_LAUNCHER_PID` + `health.py` expone `launcher_attached` (deshabilita botón Restart en dev sin launcher).
+- **BUG-015** · nuevo `POST /api/v1/scan/slot/{id}` resuelve fixture+candles desde registry/data_engine (reemplaza `/scan/manual` con body vacío que daba 422).
+- **BUG-016** · auto-scan inicial PAUSED (`running.clear()` por default) — antes consumía TD credits sin pedirlo.
+- **BUG-021** · `/scan/slot/{id}` broadcastea `api_usage.tick` post-scan + response incluye `fetch_meta` (banner de credits del Cockpit refresca).
+- **BUG-022** · nuevo `GET /api/v1/candles/{ticker}?tf=&n=` para chart del Cockpit + frontend Panel.Chart con render OHLC SVG real (50 candles 15m, bodies+wicks+línea de cierres+eje Y).
+- **BUG-023** · `modules/fixtures/metrics_lookup.py` (nuevo) + `signals.py` augment con `wr_pct` desde `.metrics.json`.
+- **BUG-024** · `signals.py` augment con `chat_format` regenerado en read time + `ind.price` desde candles_15m si viene vacío (caso BLOCKED). `pipeline.py:build_chat_format` reescrito con bloques claros.
+- **BUG-026/028** · `fetcher.py:test_key_diag` clasifica fallos del probe TD (rate_limit / invalid_key / http_xxx / network / malformed_response) + cliente fresh por llamada + 200ms entre keys consecutivas.
+- **BUG-029** · `config_put_td_keys` preserva secret original cuando frontend re-envía `***` (masked redacted) — antes guardaba literalmente `"***"` y la key vieja quedaba inválida. **Patrón importante para cualquier endpoint que reciba secrets editables desde la UI.** Ver gotcha #18.
+
+Frontend (type contracts + adapters):
+- **BUG-009-012** · `RawSlotInfo` + `adaptSlot()` en `useSlots` (backend usa `slot`/`base_state`/`fixture_path`, frontend esperaba `slot_id`/`enabled`). `DatabaseStatsResponse` alineado al shape real.
+- **BUG-017/018** · `useLatestSignal` toma `items[0]` (backend devuelve `list[dict]`). `SignalPayload.signal: boolean`; Banner deriva label visible (NEUTRAL/SETUP/REVISAR/BLOQUEADO) desde `conf` en lugar de crashear con `.toLowerCase()` sobre bool.
+- **BUG-019** · `AppShell.useBackendWiring` auto-selecciona primer slot operativo + `ApiBar.handleScan` resuelve targetSlot por status (no por selectedSlotId hardcoded — antes 409 si vacío).
+- **BUG-020** · `ws.ts` dispatch de `slot.status` invalida `['slots']` query · `api/queryClient.ts` (nuevo singleton para uso fuera de hooks).
+- **BUG-025/027/030/031** · Panel.Exec wired a `signal.layers` + `signal.ind` · Box3Keys.onProbeOne actualiza badges de TODAS las keys · `useScanSlot.onSettled` invalida `['candles']` + ws dispatch de `signal.new` también (chart refresca tras scan) · chip "PROBABILIDAD" en Cockpit Exec block.
+
+Infra:
+- **BUG-006** · `.gitattributes`: `text eol=lf` para `fixtures/**/*.json` y `.sha256` (Windows autocrlf rompía hash de canonicals · REG-020). **Acción manual requerida tras merge:** `git add --renormalize . && git commit -m "renormalize line endings post .gitattributes"`. Ver gotcha #19.
+
+**Sesión 2026-05-02 (PR #50 · `prueba-pre-alpha`):** script standalone de regression / parity test del scoring engine vs canonical pre-alfa.
+- `scripts/replay_canonical_parity.py` (~470 líneas) · itera 1m candles → CandleBuilder agrega 15m/1h → `analyze(fixture, *)` en cada cierre 15m → persiste a SQLite + tracking forward 30 min para MFE/MAE → agrega por banda y compara con `.metrics.json:metrics_training.by_band`.
+- Última ejecución (2026-05-01) sobre `qqq_canonical_v1` full 36m: counts por banda dentro de **±1.55%**; **S y S+ exactos (51/51, 11/11)**; WR @ 30 min mean |Δ| = 2.64 pp; banda S idéntica (60.8% ↔ 60.8%); mfe_mae con AVG(MFE/MAE) matchea banda B casi exacto (10.34 ↔ 10.37). Wall time ~82 min single-threaded.
+- Veredicto: **engine V5 production-ready** para la calibración existente.
+- Sirve como garantía I2 del scoring engine spec (determinístico, mismos inputs → mismo output).
+- DB output a `backend/data/replay_*.db` (gitignored).
+
+---
 
 **Estado al 2026-04-30 (post sesión OZyjj · scaffold React de Configuración):** backend completo · **frontend con 4 pestañas wired**: Cockpit + Configuración (NUEVO), Dashboard / Memento siguen como stubs.
 
@@ -699,13 +765,16 @@ Superficie backend disponible para el frontend:
 | GET | `/api/v1/fixtures` | List `.json` con metadata + sha256 + slots usage (NUEVO sesión OZyjj) |
 | POST | `/api/v1/fixtures/upload` | Multipart upload + valida engine_compat_range (NUEVO sesión OZyjj) |
 | DELETE | `/api/v1/fixtures/{fixture_id}` | Borra `.json` + siblings; 409 si usado (NUEVO sesión OZyjj) |
+| GET | `/api/v1/candles/{ticker}?tf=&n=` | Velas para chart del Cockpit (NUEVO PR #49 BUG-022) |
+| POST | `/api/v1/scan/slot/{id}` | Scan target por slot · resuelve fixture+candles desde registry/data_engine + broadcast `api_usage.tick` (NUEVO PR #49 BUG-015/021) |
+| POST | `/api/v1/system/{shutdown,restart}` | Control del proceso vía launcher · `restart_requested.flag` + signal SIGTERM (NUEVO PR #46) |
 | WS | `/ws?token=...` | 6 eventos push |
 
-**Pestañas (estado actual):**
-1. **Cockpit** — Watchlist + detalle técnico + botón COPIAR con `chat_format` · **completo wired al backend**, 7 estados + bearer + DevStateSwitcher.
-2. **Dashboard** — stub. Sin spec ni wireframe todavía. Incluirá persistencia DB + retención (sacadas de Configuración).
-3. **Memento** — stub. Sin spec.
-4. **Configuración** — stub. Spec funcional + 2 wireframes mid-fi disponibles. Próximo paso: hi-fi Phoenix v1 + scaffold.
+**Pestañas (estado actual al 2026-05-02):**
+1. **Cockpit** — Watchlist + detalle técnico + botón COPIAR con `chat_format` · **completo wired al backend**, 7 estados + bearer + DevStateSwitcher + chart OHLC SVG real (BUG-022).
+2. **Dashboard** — stub (10 líneas). Sin spec ni wireframe todavía. Incluirá persistencia DB + retención (sacadas de Configuración).
+3. **Memento** — stub (10 líneas). Sin spec.
+4. **Configuración** — **wired completo** (sesión OZyjj 2026-04-30 + refinamientos PR #46-#49). 6 boxes operativos (Engines/Config/Keys/Slots/Validator/S3) ~2227 líneas.
 
 **Comando de arranque end-to-end verificado:**
 ```bash
@@ -886,6 +955,66 @@ El ORB breakout/breakdown tiene un gate binario `vol_ratio >= 1.0`. Observatory 
 
 **Lección general:** tanto #16 como #17 existían en el motor productivo. El parity exhaustivo fue el mecanismo que los expuso. Mantener Check F activo detecta regresiones futuras.
 
+### 18. Endpoints PUT con secretos: preservar el valor original si el frontend manda `"***"` (masked)
+
+Patrón de UX típico: el frontend muestra los secretos redactados (`***`) en el form de edición. Si el usuario edita otros campos y guarda sin re-pegar el secret, el body llega con `"***"` literal en el campo `secret`/`access_key`/etc.
+
+**Bug original (BUG-029, PR #49):** `config.py:config_put_td_keys` guardaba ese `"***"` como si fuera el nuevo valor → la key real quedaba inválida silenciosamente. El usuario veía la UI confirmando "guardado" pero el probe siguiente fallaba con `invalid_key`.
+
+**Fix obligatorio para cualquier PUT que reciba secrets editables:**
+
+```python
+def merge_secret(submitted: str, existing: str | None) -> str | None:
+    """Si el frontend manda el sentinel masked, preservar el valor original."""
+    MASKED_SENTINELS = {"***", "***REDACTED***", ""}
+    if submitted in MASKED_SENTINELS:
+        return existing
+    return submitted
+```
+
+Aplicar en TODOS los endpoints PUT que tomen secrets:
+- `PUT /config/twelvedata_keys` (TD secret) — fix aplicado.
+- `PUT /config/s3` (access_key + secret_key) — verificar.
+- Cualquier endpoint nuevo con `password` / `token` / `api_key` / `secret`.
+
+**Test de regresión obligatorio:**
+
+```python
+async def test_put_preserves_secret_when_masked():
+    # Setup: PUT con secret real
+    await client.put("/config/twelvedata_keys", json=[{"key_id": "k1", "secret": "sk-real", ...}])
+    # Edit: PUT con "***" (frontend no recargó el secret)
+    await client.put("/config/twelvedata_keys", json=[{"key_id": "k1", "secret": "***", ...}])
+    # Verify: el secret real se preservó
+    r = await client.get("/config/current?include_secrets=true")
+    assert r.json()["twelvedata_keys"][0]["secret"] == "sk-real"  # NO "***"
+```
+
+**Lección general:** redactar `***` en GET es seguro; aceptar `***` en PUT es bug. La capa de "ignorar el sentinel" debe vivir en el handler del PUT, no en el frontend (que no es la fuente de verdad).
+
+### 19. `.gitattributes` + Windows autocrlf rompe hash SHA-256 de canonicals
+
+**Bug original (BUG-006, PR #49):** clones en Windows con `core.autocrlf=true` (default) convertían LF→CRLF al checkout de archivos `.json`. El hash SHA-256 calculado por `validate_canonical_hash()` no matcheaba el hash commiteado en el `.sha256` sibling → REG-020 fatal → registry no carga → scan_loop=stub.
+
+**Fix:** `.gitattributes` con `text eol=lf` para `backend/fixtures/**/*.json` y `*.sha256`. Una vez en main, **acción manual obligatoria una sola vez:**
+
+```bash
+git add --renormalize .
+git commit -m "renormalize line endings post .gitattributes (BUG-006)"
+```
+
+`.gitattributes` solo aplica a checkouts futuros. Sin el `--renormalize`, los archivos en el index quedan con CRLF y el bug persiste para clones nuevos.
+
+**Cuándo aplicar este patrón:**
+- Cualquier archivo binario-en-text (hashes, parquet, .npy, etc) que el repo trackea como text.
+- Cualquier `.json` cuyo SHA se valida contra un sibling `.sha256`.
+- Cualquier dataset commiteado donde la byte-equality importa.
+
+**Cómo detectar el bug en futuros canonicals:**
+- Desktop Linux/Mac: nunca aparece (autocrlf=input).
+- Windows: aparece la primera vez que el clone se usa para arrancar el backend.
+- CI Linux: aparece solo si el CI corre en Windows.
+
 ---
 
 ## Observatory como autoridad de paridad
@@ -915,7 +1044,7 @@ El código de Observatory vive en `docs/specs/Observatory/Current/scanner/`:
 
 ## Git workflow
 
-- **Todo desarrollo:** rama `claude/review-project-setup-4DnEm`. Nunca push directo a main.
+- **Todo desarrollo:** branch designada de la sesión (ej. `claude/plan-feature-development-qh7yJ`). Nunca push directo a main.
 - **Antes de commit:** correr `cd backend && python -m pytest tests/ -q` y asegurar que pasa.
 - **Commit messages:** español, conventional commits (`feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, `test:`). Scope entre paréntesis (`feat(scoring):`).
 - **Footer:** incluir `https://claude.ai/code/...` como manda la configuración del repo.
@@ -954,7 +1083,7 @@ git log --oneline HEAD..origin/main
 3. Leer `docs/specs/SCANNER_V5_HANDOFF_CURRENT.md` para contexto de producto.
 4. Si se va a tocar scoring: leer `docs/specs/SCORING_ENGINE_SPEC.md` + `docs/specs/Observatory/Current/scanner/scoring.py` + `patterns.py` + `engine.py`.
 5. Si se va a tocar Validator (próximo gran bloque): leer `docs/specs/SCANNER_V5_FEATURE_DECISIONS.md` sección batería D/A/B/C/E/F/G.
-6. Correr los tests antes de tocar nada para verificar baseline verde (851 passing esperados).
+6. Correr los tests antes de tocar nada para verificar baseline verde (**1132 passing esperados** + 1 slow parity guard, post PR #49).
 7. **No avanzar sin "ejecuta".** Proponer, esperar, ejecutar.
 
 ### Arranque end-to-end del backend
