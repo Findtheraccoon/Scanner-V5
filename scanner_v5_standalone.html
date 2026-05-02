@@ -40,7 +40,24 @@
   .sh{color:#22c55e;font-weight:700}.sm{color:#f59e0b;font-weight:700}.slo{color:#4a5568;font-weight:700}
   .sb{border-radius:3px;padding:2px 8px;font-size:11px;font-weight:700}
   .sb-S{background:#22c55e20;color:#22c55e;border:1px solid #22c55e40}.sb-R{background:#f59e0b20;color:#f59e0b;border:1px solid #f59e0b40}.sb-N{background:#33415520;color:#334155;border:1px solid #33415540}
-  .cAp{color:#22c55e;font-weight:700}.cA{color:#3b82f6;font-weight:700}.cB{color:#f59e0b;font-weight:700}.cN{color:#4a5568;font-weight:700}
+  .cSp{color:#fff;font-weight:800;letter-spacing:.5px;text-shadow:0 0 6px #fff,0 0 14px rgba(255,255,255,.55)}
+  .cS{color:#fbbf24;font-weight:700;text-shadow:0 0 4px rgba(251,191,36,.45)}
+  .cAp{color:#d946ef;font-weight:700;text-shadow:0 0 4px rgba(217,70,239,.35)}
+  .cA{color:#3b82f6;font-weight:700}
+  .cB{color:#f59e0b;font-weight:700}
+  .cR{color:#94a3b8;font-weight:600}
+  .cN{color:#4a5568;font-weight:600}
+  .wrChip{display:inline-block;background:#0f1520;border:1px solid #1e293b;color:#94a3b8;font-size:9px;font-weight:600;border-radius:3px;padding:1px 5px;margin-left:4px;letter-spacing:.3px}
+  .wrChip.hi{color:#22c55e;border-color:#22c55e40}
+  .wrChip.lo{color:#ef4444;border-color:#ef444440}
+  .metrics-tbl{width:100%;border-collapse:collapse;background:#0f1520;border-radius:6px;overflow:hidden;font-size:11px;margin-top:6px}
+  .metrics-tbl th{background:#0c1019;color:#64748b;font-size:10px;letter-spacing:.6px;font-weight:600;padding:6px 8px;text-align:right}
+  .metrics-tbl th:first-child{text-align:left}
+  .metrics-tbl td{padding:5px 8px;text-align:right;font-variant-numeric:tabular-nums;border-top:1px solid #1a2030;color:#c8cdd5}
+  .metrics-tbl td:first-child{text-align:left;font-weight:700}
+  .metrics-tbl tr.cur{background:#1e293b40}
+  .metrics-tbl tr.cur td{color:#fff}
+  .metrics-note{font-size:10px;color:#4a5568;margin-top:6px;line-height:1.5}
   .bc{background:transparent;color:#4a5568;border:1px solid #1a2030;border-radius:3px;padding:3px 8px;font-family:inherit;font-size:11px;cursor:pointer}.bc.cp{background:#22c55e20;color:#22c55e}
   .dp{width:380px;min-width:380px;border-left:1px solid #1a2030;padding:16px;background:#0c1019;overflow-y:auto;max-height:calc(100vh-140px);display:none}
   .dph{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
@@ -562,18 +579,23 @@ function detect(cM,cH,cD,ind){
     }
   }
 
-  // CONFIRMATIONS (layer 3)
+  // CONFIRMATIONS (layer 3) — pesos desde FIXTURE.confirm_weights (qqq_canonical_v1).
+  // VolHigh threshold ahora viene del fixture (volhigh_min_ratio = 1.2, antes hardcoded 1.5).
+  const CW=FIXTURE.confirm_weights, DT=FIXTURE.detection_thresholds;
   const L=cM[cM.length-1],pv=cM[cM.length-2];
-  if(ind.bbH&&L.c>=ind.bbH.u)P.push({tf:"1H",d:`BB sup 1H ($${ind.bbH.u})`,sg:"PUT",w:1,cat:"CONFIRM",age:0});
-  if(ind.bbH&&L.c<=ind.bbH.l)P.push({tf:"1H",d:`BB inf 1H ($${ind.bbH.l})`,sg:"CALL",w:1,cat:"CONFIRM",age:0});
-  if(ind.bbD&&L.c>=ind.bbD.u)P.push({tf:"D",d:`BB sup D ($${ind.bbD.u})`,sg:"PUT",w:1,cat:"CONFIRM",age:0});
-  if(ind.bbD&&L.c<=ind.bbD.l)P.push({tf:"D",d:`BB inf D ($${ind.bbD.l})`,sg:"CALL",w:1,cat:"CONFIRM",age:0});
-  if(ind.volM>1.5)P.push({tf:"15M",d:`Vol ${ind.volM}x avg`,sg:"CONFIRM",w:1,cat:"CONFIRM",age:0});
-  if(ind.volSeqM.growing)P.push({tf:"15M",d:`Vol creciente ${ind.volSeqM.count+1} velas`,sg:"CONFIRM",w:2,cat:"CONFIRM",age:0});
+  if(ind.bbH&&L.c>=ind.bbH.u)P.push({tf:"1H",d:`BB sup 1H ($${ind.bbH.u})`,sg:"PUT",w:CW.BBsup_1H,cat:"CONFIRM",age:0,key:"BBsup_1H"});
+  if(ind.bbH&&L.c<=ind.bbH.l)P.push({tf:"1H",d:`BB inf 1H ($${ind.bbH.l})`,sg:"CALL",w:CW.BBinf_1H,cat:"CONFIRM",age:0,key:"BBinf_1H"});
+  if(ind.bbD&&L.c>=ind.bbD.u)P.push({tf:"D",d:`BB sup D ($${ind.bbD.u})`,sg:"PUT",w:CW.BBsup_D,cat:"CONFIRM",age:0,key:"BBsup_D"});
+  if(ind.bbD&&L.c<=ind.bbD.l)P.push({tf:"D",d:`BB inf D ($${ind.bbD.l})`,sg:"CALL",w:CW.BBinf_D,cat:"CONFIRM",age:0,key:"BBinf_D"});
+  if(ind.volM>=DT.volhigh_min_ratio)P.push({tf:"15M",d:`Vol ${ind.volM}x avg`,sg:"CONFIRM",w:CW.VolHigh,cat:"CONFIRM",age:0,key:"VolHigh"});
+  if(ind.volSeqM.growing)P.push({tf:"15M",d:`Vol creciente ${ind.volSeqM.count+1} velas`,sg:"CONFIRM",w:CW.VolSeq,cat:"CONFIRM",age:0,key:"VolSeq"});
 
-  // BB Squeeze
+  // BB Squeeze: la condición de squeeze pura es informativa (cat=SQUEEZE, w=0); la transición
+  // squeeze→expansion sí entra como confirm con peso del fixture (SqExp = 0 en qqq_canonical_v1
+  // por hallazgo H-13: el evento es cualitativo pero no agrega edge en backtest, queda visible
+  // en patterns para análisis pero no aporta al score).
   if(ind.bbSqH?.isSqueeze)P.push({tf:"1H",d:`BB Squeeze (ancho p${ind.bbSqH.percentile})`,sg:"CONFIRM",w:0,cat:"SQUEEZE",age:0});
-  if(ind.bbSqH?.isSqueeze&&ind.bbSqH?.isExpanding)P.push({tf:"1H",d:"Squeeze → Expansión (ruptura)",sg:"CONFIRM",w:2,cat:"CONFIRM",age:0});
+  if(ind.bbSqH?.isSqueeze&&ind.bbSqH?.isExpanding)P.push({tf:"1H",d:"Squeeze → Expansión (ruptura)",sg:"CONFIRM",w:CW.SqExp,cat:"CONFIRM",age:0,key:"SqExp"});
 
   // RISKS (layer 4)
   if(ind.volM<.6&&L&&pv&&L.c>pv.c)P.push({tf:"15M",d:`Rebote vol bajo (${ind.volM}x)`,sg:"WARN",w:-2,cat:"RISK",age:0});
@@ -608,15 +630,51 @@ function trendSlope(c,m20){
   return"neutral";
 }
 
+// ═══════════════════════════════════════
+// BAND RESOLUTION — port de backend/engines/scoring/bands.py:resolve_band
+// Lee FIXTURE.score_bands ordenado high→low. Devuelve la primera banda donde
+// score >= min y (max=null o score < max). Score < min de la banda más baja → NEUTRAL.
+// ═══════════════════════════════════════
+function resolveBand(score){
+  for(const b of FIXTURE.score_bands){
+    if(score>=b.min&&(b.max===null||score<b.max))return{label:b.label,signal:b.signal};
+  }
+  return{label:"—",signal:"NEUTRAL"};
+}
+// Mapping label → CSS class para chips de confianza.
+function confClass(c){
+  return({"S+":"cSp","S":"cS","A+":"cAp","A":"cA","B":"cB","REVISAR":"cR"})[c]||"cN";
+}
+
+// ═══════════════════════════════════════
+// LAYERED SCORING — fórmula motor V5 (paridad estricta con qqq_canonical_v1)
+// ═══════════════════════════════════════
+// score = trigger_sum + confirm_sum  (H-02 del scoring engine spec).
+//
+// Diferencias vs scanner v4.2.1 (todas las cosas que SACAMOS del cálculo del
+// score y movimos a "contexto informativo" en el modal):
+//   - volMult (×1.5/×1.3/×0.5 según vol intraday): el canonical ya pondera
+//     VolHigh con weight=2 — multiplicar otra vez sería double-counting.
+//   - effectiveTimeW (zona horaria ET): time-of-day no es parte de la
+//     calibración Observatory.
+//   - bonus FzaRel/pivote: FzaRel ya tiene confirm con weight=4 → double-count.
+//   - risks (peso negativo): siguen detectándose y mostrándose, pero NO restan
+//     del score (gotcha #7 de CLAUDE.md). El conflict gate sigue invalidando.
+//
+// Lo que SE MANTIENE del v4 (también está en V5 spec):
+//   - Structure gate: alineación >= 2/3.
+//   - Catalyst override: bypass del gate si needsCat AND 15M==1H AND ≠neutral.
+//   - Trigger gate: ≥1 trigger del lado correcto.
+//   - Conflict gate: si PUT_w > 0 AND CALL_w > 0 AND |diff| < 2 → BLOQUEADO.
 function layeredScore(patterns,alignment,ind,divSPY,secRel,keyLvls,needsCat,tM,tH){
   const timeW=getTimeWeight();
-  const layers={structure:{pass:false,reason:"",override:false},trigger:{pass:false,count:0,sum:0},confirm:{sum:0,volMult:1.0,items:[]},risk:{sum:0,blocked:false,items:[]}};
+  const layers={structure:{pass:false,reason:"",override:false},trigger:{pass:false,count:0,sum:0},confirm:{sum:0,volMult:1.0,bonus:0,items:[]},risk:{sum:0,items:[],blocked:false,conflictInfo:null}};
 
-  // LAYER 1: STRUCTURE
+  // ── LAYER 1 · STRUCTURE ───────────────────────────────────────
   if(alignment.n>=2){layers.structure.pass=true;layers.structure.reason=`${alignment.n}/3 ${alignment.dir}`}
   else{layers.structure.pass=false;layers.structure.reason=`${alignment.n}/3 insuficiente`}
 
-  // CATALYST OVERRIDE: if needsCat and 15M+1H agree, bypass structure gate
+  // Catalyst override: bypass del gate si hay catalyst + 15M==1H ≠ neutral.
   if(!layers.structure.pass&&needsCat&&tM&&tH&&tM!=="neutral"&&tM===tH){
     layers.structure.pass=true;
     layers.structure.override=true;
@@ -624,67 +682,61 @@ function layeredScore(patterns,alignment,ind,divSPY,secRel,keyLvls,needsCat,tM,t
     alignment={n:2,dir:tM==="bearish"?"bearish":"bullish"};
   }
 
-  if(!layers.structure.pass)return{score:0,conf:"—",signal:"NEUTRAL",layers,timeW,blocked:"Alineación insuficiente"};
+  if(!layers.structure.pass){
+    return{score:0,conf:"—",signal:"NEUTRAL",band:null,layers,timeW,blocked:"Alineación insuficiente"};
+  }
 
   const dir=alignment.dir==="bearish"?"PUT":"CALL";
 
-  // LAYER 2: TRIGGERS
-  const triggers=patterns.filter(p=>p.cat==="TRIGGER"&&(p.sg===dir));
+  // ── LAYER 2 · TRIGGERS ────────────────────────────────────────
+  const triggers=patterns.filter(p=>p.cat==="TRIGGER"&&p.sg===dir);
   layers.trigger.count=triggers.length;
-  layers.trigger.sum=triggers.reduce((a,p)=>a+p.w,0);
+  layers.trigger.sum=+triggers.reduce((a,p)=>a+p.w,0).toFixed(1);
   layers.trigger.pass=triggers.length>=1;
 
-  if(!layers.trigger.pass)return{score:0,conf:"—",signal:"NEUTRAL",layers,timeW,dir,blocked:"Sin trigger de entrada"};
+  if(!layers.trigger.pass){
+    return{score:0,conf:"—",signal:"NEUTRAL",band:null,layers,timeW,dir,blocked:"Sin trigger de entrada"};
+  }
 
-  // LAYER 3: CONFIRMATIONS
-  // Volume multiplier
+  // ── LAYER 3 · CONFIRMS (suman al score) ───────────────────────
+  const confirms=patterns.filter(p=>p.cat==="CONFIRM"&&(p.sg===dir||p.sg==="CONFIRM"));
+  layers.confirm.sum=+confirms.reduce((a,p)=>a+p.w,0).toFixed(1);
+
+  // Vol multiplier y bonus se calculan SOLO para mostrar como contexto en el modal — NO entran al score.
   if(ind.volM>=2.0)layers.confirm.volMult=1.5;
   else if(ind.volM>=1.5)layers.confirm.volMult=1.3;
   else if(ind.volM<0.6)layers.confirm.volMult=0.5;
   else layers.confirm.volMult=1.0;
+  let bonusCtx=0;
+  if(secRel&&((dir==="PUT"&&secRel.diff<-0.5)||(dir==="CALL"&&secRel.diff>0.5)))bonusCtx+=1;
+  const nearPivot=dir==="PUT"
+    ? keyLvls.r.find(l=>l.l.includes("Piv")&&Math.abs(ind.price-l.p)/l.p<0.01)
+    : keyLvls.s.find(l=>l.l.includes("Piv")&&Math.abs(ind.price-l.p)/l.p<0.01);
+  if(nearPivot)bonusCtx+=1;
+  layers.confirm.bonus=bonusCtx;
 
-  // Time weight subordinated to volume: if real volume present, floor at 0.9
-  let effectiveTimeW=timeW.w;
-  if(layers.confirm.volMult>=1.0&&timeW.w>0&&timeW.w<0.9)effectiveTimeW=0.9;
-
-  const confirms=patterns.filter(p=>p.cat==="CONFIRM"&&(p.sg===dir||p.sg==="CONFIRM"));
-  layers.confirm.sum=confirms.reduce((a,p)=>a+p.w,0);
-
-  // Bonuses
-  let bonus=0;
-  if(secRel&&((dir==="PUT"&&secRel.diff<-0.5)||(dir==="CALL"&&secRel.diff>0.5)))bonus+=1;
-  // Near strong pivot
-  const nearPivot=dir==="PUT"?keyLvls.r.find(l=>l.l.includes("Piv")&&Math.abs(ind.price-l.p)/l.p<0.01):keyLvls.s.find(l=>l.l.includes("Piv")&&Math.abs(ind.price-l.p)/l.p<0.01);
-  if(nearPivot)bonus+=1;
-  layers.confirm.bonus=bonus;
-
-  // LAYER 4: RISKS
+  // ── LAYER 4 · RISKS (informativos) + CONFLICT GATE ────────────
   const risks=patterns.filter(p=>p.cat==="RISK");
-  layers.risk.sum=risks.reduce((a,p)=>a+p.w,0);
+  layers.risk.sum=+risks.reduce((a,p)=>a+p.w,0).toFixed(1);
   layers.risk.items=risks;
-  // Conflict check — net balance instead of binary block
-  const putTriggersW=patterns.filter(p=>p.cat==="TRIGGER"&&p.sg==="PUT").reduce((a,p)=>a+p.w,0);
-  const callTriggersW=patterns.filter(p=>p.cat==="TRIGGER"&&p.sg==="CALL").reduce((a,p)=>a+p.w,0);
-  const conflictDiff=Math.abs(putTriggersW-callTriggersW);
-  if(putTriggersW>0&&callTriggersW>0){
-    if(conflictDiff<2){layers.risk.blocked=true;layers.risk.sum-=5}
-    else{layers.risk.sum-=1}
+  // Conflict gate (bloquea — única forma en que un risk afecta el resultado).
+  const putW=patterns.filter(p=>p.cat==="TRIGGER"&&p.sg==="PUT").reduce((a,p)=>a+p.w,0);
+  const callW=patterns.filter(p=>p.cat==="TRIGGER"&&p.sg==="CALL").reduce((a,p)=>a+p.w,0);
+  const diff=Math.abs(putW-callW);
+  if(putW>0&&callW>0){
+    layers.risk.conflictInfo={put:+putW.toFixed(1),call:+callW.toFixed(1),diff:+diff.toFixed(1)};
+    if(diff<2){
+      layers.risk.blocked=true;
+      return{score:0,conf:"—",signal:"NEUTRAL",band:null,layers,timeW,dir,blocked:`Conflicto PUT(${putW.toFixed(1)})/CALL(${callW.toFixed(1)}) — diff ${diff.toFixed(1)} < 2`};
+    }
   }
-  layers.risk.conflictInfo=putTriggersW>0&&callTriggersW>0?{put:putTriggersW,call:callTriggersW,diff:conflictDiff}:null;
 
-  if(layers.risk.blocked)return{score:0,conf:"—",signal:"NEUTRAL",layers,timeW,dir,blocked:`Conflicto PUT(${putTriggersW})/CALL(${callTriggersW}) — diferencia ${conflictDiff.toFixed(1)} < 2`};
+  // ── FINAL SCORE V5 ───────────────────────────────────────────
+  // Fórmula H-02: score = trigger_sum + confirm_sum. Sin volMult, timeW, bonus ni risks.
+  const score=+Math.max(0,layers.trigger.sum+layers.confirm.sum).toFixed(1);
+  const band=resolveBand(score);
 
-  // FINAL SCORE (uses effectiveTimeW instead of raw timeW.w)
-  const rawScore=(layers.trigger.sum*layers.confirm.volMult*effectiveTimeW)+layers.confirm.sum+bonus+layers.risk.sum;
-  const score=+Math.max(0,rawScore).toFixed(1);
-
-  let signal="NEUTRAL",conf="—";
-  if(score>=8&&alignment.n===3){signal="SETUP";conf="A+"}
-  else if(score>=5&&alignment.n>=2){signal="SETUP";conf="A"}
-  else if(score>=3){signal="REVISAR";conf="B+"}
-  else if(score>=2){signal="REVISAR";conf="B"}
-
-  return{score,conf,signal,layers,timeW,dir,blocked:null};
+  return{score,conf:band.label,signal:band.signal,band,layers,timeW,dir,blocked:null};
 }
 
 // ═══════════════════════════════════════
@@ -719,16 +771,19 @@ function analyzeAll(raw){
     const ts=[tM,tH,tD],bc=ts.filter(x=>x==="bearish").length,uc=ts.filter(x=>x==="bullish").length;
     const aln=bc>=3?{n:3,dir:"bearish"}:uc>=3?{n:3,dir:"bullish"}:bc>=2?{n:2,dir:"bearish"}:uc>=2?{n:2,dir:"bullish"}:{n:Math.max(bc,uc),dir:"mixed"};
 
+    // Thresholds y pesos vienen del FIXTURE (qqq_canonical_v1 detection_thresholds + confirm_weights).
+    const CWa=FIXTURE.confirm_weights, DTa=FIXTURE.detection_thresholds;
     let divSPY=null;const aChg=ind.chgD;
-    if(t!=="SPY"&&spyChg!==0&&((aChg<-.5&&spyChg>.3)||(aChg>.5&&spyChg<-.3))){
+    if(t!=="SPY"&&spyChg!==0&&((aChg<-DTa.divspy_asset_threshold_pct&&spyChg>DTa.divspy_spy_threshold_pct)||(aChg>DTa.divspy_asset_threshold_pct&&spyChg<-DTa.divspy_spy_threshold_pct))){
       divSPY={a:aChg,spy:spyChg,type:aChg<0?"bearish":"bullish"};
-      patterns.push({tf:"D",d:`Div SPY (${t}:${aChg>0?"+":""}${aChg}% vs SPY:${spyChg>0?"+":""}${spyChg}%) → VERIFICAR CATALIZADOR`,sg:aChg<0?"PUT":"CALL",w:2,cat:"CONFIRM",age:0});
+      patterns.push({tf:"D",d:`Div SPY (${t}:${aChg>0?"+":""}${aChg}% vs SPY:${spyChg>0?"+":""}${spyChg}%) → VERIFICAR CATALIZADOR`,sg:aChg<0?"PUT":"CALL",w:CWa.DivSPY,cat:"CONFIRM",age:0,key:"DivSPY"});
     }
 
     let secRel=null;const bench=BENCH[t];
     if(bench&&raw.D[bench]){const bChg=_pc(raw.D[bench],1);secRel={a:aChg,b:bChg,tk:bench,diff:+(aChg-bChg).toFixed(2)};
-      if((aln.dir==="bullish"&&aChg>bChg+.5)||(aln.dir==="bearish"&&aChg<bChg-.5))
-        patterns.push({tf:"D",d:`FzaRel ${secRel.diff>0?"+":""}${secRel.diff}% vs ${bench}`,sg:"CONFIRM",w:1,cat:"CONFIRM",age:0});
+      const fzMin=DTa.fzarel_min_divergence_pct;
+      if((aln.dir==="bullish"&&aChg>bChg+fzMin)||(aln.dir==="bearish"&&aChg<bChg-fzMin))
+        patterns.push({tf:"D",d:`FzaRel ${secRel.diff>0?"+":""}${secRel.diff}% vs ${bench}`,sg:"CONFIRM",w:CWa.FzaRel,cat:"CONFIRM",age:0,key:"FzaRel"});
     }
 
     const pivD=findPivots(cD,50,.004),pivH=findPivots(cH,50,.003);
@@ -747,10 +802,10 @@ function analyzeAll(raw){
       });
     }
 
-    // GAP analysis — lightweight CONFIRM/RISK
+    // GAP analysis — confirm con peso del fixture.
     if(ind.gap&&ind.gap.significant){
-      if(ind.gap.dir==="bullish")patterns.push({tf:"D",d:`Gap alcista ${ind.gap.pct>0?"+":""}${ind.gap.pct}%`,sg:"CALL",w:1,cat:"CONFIRM",age:0});
-      else patterns.push({tf:"D",d:`Gap bajista ${ind.gap.pct}%`,sg:"PUT",w:1,cat:"CONFIRM",age:0});
+      if(ind.gap.dir==="bullish")patterns.push({tf:"D",d:`Gap alcista ${ind.gap.pct>0?"+":""}${ind.gap.pct}%`,sg:"CALL",w:CWa.Gap,cat:"CONFIRM",age:0,key:"Gap"});
+      else patterns.push({tf:"D",d:`Gap bajista ${ind.gap.pct}%`,sg:"PUT",w:CWa.Gap,cat:"CONFIRM",age:0,key:"Gap"});
     }
 
     // ORB — breakout as TRIGGER
@@ -802,14 +857,18 @@ function genCT(d){
   if(d.kLvls.r.length)L.push(`R:${d.kLvls.r.map(l=>`$${l.p}(${l.l})`).join("|")}`);
   if(d.kLvls.s.length)L.push(`S:${d.kLvls.s.map(l=>`$${l.p}(${l.l})`).join("|")}`);
 
-  // Layered scoring summary
+  // Layered scoring summary — fórmula V5 (score = T+C). Vol/Hora/Bonus son contexto, no entran.
   const conflictStr=s.layers.risk.conflictInfo?` Conflicto:PUT(${s.layers.risk.conflictInfo.put})vCALL(${s.layers.risk.conflictInfo.call})diff:${s.layers.risk.conflictInfo.diff.toFixed(1)}`:"";
   const overrideStr=s.layers.structure.override?" OVERRIDE":"";
-  L.push(`[CAPAS] Estructura:${s.layers.structure.pass?"✓":"✗"}${overrideStr} Triggers:${s.layers.trigger.count}(${s.layers.trigger.sum.toFixed(1)}) VolMult:×${s.layers.confirm.volMult} Hora:×${s.timeW.w}(${s.timeW.label}) Bonus:+${s.layers.confirm.bonus||0} Riesgo:${s.layers.risk.sum}${conflictStr}`);
+  L.push(`[V5] Estructura:${s.layers.structure.pass?"✓":"✗"}${overrideStr} | Triggers:${s.layers.trigger.count}(${s.layers.trigger.sum.toFixed(1)}) | Confirms:+${s.layers.confirm.sum} | Risks:${s.layers.risk.items.length}(info ${s.layers.risk.sum})${conflictStr}`);
+  L.push(`[CTX no-score] Vol×${s.layers.confirm.volMult} · Hora×${s.timeW.w}(${s.timeW.label})${s.layers.confirm.bonus?` · Bonus:+${s.layers.confirm.bonus}`:""}`);
   if(s.blocked)L.push(`⛔BLOQUEADO: ${s.blocked}`);
 
   if(d.patterns.length){L.push(`Pat(${d.patterns.length}):`);d.patterns.forEach(p=>L.push(` [${p.tf}]${p.d}(${p.sg}|${p.cat})w:${p.w}${p.age>0?" decay":""}`))}
-  L.push(`SCORE:${s.score}|${s.dir||"—"}|Conf:${s.conf}`);
+  // SCORE: T + C = score → banda. Si QQQ, agregar overlay del backtest.
+  const wrLine=(d.t==="QQQ"&&METRICS.by_band[s.conf])?` | WR backtest:${METRICS.by_band[s.conf].wr_pct}% MFE/MAE:${METRICS.by_band[s.conf].mfe_mae} n:${METRICS.by_band[s.conf].n}`:"";
+  L.push(`SCORE V5: ${s.layers.trigger.sum.toFixed(1)}+${s.layers.confirm.sum} = ${s.score} | ${s.dir||"—"} | Banda:${s.conf}${wrLine}`);
+  L.push(`[fixture: ${FIXTURE.fixture_id} v${FIXTURE.fixture_version}]`);
   return L.join("\n");
 }
 
@@ -844,7 +903,10 @@ function render(){
     const tC=t=>t==="bullish"?"tb":t==="bearish"?"tr_":"tn_";
     const aC=d.aln.n>=3?"a3":d.aln.n>=2?"a2":"a1";
     const sC=s.score>=5?"sh":s.score>=3?"sm":"slo";
-    const cC=s.conf==="A+"?"cAp":s.conf==="A"?"cA":s.conf==="B+"?"cB":"cN";
+    const cC=confClass(s.conf);
+    // WR% overlay para QQQ (única calibración disponible). En otros tickers no se muestra.
+    const wrInfo=(d.t==="QQQ"&&METRICS.by_band[s.conf])?METRICS.by_band[s.conf]:null;
+    const wrChipCls=wrInfo?(wrInfo.wr_pct>=55?" hi":wrInfo.wr_pct<50?" lo":""):"";
     const nR=d.kLvls.r[0],nS=d.kLvls.s[0];
     const squeeze=d.ind.bbSqH?.isSqueeze;
 
@@ -858,7 +920,7 @@ function render(){
       <td class="${aC}">${d.aln.n}/3</td>
       <td class="${sC}">${s.score}</td>
       <td><span class="sb sb-${s.signal[0]}">${s.signal==="SETUP"?s.dir:s.signal}</span></td>
-      <td class="${cC}">${s.conf}</td>
+      <td class="${cC}">${s.conf}${wrInfo?`<span class="wrChip${wrChipCls}">${wrInfo.wr_pct}%</span>`:""}</td>
       <td style="font-size:10px;white-space:nowrap">${nR?`<span class="lvl-r">R$${nR.p}</span>`:""} ${nS?`<span class="lvl-s">S$${nS.p}</span>`:""}</td>
       <td style="font-size:10px;color:${tW.zone==="dead"?"#ef4444":tW.zone==="prime1"||tW.zone==="prime2"?"#22c55e":"#f59e0b"}">×${tW.w}</td>
       <td><button class="bc" id="c-${d.t}" onclick="event.stopPropagation();cpOne('${d.t}')">📋</button></td></tr>`;
@@ -894,17 +956,23 @@ function renderDP(){
   const riskDetails=riskPats.length?riskPats.map(p=>`<div style="display:flex;gap:6px;padding:3px 0 3px 16px;font-size:10px"><span class="pbdg pb-WARN" style="font-size:8px">${p.tf}</span><span style="color:#c8cdd5;flex:1">${p.d}</span><span style="color:#ef4444">w:${p.w}</span></div>`).join(""):"<div style='padding:3px 16px;font-size:10px;color:#334155'>Ninguno</div>";
   const confirmDetails=confirmPats.length?confirmPats.map(p=>`<div style="display:flex;gap:6px;padding:3px 0 3px 16px;font-size:10px"><span class="pbdg pb-${p.sg}" style="font-size:8px">${p.tf}</span><span style="color:#c8cdd5;flex:1">${p.d}</span><span style="color:#4a5568">w:${p.w}</span></div>`).join(""):"";
 
-  h+=`<div style="margin-bottom:14px"><div class="st">SCORING POR CAPAS</div><div class="layer-box">
+  // SCORING POR CAPAS — fórmula motor V5 + qqq_canonical_v1.
+  // score = trigger_sum + confirm_sum (H-02). Vol/Hora/Bonus son CONTEXTO informativo,
+  // NO entran al cálculo. Risks no restan; el conflict gate sí bloquea.
+  const sCls=s.score>=14?"lv-pass":s.score>=7?"lv-pass":s.score>=4?"lv-warn":"lv-fail";
+  const ctxBits=[];
+  ctxBits.push(`Vol ×${s.layers.confirm.volMult}`);
+  ctxBits.push(`Hora ×${s.timeW.w} (${s.timeW.label})`);
+  if(s.layers.confirm.bonus)ctxBits.push(`Bonus +${s.layers.confirm.bonus}`);
+  h+=`<div style="margin-bottom:14px"><div class="st">SCORING V5 · capas</div><div class="layer-box">
     <div class="layer-row"><span class="layer-lbl">① Estructura</span><span class="layer-val ${s.layers.structure.pass?"lv-pass":"lv-fail"}">${s.layers.structure.pass?"✓":"✗"} ${s.layers.structure.reason}</span></div>
-    <div class="layer-row" style="cursor:pointer" onclick="const el=document.getElementById('trig-detail');el.style.display=el.style.display==='none'?'block':'none';this.querySelector('.arrow').textContent=el.style.display==='none'?'▸':'▾'"><span class="layer-lbl"><span class="arrow" style="font-size:10px;margin-right:3px">▸</span>② Triggers</span><span class="layer-val ${s.layers.trigger.pass?"lv-pass":"lv-fail"}">${s.layers.trigger.count} encontrados (${s.layers.trigger.sum.toFixed(1)} pts)</span></div>
+    <div class="layer-row" style="cursor:pointer" onclick="const el=document.getElementById('trig-detail');el.style.display=el.style.display==='none'?'block':'none';this.querySelector('.arrow').textContent=el.style.display==='none'?'▸':'▾'"><span class="layer-lbl"><span class="arrow" style="font-size:10px;margin-right:3px">▸</span>② Triggers (suma)</span><span class="layer-val ${s.layers.trigger.pass?"lv-pass":"lv-fail"}">${s.layers.trigger.count} × ${s.layers.trigger.sum.toFixed(1)} pts</span></div>
     <div id="trig-detail" style="display:none;border-left:2px solid #a855f730;margin:2px 0 4px 0">${triggerDetails}</div>
-    <div class="layer-row"><span class="layer-lbl">③ Vol × (mediana)</span><span class="layer-val">${s.layers.confirm.volMult}× ${s.layers.confirm.volMult>1?"🔥":s.layers.confirm.volMult<1?"⚠️":"—"}</span></div>
-    <div class="layer-row"><span class="layer-lbl">③ Hora ×</span><span class="layer-val" style="color:${s.timeW.zone==="dead"?"#ef4444":"#e2e8f0"}">${s.timeW.w}× (${s.timeW.label})</span></div>
-    ${confirmPats.length?`<div class="layer-row" style="cursor:pointer" onclick="const el=document.getElementById('conf-detail');el.style.display=el.style.display==='none'?'block':'none';this.querySelector('.arrow').textContent=el.style.display==='none'?'▸':'▾'"><span class="layer-lbl"><span class="arrow" style="font-size:10px;margin-right:3px">▸</span>③ Confirms</span><span class="layer-val lv-pass">+${s.layers.confirm.sum}</span></div><div id="conf-detail" style="display:none;border-left:2px solid #3b82f630;margin:2px 0 4px 0">${confirmDetails}</div>`:`<div class="layer-row"><span class="layer-lbl">③ Confirms</span><span class="layer-val" style="color:#4a5568">0</span></div>`}
-    <div class="layer-row"><span class="layer-lbl">③ Bonus</span><span class="layer-val lv-pass">+${s.layers.confirm.bonus||0}</span></div>
-    <div class="layer-row" style="${riskPats.length?"cursor:pointer":""}" ${riskPats.length?`onclick="const el=document.getElementById('risk-detail');el.style.display=el.style.display==='none'?'block':'none';this.querySelector('.arrow').textContent=el.style.display==='none'?'▸':'▾'"`:``}><span class="layer-lbl">${riskPats.length?'<span class="arrow" style="font-size:10px;margin-right:3px">▸</span>':""}④ Riesgo</span><span class="layer-val ${s.layers.risk.sum<0?"lv-fail":"lv-pass"}">${s.layers.risk.sum}${s.layers.risk.blocked?" ⛔BLOQUEADO":""}${s.layers.risk.conflictInfo&&!s.layers.risk.blocked?` (conflicto PUT:${s.layers.risk.conflictInfo.put}/CALL:${s.layers.risk.conflictInfo.call} diff:${s.layers.risk.conflictInfo.diff.toFixed(1)}→-1)`:""}</span></div>
+    ${confirmPats.length?`<div class="layer-row" style="cursor:pointer" onclick="const el=document.getElementById('conf-detail');el.style.display=el.style.display==='none'?'block':'none';this.querySelector('.arrow').textContent=el.style.display==='none'?'▸':'▾'"><span class="layer-lbl"><span class="arrow" style="font-size:10px;margin-right:3px">▸</span>③ Confirms (suma)</span><span class="layer-val lv-pass">+${s.layers.confirm.sum}</span></div><div id="conf-detail" style="display:none;border-left:2px solid #3b82f630;margin:2px 0 4px 0">${confirmDetails}</div>`:`<div class="layer-row"><span class="layer-lbl">③ Confirms (suma)</span><span class="layer-val" style="color:#4a5568">0</span></div>`}
+    <div class="layer-row" style="${riskPats.length?"cursor:pointer":""}" ${riskPats.length?`onclick="const el=document.getElementById('risk-detail');el.style.display=el.style.display==='none'?'block':'none';this.querySelector('.arrow').textContent=el.style.display==='none'?'▸':'▾'"`:``}><span class="layer-lbl">${riskPats.length?'<span class="arrow" style="font-size:10px;margin-right:3px">▸</span>':""}④ Risks <span style="color:#4a5568;font-size:10px">(no restan)</span></span><span class="layer-val ${riskPats.length?"lv-warn":"lv-pass"}">${riskPats.length} (info ${s.layers.risk.sum})${s.layers.risk.blocked?" ⛔BLOQUEADO":""}${s.layers.risk.conflictInfo&&!s.layers.risk.blocked?` · conflicto PUT:${s.layers.risk.conflictInfo.put}/CALL:${s.layers.risk.conflictInfo.call} diff:${s.layers.risk.conflictInfo.diff.toFixed(1)}`:""}</span></div>
     ${riskPats.length?`<div id="risk-detail" style="display:none;border-left:2px solid #ef444430;margin:2px 0 4px 0">${riskDetails}</div>`:""}
-    <div class="layer-row" style="border-top:1px solid #334155;padding-top:6px;margin-top:4px"><span class="layer-lbl" style="font-weight:700">SCORE FINAL</span><span class="layer-val ${s.score>=5?"lv-pass":s.score>=3?"lv-warn":"lv-fail"}" style="font-size:14px">${s.score} → ${s.conf}</span></div>
+    <div class="layer-row" style="border-top:1px dashed #334155;padding-top:5px;margin-top:3px;color:#64748b;font-size:10px"><span class="layer-lbl">Contexto (no entra al score)</span><span class="layer-val" style="color:#64748b;font-weight:500">${ctxBits.join(" · ")}</span></div>
+    <div class="layer-row" style="border-top:1px solid #334155;padding-top:6px;margin-top:4px"><span class="layer-lbl" style="font-weight:700">SCORE V5 = T+C</span><span class="layer-val ${sCls}" style="font-size:14px">${s.layers.trigger.sum.toFixed(1)} + ${s.layers.confirm.sum} = <b>${s.score}</b> → <span class="${confClass(s.conf)}">${s.conf}</span></span></div>
   </div></div>`;
 
   if(s.blocked)h+=`<div class="ab" style="background:#ef444410;border:1px solid #ef444430;color:#ef4444">⛔ ${s.blocked}</div>`;
@@ -943,6 +1011,27 @@ function renderDP(){
     h+=`<div class="prow"><span class="pbdg pb-${catClass}">${p.tf}</span><span class="pd">${p.d}${p.age>0?`<span class="tag tag-decay">-${((1-decayW(p.age))*100).toFixed(0)}%</span>`:""}</span><span class="pw">${p.w>0?"+":""}${p.w}</span></div>`;
   });
   h+=`</div>`;
+
+  // MÉTRICAS BACKTEST · QQQ canonical v1 — siempre visible (única calibración).
+  // Banda actual resaltada con clase `cur` SOLO si el ticker es QQQ (calibración aplica
+  // numéricamente sobre QQQ; en otros tickers los pesos del fixture se usan pero las métricas
+  // históricas no son del ticker mostrado).
+  const orderedBands=["S+","S","A+","A","B","REVISAR"];
+  const isQQQ=d.t==="QQQ";
+  let metricsRows="";
+  for(const b of orderedBands){
+    const m=METRICS.by_band[b];
+    if(!m)continue;
+    const isCur=isQQQ&&s.conf===b;
+    metricsRows+=`<tr${isCur?' class="cur"':""}><td class="${confClass(b)}">${b}</td><td>${m.wr_pct}%</td><td>${m.mfe_mae}</td><td>${m.n.toLocaleString()}</td></tr>`;
+  }
+  h+=`<div style="margin-bottom:14px"><div class="st">MÉTRICAS BACKTEST · QQQ canonical v1</div>
+    <table class="metrics-tbl">
+      <thead><tr><th>BANDA</th><th>WR%</th><th>MFE/MAE</th><th>n</th></tr></thead>
+      <tbody>${metricsRows}</tbody>
+    </table>
+    <div class="metrics-note">${METRICS.training_signals_total.toLocaleString()} señales QQQ · ${METRICS.training_months} meses · spread B→S+ ${METRICS.spread_b_to_splus_pp} pp.${isQQQ?` Banda actual <b class="${confClass(s.conf)}">${s.conf}</b> resaltada.`:` Pesos del fixture aplican a ${d.t}; las métricas históricas son específicas de QQQ.`}</div>
+  </div>`;
 
   h+=`<button class="bcd" id="cpD" onclick="cpOne('${d.t}',1)">📋 COPIAR ANÁLISIS → CLAUDE</button>`;
   h+=`<div class="pvb"><div style="color:#334155;margin-bottom:4px">Texto para Claude:</div>${genCT(d).replace(/\n/g,"<br>")}</div>`;
