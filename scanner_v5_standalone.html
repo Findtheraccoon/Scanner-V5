@@ -740,7 +740,758 @@ function layeredScore(patterns,alignment,ind,divSPY,secRel,keyLvls,needsCat,tM,t
 }
 
 // ═══════════════════════════════════════
-// MAIN ANALYSIS
+// MOTOR V5 — PORT LITERAL DE backend/engines/scoring/
+// ═══════════════════════════════════════
+// Reemplaza la lógica heredada del scanner v4 (detect/layeredScore/trend/etc)
+// con el motor V5 backend port bit-a-bit. Las funciones legacy se mantienen
+// arriba porque la UI (render/renderDP/genCT/keyLevels) las consume.
+//
+// Output del V5.analyze() está adaptado para encajar en el shape que
+// analyzeAll() del HTML produce (R[t] = {scoring, ind, patterns, aln, ...}).
+// Eso permite reemplazar `analyzeAll()` sin tocar la UI.
+//
+// Garantías de paridad:
+//   - Misma fórmula de score (T+C, sin volMult/timeW/bonus/risks).
+//   - Mismos detectores (16 triggers, 10 confirms, 4 risks).
+//   - Mismas convenciones de decay, loop range, rounding.
+//   - Mismo alignment gate (trend_with_fallback con shift de 5 + catalyst override).
+//   - Mismas bandas (resolveBand del global, lee FIXTURE.score_bands).
+const V5 = (() => {
+  // ─── Helpers de candle (triggers/_helpers.py) ────────────────────
+  function decay_weight(age) {
+    if (age <= 1) return 1.0;
+    if (age <= 3) return 0.85;
+    if (age <= 5) return 0.7;
+    if (age <= 10) return 0.4;
+    return 0.2;
+  }
+  const candle_range = c => c.h - c.l;
+  const candle_body = c => Math.abs(c.o - c.c);
+  const upper_wick_ = c => c.h - Math.max(c.o, c.c);
+  const lower_wick_ = c => Math.min(c.o, c.c) - c.l;
+  const is_bull = c => c.c >= c.o;
+  const age_label = age => age > 0 ? ` (${age}v atrás)` : "";
+  const round2 = v => Math.round(v * 100) / 100;
+  const round1 = v => Math.round(v * 10) / 10;
+
+  // ─── Indicators (indicators/*.py) ────────────────────────────────
+  function sma(values, window) {
+    const n = values.length;
+    const result = new Array(n).fill(null);
+    if (n < window) return result;
+    for (let i = window - 1; i < n; i++) {
+      let s = 0;
+      for (let j = i - window + 1; j <= i; j++) s += values[j];
+      result[i] = round2(s / window);
+    }
+    return result;
+  }
+
+  function pstdev(arr) {
+    const n = arr.length;
+    if (n === 0) return 0;
+    const m = arr.reduce((a, b) => a + b, 0) / n;
+    let s = 0;
+    for (const v of arr) s += (v - m) * (v - m);
+    return Math.sqrt(s / n);
+  }
+
+  function bollinger_bands(values, window = 20, k = 2.0) {
+    const n = values.length;
+    const lower = new Array(n).fill(null);
+    const middle = new Array(n).fill(null);
+    const upper = new Array(n).fill(null);
+    if (n < window) return [lower, middle, upper];
+    for (let i = window - 1; i < n; i++) {
+      const win = values.slice(i - window + 1, i + 1);
+      const m = win.reduce((a, b) => a + b, 0) / window;
+      const sd = pstdev(win);
+      middle[i] = round2(m);
+      upper[i] = round2(m + k * sd);
+      lower[i] = round2(m - k * sd);
+    }
+    return [lower, middle, upper];
+  }
+
+  function _bb_width_at(values, period, k) {
+    const win = values.slice(-period);
+    const sd = pstdev(win);
+    return round2(2 * k * sd);
+  }
+
+  function bb_width(values, period = 20, k = 2.0) {
+    if (!values || values.length < period + 20) return null;
+    const widths = [];
+    for (let i = period; i <= values.length; i++) {
+      widths.push(_bb_width_at(values.slice(0, i), period, k));
+    }
+    if (widths.length < 20) return null;
+    const current = widths[widths.length - 1];
+    const last20 = widths.slice(-20);
+    const min20 = Math.min(...last20);
+    const max20 = Math.max(...last20);
+    const rng = (max20 - min20) || 1;
+    const percentile = Math.round((current - min20) / rng * 100);
+    return {
+      current: round2(current),
+      min20: round2(min20),
+      percentile,
+      isSqueeze: percentile < 15,
+      isExpanding: widths.length >= 3
+        && widths[widths.length - 1] > widths[widths.length - 2]
+        && widths[widths.length - 2] > widths[widths.length - 3],
+    };
+  }
+
+  function true_range(c, prev_close) {
+    if (prev_close == null) return c.h - c.l;
+    return Math.max(c.h - c.l, Math.abs(c.h - prev_close), Math.abs(c.l - prev_close));
+  }
+
+  function atr_v5(candles, window = 14) {
+    const n = candles.length;
+    const result = new Array(n).fill(null);
+    if (n === 0 || n < window) return result;
+    const trs = [];
+    let prev_close = null;
+    for (const c of candles) {
+      trs.push(true_range(c, prev_close));
+      prev_close = c.c;
+    }
+    let seed = 0;
+    for (let i = 0; i < window; i++) seed += trs[i];
+    seed = seed / window;
+    result[window - 1] = round2(seed);
+    let prev = seed;
+    for (let i = window; i < n; i++) {
+      const curr = (prev * (window - 1) + trs[i]) / window;
+      result[i] = round2(curr);
+      prev = curr;
+    }
+    return result;
+  }
+
+  function today_candles_v5(candles, sim_date) {
+    if (!candles || !candles.length) return [];
+    let date = sim_date;
+    if (date == null) {
+      const last_dt = candles[candles.length - 1].dt;
+      if (last_dt.includes(" ")) date = last_dt.split(" ")[0];
+      else if (last_dt.includes("T")) date = last_dt.split("T")[0];
+      else date = last_dt;
+    }
+    return candles.filter(c => c.dt && c.dt.startsWith(date));
+  }
+
+  function median_(arr) {
+    if (!arr.length) return 0;
+    const s = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(s.length / 2);
+    return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+  }
+
+  function vol_ratio_intraday(candles, sim_date) {
+    const tc = today_candles_v5(candles, sim_date);
+    if (tc.length < 4) return 1.0;
+    const completed = tc[tc.length - 2];
+    const vols = tc.slice(0, -2).map(c => c.v);
+    const med = median_(vols);
+    if (med <= 0) return 1.0;
+    return round2(completed.v / med);
+  }
+
+  function vol_sequence(candles, n = 4) {
+    if (!candles || candles.length < n + 2) return { growing: false, declining: false, count: 0 };
+    const completed = candles.slice(-(n + 1), -1);
+    let g = 0, d = 0;
+    for (let i = 1; i < completed.length; i++) {
+      if (completed[i].v > completed[i - 1].v * 0.95) g++;
+      if (completed[i].v < completed[i - 1].v * 1.05) d++;
+    }
+    const threshold = Math.ceil((n - 1) * 0.75);
+    const growing = g >= threshold;
+    const declining = d >= threshold;
+    if (growing) return { growing: true, declining: false, count: g };
+    if (declining) return { growing: false, declining: true, count: -d };
+    return { growing: false, declining: false, count: 0 };
+  }
+
+  function gap_v5(candles_daily, atr_pct_val) {
+    if (!candles_daily || candles_daily.length < 2) return null;
+    const today = candles_daily[candles_daily.length - 1];
+    const yesterday = candles_daily[candles_daily.length - 2];
+    const gap_pct = round2((today.o - yesterday.c) / yesterday.c * 100);
+    const atr_val = atr_pct_val || 2;
+    const significant = Math.abs(gap_pct) > atr_val * 0.5;
+    return { pct: gap_pct, significant, dir: gap_pct > 0 ? "bullish" : "bearish" };
+  }
+
+  function pct_change(candles, n = 1) {
+    if (!candles || candles.length < n + 1) return 0.0;
+    const prev = candles[candles.length - 1 - n].c;
+    const cur = candles[candles.length - 1].c;
+    if (prev <= 0) return 0.0;
+    return round2((cur - prev) / prev * 100);
+  }
+
+  // ─── Alignment (alignment.py) ────────────────────────────────────
+  function trend_strict(price, ma20, ma40) {
+    if (ma20 == null || ma40 == null) return "neutral";
+    if (price > ma20 && ma20 > ma40) return "bullish";
+    if (price < ma20 && ma20 < ma40) return "bearish";
+    return "neutral";
+  }
+
+  function trend_slope(candles, ma20) {
+    if (ma20 == null || !candles.length) return "neutral";
+    const price = candles[candles.length - 1].c;
+    if (candles.length < 25) {
+      if (price > ma20) return "bullish";
+      if (price < ma20) return "bearish";
+      return "neutral";
+    }
+    let s = 0;
+    for (let i = candles.length - 25; i < candles.length - 5; i++) s += candles[i].c;
+    const ma20_prev = round2(s / 20);
+    if (price > ma20 && ma20 > ma20_prev) return "bullish";
+    if (price < ma20 && ma20 < ma20_prev) return "bearish";
+    return "neutral";
+  }
+
+  function trend_with_fallback(candles, ma20, ma40) {
+    if (ma40 == null) return trend_slope(candles, ma20);
+    if (!candles.length) return "neutral";
+    const price = candles[candles.length - 1].c;
+    const strict = trend_strict(price, ma20, ma40);
+    if (strict !== "neutral" || ma20 == null) return strict;
+    if (price > ma20 && price > ma40 && trend_slope(candles, ma20) === "bullish") return "bullish";
+    if (price < ma20 && price < ma40 && trend_slope(candles, ma20) === "bearish") return "bearish";
+    return "neutral";
+  }
+
+  function compute_alignment(t15, t1h, td) {
+    const ts = [t15, t1h, td];
+    const bc = ts.filter(x => x === "bearish").length;
+    const uc = ts.filter(x => x === "bullish").length;
+    if (bc >= 3) return [3, "bearish"];
+    if (uc >= 3) return [3, "bullish"];
+    if (bc >= 2) return [2, "bearish"];
+    if (uc >= 2) return [2, "bullish"];
+    return [Math.max(bc, uc), "mixed"];
+  }
+
+  function alignment_gate(t15, t1h, td, has_catalyst = false) {
+    const [n, direction] = compute_alignment(t15, t1h, td);
+    if (n >= 2 && direction !== "mixed") {
+      return { passed: true, n, dir: direction, override: false, effective_dir: direction, reason: `${n}/3 ${direction}` };
+    }
+    if (has_catalyst && t15 !== "neutral" && t15 === t1h) {
+      return { passed: true, n, dir: direction, override: true, effective_dir: t15, reason: `OVERRIDE ${n}/3 (15M+1H:${t15}, catalizador)` };
+    }
+    return { passed: false, n, dir: direction, override: false, effective_dir: null, reason: `${n}/3 insuficiente` };
+  }
+
+  // ─── Triggers (triggers/*.py) ────────────────────────────────────
+  // Constantes hardcoded — paridad Observatory bit-a-bit.
+  const _DOJI_BODY_RATIO_MAX = 0.12;
+  const _REJECTION_WICK_RATIO_MIN = 0.6;
+  const _HAMMER_LW_OVER_BODY_MIN = 2.0;
+  const _HAMMER_UW_OVER_BODY_MAX = 0.5;
+  const _DOJI_BB_TOL = 0.002;
+  const _HAMMER_BB_TOL = 0.005;
+  const _SHOOTING_BB_TOL = 0.005;
+  const _ENGULF_BODY_MIN = 1.1;
+  const _W_DOJI = 2.0, _W_REJECTION = 2.0, _W_HAMMER = 2.0, _W_SHOOTING = 2.0, _W_ENGULF_15M = 3.0;
+  const _W_ENGULF_1H = 3.0;
+  const _W_DOUBLE = 3.0;
+  const _DOUBLE_TOL = 0.005, _DOUBLE_MIN_GAP = 3, _DOUBLE_LOOKBACK = 20;
+  const _W_MA_CROSS = 2.0;
+  const _W_ORB = 2.0;
+  const _ORB_VOL_MIN = 1.0;
+  const _ORB_CUTOFF = "10:30";
+
+  function detect_candle_15m_triggers(candles_15m, bb_15m, max_age = 4) {
+    const triggers = [];
+    if (!candles_15m || !candles_15m.length) return triggers;
+    const n = candles_15m.length;
+    const ages = Math.min(max_age + 1, n - 1);
+    if (ages <= 0) return triggers;
+    const bb_upper = bb_15m ? bb_15m[0] : null;
+    const bb_lower = bb_15m ? bb_15m[2] : null;
+
+    for (let age = 0; age < ages; age++) {
+      const idx = n - 1 - age;
+      const cnd = candles_15m[idx];
+      const pv = candles_15m[idx - 1];
+      const rng = candle_range(cnd);
+      if (rng <= 0) continue;
+      const body = candle_body(cnd);
+      const u_w = upper_wick_(cnd);
+      const l_w = lower_wick_(cnd);
+      const bull = is_bull(cnd);
+      const decay = decay_weight(age);
+      const lbl = age_label(age);
+
+      // Doji BB sup/inf — solo age=0
+      if (age === 0 && bb_15m && body / rng < _DOJI_BODY_RATIO_MAX) {
+        if (bb_upper != null && cnd.h >= bb_upper * (1 - _DOJI_BB_TOL)) {
+          triggers.push({ tf: "15M", d: "Doji BB sup", sg: "PUT", w: _W_DOJI, cat: "TRIGGER", age: 0 });
+        }
+        if (bb_lower != null && cnd.l <= bb_lower * (1 + _DOJI_BB_TOL)) {
+          triggers.push({ tf: "15M", d: "Doji BB inf", sg: "CALL", w: _W_DOJI, cat: "TRIGGER", age: 0 });
+        }
+      }
+      // Rechazos sup/inf — cualquier age con decay
+      if (u_w / rng > _REJECTION_WICK_RATIO_MIN) {
+        const pct = Math.round(u_w / rng * 100);
+        triggers.push({ tf: "15M", d: `Rechazo sup ${pct}%${lbl}`, sg: "PUT", w: round1(_W_REJECTION * decay), cat: "TRIGGER", age });
+      }
+      if (l_w / rng > _REJECTION_WICK_RATIO_MIN) {
+        const pct = Math.round(l_w / rng * 100);
+        triggers.push({ tf: "15M", d: `Rechazo inf ${pct}%${lbl}`, sg: "CALL", w: round1(_W_REJECTION * decay), cat: "TRIGGER", age });
+      }
+      // Hammer / Shooting Star — solo age=0, BB-dependent
+      if (age === 0 && bb_15m) {
+        if (bb_lower != null && l_w > body * _HAMMER_LW_OVER_BODY_MIN && u_w < body * _HAMMER_UW_OVER_BODY_MAX && cnd.l <= bb_lower * (1 + _HAMMER_BB_TOL)) {
+          triggers.push({ tf: "15M", d: "Hammer", sg: "CALL", w: _W_HAMMER, cat: "TRIGGER", age: 0 });
+        }
+        if (bb_upper != null && u_w > body * _HAMMER_LW_OVER_BODY_MIN && l_w < body * _HAMMER_UW_OVER_BODY_MAX && cnd.h >= bb_upper * (1 - _SHOOTING_BB_TOL)) {
+          triggers.push({ tf: "15M", d: "Shooting Star", sg: "PUT", w: _W_SHOOTING, cat: "TRIGGER", age: 0 });
+        }
+      }
+      // Envolvente 15M — cualquier age con decay
+      const pv_body = candle_body(pv);
+      const pv_bull = is_bull(pv);
+      if (bull && !pv_bull && cnd.o <= pv.c && cnd.c >= pv.o && body > pv_body * _ENGULF_BODY_MIN) {
+        triggers.push({ tf: "15M", d: `Envolvente alcista${lbl}`, sg: "CALL", w: round1(_W_ENGULF_15M * decay), cat: "TRIGGER", age });
+      }
+      if (!bull && pv_bull && cnd.o >= pv.c && cnd.c <= pv.o && body > pv_body * _ENGULF_BODY_MIN) {
+        triggers.push({ tf: "15M", d: `Envolvente bajista${lbl}`, sg: "PUT", w: round1(_W_ENGULF_15M * decay), cat: "TRIGGER", age });
+      }
+    }
+    return triggers;
+  }
+
+  function detect_engulfing_1h(candles_1h) {
+    if (candles_1h.length < 2) return [];
+    const prev = candles_1h[candles_1h.length - 2];
+    const curr = candles_1h[candles_1h.length - 1];
+    const cb = candle_body(curr), pb = candle_body(prev);
+    const cbull = is_bull(curr), pbull = is_bull(prev);
+    const triggers = [];
+    if (cbull && !pbull && curr.o <= prev.c && curr.c >= prev.o && cb > pb * _ENGULF_BODY_MIN) {
+      triggers.push({ tf: "1H", d: "Envolvente alcista 1H", sg: "CALL", w: _W_ENGULF_1H, cat: "TRIGGER", age: 0 });
+    }
+    if (!cbull && pbull && curr.o >= prev.c && curr.c <= prev.o && cb > pb * _ENGULF_BODY_MIN) {
+      triggers.push({ tf: "1H", d: "Envolvente bajista 1H", sg: "PUT", w: _W_ENGULF_1H, cat: "TRIGGER", age: 0 });
+    }
+    return triggers;
+  }
+
+  function detect_double_patterns_15m(candles_15m) {
+    if (candles_15m.length < _DOUBLE_LOOKBACK) return [];
+    const recent = candles_15m.slice(-_DOUBLE_LOOKBACK);
+    const ph = [], pl = [];
+    for (let i = 1; i < recent.length - 1; i++) {
+      if (recent[i].h > recent[i - 1].h && recent[i].h > recent[i + 1].h) ph.push([i, recent[i].h]);
+      if (recent[i].l < recent[i - 1].l && recent[i].l < recent[i + 1].l) pl.push([i, recent[i].l]);
+    }
+    const triggers = [];
+    if (ph.length >= 2) {
+      const [a_idx, a_val] = ph[ph.length - 2];
+      const [b_idx, b_val] = ph[ph.length - 1];
+      if (a_val > 0 && Math.abs(a_val - b_val) / a_val < _DOUBLE_TOL && b_idx - a_idx >= _DOUBLE_MIN_GAP) {
+        triggers.push({ tf: "15M", d: `Doble techo ~$${a_val.toFixed(2)}`, sg: "PUT", w: _W_DOUBLE, cat: "TRIGGER", age: 0 });
+      }
+    }
+    if (pl.length >= 2) {
+      const [a_idx, a_val] = pl[pl.length - 2];
+      const [b_idx, b_val] = pl[pl.length - 1];
+      if (a_val > 0 && Math.abs(a_val - b_val) / a_val < _DOUBLE_TOL && b_idx - a_idx >= _DOUBLE_MIN_GAP) {
+        triggers.push({ tf: "15M", d: `Doble piso ~$${a_val.toFixed(2)}`, sg: "CALL", w: _W_DOUBLE, cat: "TRIGGER", age: 0 });
+      }
+    }
+    return triggers;
+  }
+
+  function detect_ma_cross_1h(candles_1h) {
+    if (candles_1h.length < 42) return [];
+    const closes = candles_1h.map(c => c.c);
+    const m20cs = sma(closes, 20);
+    const m40cs = sma(closes, 40);
+    const m20c = m20cs[m20cs.length - 1];
+    const m40c = m40cs[m40cs.length - 1];
+    const prev = closes.slice(0, -2);
+    const m20ps = sma(prev, 20);
+    const m40ps = sma(prev, 40);
+    const m20p = m20ps[m20ps.length - 1];
+    const m40p = m40ps[m40ps.length - 1];
+    if ([m20c, m40c, m20p, m40p].some(v => v == null)) return [];
+    const triggers = [];
+    if (m20p < m40p && m20c > m40c) triggers.push({ tf: "1H", d: "Cruce alcista MA20/40", sg: "CALL", w: _W_MA_CROSS, cat: "TRIGGER", age: 0 });
+    if (m20p > m40p && m20c < m40c) triggers.push({ tf: "1H", d: "Cruce bajista MA20/40", sg: "PUT", w: _W_MA_CROSS, cat: "TRIGGER", age: 0 });
+    return triggers;
+  }
+
+  function _is_orb_time_valid(dt_str) {
+    if (dt_str == null) return false;
+    try {
+      const hhmm = dt_str.slice(11, 16);
+      if (hhmm.length !== 5 || hhmm[2] !== ":") return false;
+      return hhmm <= _ORB_CUTOFF;
+    } catch (e) { return false; }
+  }
+
+  function compute_orb_levels(candles_15m) {
+    if (!candles_15m || candles_15m.length < 10) return null;
+    const last_dt = candles_15m[candles_15m.length - 1].dt;
+    if (!last_dt) return null;
+    let today;
+    if (last_dt.includes(" ")) today = last_dt.split(" ")[0];
+    else if (last_dt.includes("T")) today = last_dt.split("T")[0];
+    else today = last_dt;
+    const tc = candles_15m.filter(c => c.dt && c.dt.startsWith(today));
+    if (tc.length < 3) return null;
+    const orb_high = Math.max(tc[0].h, tc[1].h);
+    const orb_low = Math.min(tc[0].l, tc[1].l);
+    const current = candles_15m[candles_15m.length - 1];
+    return { high: round2(orb_high), low: round2(orb_low), breakUp: current.c > orb_high, breakDown: current.c < orb_low };
+  }
+
+  function detect_orb_triggers_15m(candles_15m, vol_ratio, sim_datetime) {
+    let cur_dt = sim_datetime;
+    if (cur_dt == null && candles_15m.length) cur_dt = candles_15m[candles_15m.length - 1].dt;
+    if (!_is_orb_time_valid(cur_dt)) return [];
+    if (vol_ratio != null && vol_ratio < _ORB_VOL_MIN) return [];
+    const orb = compute_orb_levels(candles_15m);
+    if (orb == null) return [];
+    const triggers = [];
+    if (orb.breakUp) triggers.push({ tf: "15M", d: `ORB breakout $${orb.high.toFixed(2)}`, sg: "CALL", w: _W_ORB, cat: "TRIGGER", age: 0 });
+    if (orb.breakDown) triggers.push({ tf: "15M", d: `ORB breakdown $${orb.low.toFixed(2)}`, sg: "PUT", w: _W_ORB, cat: "TRIGGER", age: 0 });
+    return triggers;
+  }
+
+  // ─── Confirms (confirms/*.py) ────────────────────────────────────
+  function detect_bollinger_confirms(last_close_15m, bb_1h, bb_daily) {
+    const out = [];
+    if (bb_1h) {
+      const [u, m, l] = bb_1h;
+      if (last_close_15m >= u) out.push({ tf: "1H", d: `BB sup 1H ($${u})`, sg: "PUT", w: 1.0, cat: "CONFIRM", age: 0 });
+      if (last_close_15m <= l) out.push({ tf: "1H", d: `BB inf 1H ($${l})`, sg: "CALL", w: 3.0, cat: "CONFIRM", age: 0 });
+    }
+    if (bb_daily) {
+      const [u, m, l] = bb_daily;
+      if (last_close_15m >= u) out.push({ tf: "D", d: `BB sup D ($${u})`, sg: "PUT", w: 1.0, cat: "CONFIRM", age: 0 });
+      if (last_close_15m <= l) out.push({ tf: "D", d: `BB inf D ($${l})`, sg: "CALL", w: 1.0, cat: "CONFIRM", age: 0 });
+    }
+    return out;
+  }
+
+  function detect_volume_high_confirm(vol_m) {
+    if (vol_m == null || vol_m <= 1.5) return [];
+    return [{ tf: "15M", d: `Vol ${vol_m}x avg`, sg: "CONFIRM", w: 2.0, cat: "CONFIRM", age: 0 }];
+  }
+
+  function detect_volume_sequence_confirm(vol_seq) {
+    if (vol_seq == null || !vol_seq.growing) return [];
+    const count = vol_seq.count || 0;
+    return [{ tf: "15M", d: `Vol creciente ${count + 1} velas`, sg: "CONFIRM", w: 0.0, cat: "CONFIRM", age: 0 }];
+  }
+
+  function detect_squeeze_expansion_confirm(bb_sq_1h) {
+    if (bb_sq_1h == null) return [];
+    if (!bb_sq_1h.isSqueeze || !bb_sq_1h.isExpanding) return [];
+    return [{ tf: "1H", d: "Squeeze → Expansión (ruptura)", sg: "CONFIRM", w: 0.0, cat: "CONFIRM", age: 0 }];
+  }
+
+  function detect_gap_confirm(gap_info) {
+    if (gap_info == null || !gap_info.significant) return [];
+    const pct = gap_info.pct;
+    if (gap_info.dir === "bullish") {
+      const sign = pct > 0 ? "+" : "";
+      return [{ tf: "D", d: `Gap alcista ${sign}${pct}%`, sg: "CALL", w: 1.0, cat: "CONFIRM", age: 0 }];
+    }
+    return [{ tf: "D", d: `Gap bajista ${pct}%`, sg: "PUT", w: 1.0, cat: "CONFIRM", age: 0 }];
+  }
+
+  function detect_fzarel_confirm(a_chg, bench_chg, bench_ticker, alignment_dir) {
+    const fires_bull = alignment_dir === "bullish" && a_chg > bench_chg + 0.5;
+    const fires_bear = alignment_dir === "bearish" && a_chg < bench_chg - 0.5;
+    if (!fires_bull && !fires_bear) return [];
+    const diff = round2(a_chg - bench_chg);
+    const sign = diff > 0 ? "+" : "";
+    return [{ tf: "D", d: `FzaRel ${sign}${diff}% vs ${bench_ticker}`, sg: "CONFIRM", w: 4.0, cat: "CONFIRM", age: 0 }];
+  }
+
+  function detect_divspy_confirm(ticker, a_chg, spy_chg) {
+    if (ticker === "SPY" || spy_chg === 0) return [];
+    const bear = a_chg < -0.5 && spy_chg > 0.3;
+    const bull = a_chg > 0.5 && spy_chg < -0.3;
+    if (!bear && !bull) return [];
+    const sign_a = a_chg > 0 ? "+" : "";
+    const sign_spy = spy_chg > 0 ? "+" : "";
+    const dir = a_chg > 0 ? "CALL" : "PUT";
+    return [{ tf: "D", d: `Div SPY (${ticker}:${sign_a}${a_chg}% vs SPY:${sign_spy}${spy_chg}%) → VERIFICAR CATALIZADOR`, sg: dir, w: 1.0, cat: "CONFIRM", age: 0 }];
+  }
+
+  // ─── Categorize + apply weights (confirms/categorize.py) ──────────
+  function categorize_confirm(desc) {
+    if (desc.startsWith("FzaRel")) return "FzaRel";
+    if (desc.startsWith("BB sup D")) return "BBsup_D";
+    if (desc.startsWith("BB inf D")) return "BBinf_D";
+    if (desc.startsWith("BB sup 1H")) return "BBsup_1H";
+    if (desc.startsWith("BB inf 1H")) return "BBinf_1H";
+    if (desc.startsWith("Vol creciente")) return "VolSeq";
+    if (desc.includes("x avg")) return "VolHigh";
+    if (desc.startsWith("Gap")) return "Gap";
+    if (desc.startsWith("Squeeze")) return "SqExp";
+    if (desc.startsWith("Div SPY")) return "DivSPY";
+    return null;
+  }
+
+  function apply_confirm_weights(confirms, weights) {
+    let total = 0;
+    const seen = new Set();
+    const items = [];
+    for (const c of confirms) {
+      const cat = categorize_confirm(c.d);
+      if (cat == null || seen.has(cat)) continue;
+      seen.add(cat);
+      const w = weights[cat] || 0;
+      total += w;
+      items.push({ category: cat, weight: w, desc: c.d, tf: c.tf || "", sg: c.sg || "" });
+    }
+    return [round2(total), items];
+  }
+
+  // ─── Risks (risks/*.py) ──────────────────────────────────────────
+  function detect_volume_risks_15m(candles_15m, vol_ratio, vol_seq_declining = false) {
+    const risks = [];
+    if (candles_15m.length < 2) return risks;
+    const curr = candles_15m[candles_15m.length - 1];
+    const prev = candles_15m[candles_15m.length - 2];
+    if (!(curr.c > prev.c)) return risks;
+    if (vol_ratio != null && vol_ratio < 0.6) {
+      risks.push({ tf: "15M", d: `Rebote vol bajo (${vol_ratio}x)`, sg: "WARN", w: -2.0, cat: "RISK", age: 0 });
+    }
+    if (vol_seq_declining) {
+      risks.push({ tf: "15M", d: "Vol declinante en rebote", sg: "WARN", w: -1.0, cat: "RISK", age: 0 });
+    }
+    return risks;
+  }
+
+  function detect_bb_fakeouts_15m(candles_15m, bb_1h) {
+    if (bb_1h == null || candles_15m.length < 3) return [];
+    const bb_upper = bb_1h[0], bb_lower = bb_1h[2];
+    const c2 = candles_15m[candles_15m.length - 2];
+    const c1 = candles_15m[candles_15m.length - 1];
+    const risks = [];
+    if (c2.h > bb_upper && c2.c < bb_upper && c1.c < bb_upper) {
+      risks.push({ tf: "15M", d: "Fakeout sobre BB sup 1H", sg: "WARN", w: -3.0, cat: "RISK", age: 0 });
+    }
+    if (c2.l < bb_lower && c2.c > bb_lower && c1.c > bb_lower) {
+      risks.push({ tf: "15M", d: "Fakeout bajo BB inf 1H", sg: "WARN", w: -3.0, cat: "RISK", age: 0 });
+    }
+    return risks;
+  }
+
+  // ─── Ind builder (ind_builder.py) ────────────────────────────────
+  function _last_bb_tuple(bb_series) {
+    const [lower, middle, upper] = bb_series;
+    const lo = lower.length ? lower[lower.length - 1] : null;
+    const mi = middle.length ? middle[middle.length - 1] : null;
+    const up = upper.length ? upper[upper.length - 1] : null;
+    if (lo == null || mi == null || up == null) return null;
+    return [up, mi, lo];
+  }
+
+  function build_ind_bundle(cD, cH, cM, spyD, benchD, sim_date) {
+    const price = cM[cM.length - 1].c;
+    const closes_1h = cH.map(c => c.c);
+    const closes_d = cD.map(c => c.c);
+    const bb_1h = _last_bb_tuple(bollinger_bands(closes_1h, 20, 2.0));
+    const bb_daily = _last_bb_tuple(bollinger_bands(closes_d, 20, 2.0));
+    const bb_sq_1h = bb_width(closes_1h, 20, 2.0);
+    const atr_series = atr_v5(cD);
+    const atr_daily = atr_series.length ? atr_series[atr_series.length - 1] : null;
+    let atr_pct = null;
+    if (atr_daily != null && price > 0) atr_pct = round2(atr_daily / price * 100);
+    const gap_info = gap_v5(cD, atr_pct);
+    const vol_m = vol_ratio_intraday(cM, sim_date);
+    const vol_seq_m = vol_sequence(cM, 4);
+    const a_chg = pct_change(cD, 1);
+    const spy_chg = spyD ? pct_change(spyD, 1) : 0.0;
+    const bench_chg = benchD ? pct_change(benchD, 1) : 0.0;
+    return { price, bb_1h, bb_daily, bb_sq_1h, gap_info, vol_m, vol_seq_m, a_chg, spy_chg, bench_chg, atr_daily, atr_pct };
+  }
+
+  // ─── Pipeline analyze() (analyze.py) ─────────────────────────────
+  function analyze(ticker, cD, cH, cM, fixture, spyD, sim_datetime, sim_date, benchD) {
+    // Validar mínimos.
+    if (cD.length < 210 || cH.length < 80 || cM.length < 50) {
+      return { error: true, error_code: "ENG-001", ticker, score: 0, conf: "—", signal: "NEUTRAL", dir: "", blocked: "candles below minimum", layers: null, ind: {}, patterns: [] };
+    }
+    const closes_15m = cM.map(c => c.c);
+    const closes_1h = cH.map(c => c.c);
+    const closes_d = cD.map(c => c.c);
+
+    const ma20_15 = sma(closes_15m, 20);
+    const ma40_15 = sma(closes_15m, 40);
+    const ma20_1h = sma(closes_1h, 20);
+    const ma40_1h = sma(closes_1h, 40);
+    const ma20_d = sma(closes_d, 20);
+    const ma40_d = sma(closes_d, 40);
+    const ma20_15_v = ma20_15.length ? ma20_15[ma20_15.length - 1] : null;
+    const ma40_15_v = ma40_15.length ? ma40_15[ma40_15.length - 1] : null;
+    const ma20_1h_v = ma20_1h.length ? ma20_1h[ma20_1h.length - 1] : null;
+    const ma40_1h_v = ma40_1h.length ? ma40_1h[ma40_1h.length - 1] : null;
+    const ma20_d_v = ma20_d.length ? ma20_d[ma20_d.length - 1] : null;
+    const ma40_d_v = ma40_d.length ? ma40_d[ma40_d.length - 1] : null;
+
+    const t15 = trend_with_fallback(cM, ma20_15_v, ma40_15_v);
+    const t1h = trend_with_fallback(cH, ma20_1h_v, ma40_1h_v);
+    const td = trend_strict(cD[cD.length - 1].c, ma20_d_v, ma40_d_v);
+
+    const gate = alignment_gate(t15, t1h, td, false);
+
+    const layers = {
+      structure: { pass: gate.passed, reason: gate.reason, override: gate.override },
+      trends: { t15m: t15, t1h: t1h, tdaily: td },
+      alignment: { n: gate.n, dir: gate.dir, effective_dir: gate.effective_dir },
+    };
+
+    if (!gate.passed) {
+      return _neutral_out(ticker, "Alineación insuficiente", layers, {}, [], "", t15, t1h, td);
+    }
+
+    const effective_dir = gate.effective_dir === "bearish" ? "PUT" : "CALL";
+
+    // Indicators para triggers.
+    const bb_15m = _last_bb_tuple(bollinger_bands(closes_15m, 20, 2.0));
+    const bb_1h = _last_bb_tuple(bollinger_bands(closes_1h, 20, 2.0));
+    const vol_ratio = vol_ratio_intraday(cM, sim_date);
+
+    // Triggers (5 detectores → 16 patterns).
+    const triggers = [
+      ...detect_candle_15m_triggers(cM, bb_15m),
+      ...detect_engulfing_1h(cH),
+      ...detect_double_patterns_15m(cM),
+      ...detect_ma_cross_1h(cH),
+      ...detect_orb_triggers_15m(cM, vol_ratio, sim_datetime),
+    ];
+
+    // Risks.
+    const risks = [
+      ...detect_volume_risks_15m(cM, vol_ratio, false),
+      ...detect_bb_fakeouts_15m(cM, bb_1h),
+    ];
+
+    let patterns = [...triggers, ...risks];
+
+    // Trigger gate.
+    const directional_triggers = triggers.filter(t => t.sg === effective_dir);
+    const trigger_sum = round2(directional_triggers.reduce((a, t) => a + t.w, 0));
+    layers.trigger = { pass: directional_triggers.length >= 1, count: directional_triggers.length, sum: trigger_sum };
+
+    const risk_sum = round2(risks.reduce((a, r) => a + r.w, 0));
+    if (!layers.trigger.pass) {
+      layers.risk = { sum: risk_sum, blocked: false, items: risks, conflictInfo: null };
+      return _neutral_out(ticker, "Sin trigger de entrada", layers, {}, patterns, effective_dir, t15, t1h, td);
+    }
+
+    // Conflict gate.
+    const put_w = round2(triggers.filter(t => t.sg === "PUT").reduce((a, t) => a + t.w, 0));
+    const call_w = round2(triggers.filter(t => t.sg === "CALL").reduce((a, t) => a + t.w, 0));
+    const diff = round2(Math.abs(put_w - call_w));
+    let conflict_info = null, conflict_blocked = false;
+    if (put_w > 0 && call_w > 0) {
+      conflict_info = { put: put_w, call: call_w, diff };
+      if (diff < 2) conflict_blocked = true;
+    }
+    layers.risk = { sum: risk_sum, blocked: conflict_blocked, items: risks, conflictInfo: conflict_info };
+    if (conflict_blocked) {
+      return _neutral_out(ticker, `Conflicto PUT(${put_w})/CALL(${call_w}) — diferencia ${diff} < 2`, layers, {}, patterns, effective_dir, t15, t1h, td);
+    }
+
+    // Ind bundle + confirms.
+    const ind = build_ind_bundle(cD, cH, cM, spyD, benchD, sim_date);
+    const bench_ticker = (fixture.benchmark || fixture.ticker_info?.benchmark || "SPY");
+    const bench_chg_for_fzarel = benchD ? ind.bench_chg : ind.spy_chg;
+
+    const confirms = [
+      ...detect_bollinger_confirms(ind.price, ind.bb_1h, ind.bb_daily),
+      ...detect_volume_high_confirm(ind.vol_m),
+      ...detect_volume_sequence_confirm(ind.vol_seq_m),
+      ...detect_squeeze_expansion_confirm(ind.bb_sq_1h),
+      ...detect_gap_confirm(ind.gap_info),
+      ...detect_fzarel_confirm(ind.a_chg, bench_chg_for_fzarel, bench_ticker, gate.effective_dir),
+      ...detect_divspy_confirm(ticker, ind.a_chg, ind.spy_chg),
+    ];
+    patterns = [...triggers, ...risks, ...confirms];
+
+    // Apply weights con dedup.
+    const directional_confirms = confirms.filter(c => c.sg === effective_dir || c.sg === "CONFIRM");
+    const [confirm_sum, confirm_items] = apply_confirm_weights(directional_confirms, fixture.confirm_weights);
+    layers.confirm = { sum: confirm_sum, volMult: 1.0, items: confirm_items, bonus: 0 };
+
+    // Score V5: T + C.
+    const raw_score = trigger_sum + confirm_sum;
+    const score = round1(Math.max(0, raw_score));
+
+    const band = resolveBand(score);
+    if (band.signal === "NEUTRAL") {
+      return _neutral_out(ticker, "Score insuficiente — sin banda asignada", layers, ind, patterns, effective_dir, t15, t1h, td, score);
+    }
+
+    return {
+      ticker,
+      score,
+      conf: band.label,
+      signal: band.signal,
+      dir: effective_dir,
+      band,
+      layers,
+      ind,
+      patterns,
+      blocked: null,
+      // Compat con UI del HTML:
+      tM: t15, tH: t1h, tD: td,
+      aln: { n: gate.n, dir: gate.dir },
+      timeW: getTimeWeight(),
+    };
+  }
+
+  function _neutral_out(ticker, blocked, layers, ind, patterns, dir, t15, t1h, td, score = 0) {
+    return {
+      ticker,
+      score,
+      conf: "—",
+      signal: "NEUTRAL",
+      dir: dir || "",
+      band: null,
+      layers,
+      ind: ind || {},
+      patterns: patterns || [],
+      blocked,
+      tM: t15, tH: t1h, tD: td,
+      aln: { n: layers.alignment?.n || 0, dir: layers.alignment?.dir || "mixed" },
+      timeW: getTimeWeight(),
+    };
+  }
+
+  return {
+    analyze,
+    indicators: { sma, bollinger_bands, bb_width, atr: atr_v5, vol_ratio_intraday, vol_sequence, gap: gap_v5, pct_change, today_candles: today_candles_v5 },
+    triggers: { detect_candle_15m_triggers, detect_engulfing_1h, detect_double_patterns_15m, detect_ma_cross_1h, detect_orb_triggers_15m },
+    confirms: { detect_bollinger_confirms, detect_volume_high_confirm, detect_volume_sequence_confirm, detect_squeeze_expansion_confirm, detect_gap_confirm, detect_fzarel_confirm, detect_divspy_confirm, categorize_confirm, apply_confirm_weights },
+    risks: { detect_volume_risks_15m, detect_bb_fakeouts_15m },
+    alignment: { trend_strict, trend_slope, trend_with_fallback, compute_alignment, alignment_gate },
+    build_ind_bundle,
+  };
+})();
+
+// ═══════════════════════════════════════
+// MAIN ANALYSIS — usa V5.analyze() para cada ticker
 // ═══════════════════════════════════════
 function analyzeAll(raw){
   const R={},spyChg=raw.D.SPY?_pc(raw.D.SPY,1):0;
@@ -749,84 +1500,87 @@ function analyzeAll(raw){
     const t=asset.t,cD=raw.D[t],cH=raw.H[t],cM=raw.M[t];
     if(!cD||!cH||!cM){R[t]={...asset,error:true};return}
 
-    const ind=calcInd(cD,cH,cM);
-    const patterns=detect(cM,cH,cD,ind);
+    // Fixture: el HTML standalone usa siempre qqq_canonical_v1 (FIXTURE global).
+    // Para el motor V5, normalizamos el fixture al shape que parse_fixture espera.
+    const fixtureForV5 = {
+      confirm_weights: FIXTURE.confirm_weights,
+      detection_thresholds: FIXTURE.detection_thresholds,
+      score_bands: FIXTURE.score_bands,
+      benchmark: FIXTURE.benchmark,
+      ticker_info: { benchmark: FIXTURE.benchmark },
+    };
 
-    // OPTION B: trend with trendSlope fallback for 15M and 1H
-    // If trend() gives neutral but price > both MAs with rising MA20 → bullish (and vice versa)
-    let tM=_ma(cM,40)?trend(cM,ind.ma20M,_ma(cM,40)):trendSlope(cM,ind.ma20M);
-    const ma40M=_ma(cM,40);
-    if(tM==="neutral"&&ind.ma20M&&ma40M){
-      const p=cM[cM.length-1].c;
-      if(p>ind.ma20M&&p>ma40M){const sl=trendSlope(cM,ind.ma20M);if(sl==="bullish")tM="bullish"}
-      if(p<ind.ma20M&&p<ma40M){const sl=trendSlope(cM,ind.ma20M);if(sl==="bearish")tM="bearish"}
-    }
-    let tH=trend(cH,ind.ma20H,ind.ma40H);
-    if(tH==="neutral"&&ind.ma20H&&ind.ma40H){
-      const p=cH[cH.length-1].c;
-      if(p>ind.ma20H&&p>ind.ma40H){const sl=trendSlope(cH,ind.ma20H);if(sl==="bullish")tH="bullish"}
-      if(p<ind.ma20H&&p<ind.ma40H){const sl=trendSlope(cH,ind.ma20H);if(sl==="bearish")tH="bearish"}
-    }
-    const tD=trend(cD,ind.ma20D,ind.ma40D); // Daily: strict, no fallback
-    const ts=[tM,tH,tD],bc=ts.filter(x=>x==="bearish").length,uc=ts.filter(x=>x==="bullish").length;
-    const aln=bc>=3?{n:3,dir:"bearish"}:uc>=3?{n:3,dir:"bullish"}:bc>=2?{n:2,dir:"bearish"}:uc>=2?{n:2,dir:"bullish"}:{n:Math.max(bc,uc),dir:"mixed"};
+    const benchTicker = BENCH[t];
+    const benchD = benchTicker && raw.D[benchTicker] ? raw.D[benchTicker] : null;
+    const spyD = raw.D.SPY || null;
 
-    // Thresholds y pesos vienen del FIXTURE (qqq_canonical_v1 detection_thresholds + confirm_weights).
-    const CWa=FIXTURE.confirm_weights, DTa=FIXTURE.detection_thresholds;
-    let divSPY=null;const aChg=ind.chgD;
-    if(t!=="SPY"&&spyChg!==0&&((aChg<-DTa.divspy_asset_threshold_pct&&spyChg>DTa.divspy_spy_threshold_pct)||(aChg>DTa.divspy_asset_threshold_pct&&spyChg<-DTa.divspy_spy_threshold_pct))){
-      divSPY={a:aChg,spy:spyChg,type:aChg<0?"bearish":"bullish"};
-      patterns.push({tf:"D",d:`Div SPY (${t}:${aChg>0?"+":""}${aChg}% vs SPY:${spyChg>0?"+":""}${spyChg}%) → VERIFICAR CATALIZADOR`,sg:aChg<0?"PUT":"CALL",w:CWa.DivSPY,cat:"CONFIRM",age:0,key:"DivSPY"});
-    }
+    // Llamada al motor V5. sim_datetime/sim_date null en live (usa el dt de la última vela).
+    const out = V5.analyze(t, cD, cH, cM, fixtureForV5, spyD, null, null, benchD);
 
-    let secRel=null;const bench=BENCH[t];
-    if(bench&&raw.D[bench]){const bChg=_pc(raw.D[bench],1);secRel={a:aChg,b:bChg,tk:bench,diff:+(aChg-bChg).toFixed(2)};
-      const fzMin=DTa.fzarel_min_divergence_pct;
-      if((aln.dir==="bullish"&&aChg>bChg+fzMin)||(aln.dir==="bearish"&&aChg<bChg-fzMin))
-        patterns.push({tf:"D",d:`FzaRel ${secRel.diff>0?"+":""}${secRel.diff}% vs ${bench}`,sg:"CONFIRM",w:CWa.FzaRel,cat:"CONFIRM",age:0,key:"FzaRel"});
+    if (out.error) { R[t] = { ...asset, error: true, error_code: out.error_code }; return; }
+
+    // Adaptar shape a lo que la UI consume (R[t]) — combina V5 output + UI extras del v4.
+    const aChg = out.ind?.a_chg ?? 0;
+
+    // DivSPY metadata (no parte del scoring V5, pero la UI lo muestra).
+    let divSPY = null;
+    if (t !== "SPY" && spyChg !== 0) {
+      const DT = FIXTURE.detection_thresholds;
+      if ((aChg < -DT.divspy_asset_threshold_pct && spyChg > DT.divspy_spy_threshold_pct)
+          || (aChg > DT.divspy_asset_threshold_pct && spyChg < -DT.divspy_spy_threshold_pct)) {
+        divSPY = { a: aChg, spy: spyChg, type: aChg < 0 ? "bearish" : "bullish" };
+      }
     }
 
-    const pivD=findPivots(cD,50,.004),pivH=findPivots(cH,50,.003);
-    const kLvls=keyLevels(ind,pivD,pivH,ind.price);
-
-    // FIX 4: Fakeout detection on strong pivots
-    if(cM.length>=3){
-      const c2=cM[cM.length-2],c1=cM[cM.length-1];
-      pivH.r.filter(p=>p.tx>=2).forEach(piv=>{
-        if(c2.h>piv.lv&&c2.c<piv.lv&&c1.c<piv.lv)
-          patterns.push({tf:"15M",d:`Fakeout sobre pivote $${piv.lv} (${piv.tx}x)`,sg:"WARN",w:-3,cat:"RISK",age:0});
-      });
-      pivH.s.filter(p=>p.tx>=2).forEach(piv=>{
-        if(c2.l<piv.lv&&c2.c>piv.lv&&c1.c>piv.lv)
-          patterns.push({tf:"15M",d:`Fakeout bajo pivote $${piv.lv} (${piv.tx}x)`,sg:"WARN",w:-3,cat:"RISK",age:0});
-      });
+    // FzaRel metadata.
+    let secRel = null;
+    if (benchTicker && benchD) {
+      const bChg = _pc(benchD, 1);
+      secRel = { a: aChg, b: bChg, tk: benchTicker, diff: +(aChg - bChg).toFixed(2) };
     }
 
-    // GAP analysis — confirm con peso del fixture.
-    if(ind.gap&&ind.gap.significant){
-      if(ind.gap.dir==="bullish")patterns.push({tf:"D",d:`Gap alcista ${ind.gap.pct>0?"+":""}${ind.gap.pct}%`,sg:"CALL",w:CWa.Gap,cat:"CONFIRM",age:0,key:"Gap"});
-      else patterns.push({tf:"D",d:`Gap bajista ${ind.gap.pct}%`,sg:"PUT",w:CWa.Gap,cat:"CONFIRM",age:0,key:"Gap"});
+    // Indicators legacy del v4 para la UI (calcInd produce el dict con price/ma/bb/atr/etc).
+    const indLegacy = calcInd(cD, cH, cM);
+
+    // Pivots + key levels (UI extras, no afectan al scoring V5).
+    const pivD = findPivots(cD, 50, 0.004);
+    const pivH = findPivots(cH, 50, 0.003);
+    const kLvls = keyLevels(indLegacy, pivD, pivH, indLegacy.price);
+    if (indLegacy.orb) {
+      if (!indLegacy.orb.breakUp) kLvls.r.push({ p: indLegacy.orb.high, l: "ORB↑" });
+      if (!indLegacy.orb.breakDown) kLvls.s.push({ p: indLegacy.orb.low, l: "ORB↓" });
+      kLvls.r.sort((a, b) => a.p - b.p); kLvls.r = kLvls.r.slice(0, 5);
+      kLvls.s.sort((a, b) => b.p - a.p); kLvls.s = kLvls.s.slice(0, 5);
     }
 
-    // ORB — breakout as TRIGGER
-    if(ind.orb){
-      if(ind.orb.breakUp&&ind.volM>=1.0)patterns.push({tf:"15M",d:`ORB breakout ↑$${ind.orb.high}`,sg:"CALL",w:2,cat:"TRIGGER",age:0});
-      if(ind.orb.breakDown&&ind.volM>=1.0)patterns.push({tf:"15M",d:`ORB breakdown ↓$${ind.orb.low}`,sg:"PUT",w:2,cat:"TRIGGER",age:0});
-      // Add ORB levels to key levels
-      if(!ind.orb.breakUp)kLvls.r.push({p:ind.orb.high,l:"ORB↑"});
-      if(!ind.orb.breakDown)kLvls.s.push({p:ind.orb.low,l:"ORB↓"});
-      kLvls.r.sort((a,b)=>a.p-b.p);kLvls.r=kLvls.r.slice(0,5);
-      kLvls.s.sort((a,b)=>b.p-a.p);kLvls.s=kLvls.s.slice(0,5);
-    }
+    const atrPct = indLegacy.atrPct || 2;
+    const catThreshold = +(atrPct * 1.5).toFixed(2);
+    const needsCat = Math.abs(aChg) > catThreshold || !!divSPY;
 
-    // ATR-based catalyst trigger + divergence trigger
-    const atrPct=ind.atrPct||2;
-    const catThreshold=+(atrPct*1.5).toFixed(2);
-    const needsCat=Math.abs(aChg)>catThreshold||!!divSPY;
-
-    const scoring=layeredScore(patterns,aln,ind,divSPY,secRel,kLvls,needsCat,tM,tH);
-
-    R[t]={...asset,ind,patterns,aln,tM,tH,tD,scoring,chg:aChg,needsCat,catThreshold,divSPY,secRel,kLvls,error:false,cM:cM.slice(-20)};
+    R[t] = {
+      ...asset,
+      ind: indLegacy,                  // UI usa indLegacy (price, ma*, bb*, atr, gap, orb, vol*).
+      patterns: out.patterns,           // patterns del motor V5.
+      aln: out.aln,
+      tM: out.tM, tH: out.tH, tD: out.tD,
+      scoring: {
+        score: out.score,
+        conf: out.conf,
+        signal: out.signal,
+        dir: out.dir,
+        layers: out.layers,
+        timeW: out.timeW,
+        blocked: out.blocked,
+      },
+      chg: aChg,
+      needsCat,
+      catThreshold,
+      divSPY,
+      secRel,
+      kLvls,
+      error: false,
+      cM: cM.slice(-20),
+    };
   });
   return R;
 }
