@@ -82,6 +82,10 @@ data/*.db-wal
 data/*.db-shm
 data/archive/*.db
 data/archive/*.db-journal
+backend/data/*.db
+backend/data/*.db-journal
+backend/data/*.db-wal
+backend/data/*.db-shm
 
 # pero mantenemos la estructura de carpetas
 !data/.gitkeep
