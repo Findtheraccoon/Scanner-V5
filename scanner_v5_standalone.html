@@ -1327,9 +1327,11 @@ const V5 = (() => {
 
   // ─── Pipeline analyze() (analyze.py) ─────────────────────────────
   function analyze(ticker, cD, cH, cM, fixture, spyD, sim_datetime, sim_date, benchD) {
-    // Validar mínimos.
-    if (cD.length < 210 || cH.length < 80 || cM.length < 50) {
-      return { error: true, error_code: "ENG-001", ticker, score: 0, conf: "—", signal: "NEUTRAL", dir: "", blocked: "candles below minimum", layers: null, ind: {}, patterns: [] };
+    // Mínimos relajados para live (TD outputsize=5000 1m → ~83h 1H, borderline al motor backend
+    // que exige 80). Si cualquiera está vacío devolvemos error; sino delegamos warmup a los
+    // detectores individuales (cada uno devuelve null/[] si no tiene datos suficientes).
+    if (!cD || !cD.length || !cH || !cH.length || !cM || !cM.length) {
+      return { error: true, error_code: "ENG-001", ticker, score: 0, conf: "—", signal: "NEUTRAL", dir: "", blocked: "no candles", layers: null, ind: {}, patterns: [] };
     }
     const closes_15m = cM.map(c => c.c);
     const closes_1h = cH.map(c => c.c);
